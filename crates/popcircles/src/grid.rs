@@ -74,6 +74,36 @@ pub struct LonSpan {
     pub east: f64,
 }
 
+/// A row index some grid contains, and a column index likewise. Only [`Grid::row`], [`Grid::col`]
+/// and the two iterators mint them, which is what lets every accessor taking one drop the bound it
+/// would otherwise repeat — and what makes a row where a column belongs a compile error rather than
+/// a plausible coordinate.
+///
+/// The proof they carry is scoped to the grid that minted it. Passing a fine grid's `Row` to a
+/// coarser one is the single way back to an out-of-range index, and a `debug_assert` in each
+/// accessor rather than the type system is what stands in its way: branding every index with its
+/// grid's lifetime would reach that last case at the cost of a lifetime parameter on every signature
+/// downstream of here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Row(u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Col(u32);
+
+impl Row {
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl Col {
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// Rows run north to south, so `lat_step` is negative — the GDAL north-up convention, kept so a
 /// geotransform read from a raster needs no sign flip.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -165,20 +195,51 @@ impl Grid {
         self.lat_step
     }
 
-    /// The centre of a cell, not its corner: an index addresses a sample, and every distance in the
-    /// search is measured between sample centres.
+    /// The row this grid contains at `row`, or `None` when it has no such row.
     #[must_use]
-    pub fn centre_of(&self, row: u32, col: u32) -> LatLon {
-        // u32 -> f64 is exact below 2^53, so these carry no rounding of their own.
-        LatLon {
-            lat: self.origin.lat + (f64::from(row) + 0.5) * self.lat_step,
-            lon: self.origin.lon + (f64::from(col) + 0.5) * self.lon_step,
+    pub const fn row(&self, row: u32) -> Option<Row> {
+        if row < self.height {
+            Some(Row(row))
+        } else {
+            None
         }
     }
 
     #[must_use]
-    pub fn lat_bounds(&self, row: u32) -> LatBand {
-        let north = self.origin.lat + f64::from(row) * self.lat_step;
+    pub const fn col(&self, col: u32) -> Option<Col> {
+        if col < self.width {
+            Some(Col(col))
+        } else {
+            None
+        }
+    }
+
+    /// Every row north to south, and every column west to east on a north-up grid. These exist so a
+    /// traversal needs no index it has to check: the iterator is the mint.
+    pub fn rows(&self) -> impl Iterator<Item = Row> {
+        (0..self.height).map(Row)
+    }
+
+    pub fn cols(&self) -> impl Iterator<Item = Col> {
+        (0..self.width).map(Col)
+    }
+
+    /// The centre of a cell, not its corner: an index addresses a sample, and every distance in the
+    /// search is measured between sample centres.
+    #[must_use]
+    pub fn centre_of(&self, row: Row, col: Col) -> LatLon {
+        debug_assert!(row.0 < self.height && col.0 < self.width);
+        // u32 -> f64 is exact below 2^53, so these carry no rounding of their own.
+        LatLon {
+            lat: self.origin.lat + (f64::from(row.0) + 0.5) * self.lat_step,
+            lon: self.origin.lon + (f64::from(col.0) + 0.5) * self.lon_step,
+        }
+    }
+
+    #[must_use]
+    pub fn lat_bounds(&self, row: Row) -> LatBand {
+        debug_assert!(row.0 < self.height);
+        let north = self.origin.lat + f64::from(row.0) * self.lat_step;
         // lat_step is negative by construction, so north is the larger of the two.
         LatBand {
             north,
@@ -187,8 +248,9 @@ impl Grid {
     }
 
     #[must_use]
-    pub fn lon_bounds(&self, col: u32) -> LonSpan {
-        let a = self.origin.lon + f64::from(col) * self.lon_step;
+    pub fn lon_bounds(&self, col: Col) -> LonSpan {
+        debug_assert!(col.0 < self.width);
+        let a = self.origin.lon + f64::from(col.0) * self.lon_step;
         let b = a + self.lon_step;
         // lon_step's sign is not constrained, so order by value rather than by index.
         LonSpan {
@@ -203,12 +265,15 @@ impl Grid {
     /// lands in a column and the antimeridian is not a boundary. On a window grid a longitude
     /// outside the window has no column, and that is the `None`.
     #[must_use]
-    pub fn cell_containing(&self, at: LatLon) -> Option<(u32, u32)> {
+    pub fn cell_containing(&self, at: LatLon) -> Option<(Row, Col)> {
         if !at.lat.is_finite() || !at.lon.is_finite() {
             return None;
         }
 
-        let row = index_from_offset((at.lat - self.origin.lat) / self.lat_step, self.height)?;
+        let row = Row(index_from_offset(
+            (at.lat - self.origin.lat) / self.lat_step,
+            self.height,
+        )?);
 
         let cells_from_origin = (at.lon - self.origin.lon) / self.lon_step;
         // Reducing by the width rather than by 360/step is what makes "every longitude has a
@@ -219,7 +284,10 @@ impl Grid {
         } else {
             360.0 / self.lon_step.abs()
         };
-        let col = index_from_offset(cells_from_origin.rem_euclid(modulus), self.width)?;
+        let col = Col(index_from_offset(
+            cells_from_origin.rem_euclid(modulus),
+            self.width,
+        )?);
 
         Some((row, col))
     }
@@ -231,7 +299,7 @@ impl Grid {
     /// It reads the row's edges through [`Grid::lat_bounds`] rather than recomputing them, which is
     /// what stops the area and the coordinate of a row from ever disagreeing about where the row is.
     #[must_use]
-    pub fn cell_area_km2(&self, row: u32) -> f64 {
+    pub fn cell_area_km2(&self, row: Row) -> f64 {
         let band = self.lat_bounds(row);
         let delta_lon_rad = self.lon_step.abs().to_radians();
         EARTH_RADIUS_KM
@@ -276,6 +344,19 @@ mod tests {
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-12
+    }
+
+    // Minting a pair is three lines at every call site otherwise, and every use below wants a pair
+    // the grid does contain.
+    fn cell(grid: &Grid, row: u32, col: u32) -> (Row, Col) {
+        (
+            grid.row(row).expect("row is inside the grid"),
+            grid.col(col).expect("column is inside the grid"),
+        )
+    }
+
+    fn last_row(grid: &Grid) -> Row {
+        grid.row(grid.height() - 1).expect("the grid has rows")
     }
 
     // The decimated grid application.md "Approach" calls for: same code path, coarse enough to
@@ -479,68 +560,103 @@ mod tests {
     }
 
     #[test]
+    fn an_index_off_the_end_is_never_minted() {
+        // The accessors have no bound of their own, so this is the only thing standing between a
+        // caller's arithmetic and a latitude off the globe or a negative cell area.
+        let grid = decimated();
+        assert!(grid.row(179).is_some() && grid.col(359).is_some());
+        for off_the_end in [180, 181, u32::MAX] {
+            assert_eq!(grid.row(off_the_end), None);
+        }
+        for off_the_end in [360, 361, u32::MAX] {
+            assert_eq!(grid.col(off_the_end), None);
+        }
+    }
+
+    #[test]
+    fn the_iterators_cover_the_grid_exactly_once_in_order() {
+        let grid = decimated();
+        let rows: Vec<u32> = grid.rows().map(Row::get).collect();
+        let cols: Vec<u32> = grid.cols().map(Col::get).collect();
+        assert_eq!(rows, (0..grid.height()).collect::<Vec<u32>>());
+        assert_eq!(cols, (0..grid.width()).collect::<Vec<u32>>());
+    }
+
+    #[test]
     fn centres_sit_half_a_cell_inside_each_corner() {
         let grid = gpw();
         let half = GPW_STEP / 2.0;
 
-        let nw = grid.centre_of(0, 0);
+        let (row, col) = cell(&grid, 0, 0);
+        let nw = grid.centre_of(row, col);
         assert!(close(nw.lat, 90.0 - half) && close(nw.lon, -180.0 + half));
 
-        let ne = grid.centre_of(0, 43199);
+        let (row, col) = cell(&grid, 0, 43199);
+        let ne = grid.centre_of(row, col);
         assert!(close(ne.lat, 90.0 - half) && close(ne.lon, 180.0 - half));
 
-        let sw = grid.centre_of(21599, 0);
+        let (row, col) = cell(&grid, 21599, 0);
+        let sw = grid.centre_of(row, col);
         assert!(close(sw.lat, -90.0 + half) && close(sw.lon, -180.0 + half));
 
-        let se = grid.centre_of(21599, 43199);
+        let (row, col) = cell(&grid, 21599, 43199);
+        let se = grid.centre_of(row, col);
         assert!(close(se.lat, -90.0 + half) && close(se.lon, 180.0 - half));
     }
 
     #[test]
     fn polar_rows_stay_on_the_globe() {
         let grid = gpw();
-        for row in [0, grid.height() - 1] {
-            let centre = grid.centre_of(row, 0);
-            assert!(centre.lat.abs() < 90.0, "row {row} centre left the globe");
-            assert_eq!(grid.cell_containing(centre), Some((row, 0)));
+        for index in [0, grid.height() - 1] {
+            let (row, col) = cell(&grid, index, 0);
+            let centre = grid.centre_of(row, col);
+            assert!(centre.lat.abs() < 90.0, "row {index} centre left the globe");
+            assert_eq!(grid.cell_containing(centre), Some((row, col)));
         }
     }
 
     #[test]
     fn the_antimeridian_is_not_a_boundary() {
         let grid = gpw();
-        let last = grid.width() - 1;
+        let east = cell(&grid, 0, grid.width() - 1);
+        let west = cell(&grid, 0, 0);
 
         // The two columns either side of the seam are the first and the last, and a longitude in
         // each lands in it — the seam is where the index wraps, not where the grid stops.
         assert_eq!(
-            grid.cell_containing(grid.centre_of(0, last)),
-            Some((0, last))
+            grid.cell_containing(grid.centre_of(east.0, east.1)),
+            Some(east)
         );
-        assert_eq!(grid.cell_containing(grid.centre_of(0, 0)), Some((0, 0)));
+        assert_eq!(
+            grid.cell_containing(grid.centre_of(west.0, west.1)),
+            Some(west)
+        );
 
         // -180 and +180 are the same meridian, so both land in a column, and +180 wraps to the
         // first rather than falling off the last.
+        let equator = cell(&grid, 10800, 0);
         assert_eq!(
             grid.cell_containing(LatLon {
                 lat: 0.0,
                 lon: -180.0
             }),
-            Some((10800, 0))
+            Some(equator)
         );
         assert_eq!(
             grid.cell_containing(LatLon {
                 lat: 0.0,
                 lon: 180.0
             }),
-            Some((10800, 0))
+            Some(equator)
         );
     }
 
     #[test]
     fn bounds_bracket_the_centre() {
         let grid = gpw();
-        for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)] {
+        for (row, col) in
+            [(0u32, 0u32), (10800, 21600), (21599, 43199)].map(|(row, col)| cell(&grid, row, col))
+        {
             let centre = grid.centre_of(row, col);
             let band = grid.lat_bounds(row);
             let span = grid.lon_bounds(col);
@@ -556,14 +672,15 @@ mod tests {
         // The bands tile the globe with no gap and no overlap, which is what lets 3.1's sum
         // telescope.
         let grid = decimated();
-        for row in 0..grid.height() - 1 {
+        for (row, next) in grid.rows().zip(grid.rows().skip(1)) {
             assert!(close(
                 grid.lat_bounds(row).south,
-                grid.lat_bounds(row + 1).north
+                grid.lat_bounds(next).north
             ));
         }
-        assert!(close(grid.lat_bounds(0).north, 90.0));
-        assert!(close(grid.lat_bounds(grid.height() - 1).south, -90.0));
+        let (first, _) = cell(&grid, 0, 0);
+        assert!(close(grid.lat_bounds(first).north, 90.0));
+        assert!(close(grid.lat_bounds(last_row(&grid)).south, -90.0));
     }
 
     #[test]
@@ -615,13 +732,17 @@ mod tests {
                 -GPW_STEP,
             )
             .expect("shifting the origin by whole turns keeps the grid valid");
-            for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)] {
+            for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)]
+                .map(|(row, col)| cell(&shifted, row, col))
+            {
                 let here = shifted.centre_of(row, col);
                 let there = base.centre_of(row, col);
                 assert!(close(here.lat, there.lat));
                 assert!(
                     (wrap_lon(here.lon) - wrap_lon(there.lon)).abs() < 1e-9,
-                    "k={k} ({row}, {col})"
+                    "k={k} ({}, {})",
+                    row.get(),
+                    col.get()
                 );
             }
         }
@@ -668,7 +789,8 @@ mod tests {
         // 5e-14 relative, four orders inside the bound.
         let exact = 4.0 * std::f64::consts::PI * EARTH_RADIUS_KM * EARTH_RADIUS_KM;
         for grid in [gpw(), decimated()] {
-            let total: f64 = (0..grid.height())
+            let total: f64 = grid
+                .rows()
                 .map(|row| f64::from(grid.width()) * grid.cell_area_km2(row))
                 .sum();
             let relative = (total - exact).abs() / exact;
@@ -685,13 +807,15 @@ mod tests {
     fn cell_areas_are_positive_and_symmetric_about_the_equator() {
         let grid = decimated();
         let last = grid.height() - 1;
-        for row in 0..grid.height() {
+        for row in grid.rows() {
             let area = grid.cell_area_km2(row);
-            assert!(area > 0.0, "row {row} has area {area}");
-            let mirrored = grid.cell_area_km2(last - row);
+            assert!(area > 0.0, "row {} has area {area}", row.get());
+            let (mirror, _) = cell(&grid, last - row.get(), 0);
+            let mirrored = grid.cell_area_km2(mirror);
             assert!(
                 (area - mirrored).abs() / area < 1e-12,
-                "row {row} and its mirror disagree: {area} against {mirrored}"
+                "row {} and its mirror disagree: {area} against {mirrored}",
+                row.get()
             );
         }
     }
@@ -702,19 +826,23 @@ mod tests {
         // largest cells are the two straddling the equator, and nothing on the way there dips.
         for grid in [gpw(), decimated()] {
             let middle = grid.height() / 2;
-            for row in 1..middle {
-                let previous = grid.cell_area_km2(row - 1);
+            for index in 1..middle {
+                let (row, _) = cell(&grid, index, 0);
+                let (previous_row, _) = cell(&grid, index - 1, 0);
+                let previous = grid.cell_area_km2(previous_row);
                 let current = grid.cell_area_km2(row);
                 assert!(
                     current > previous,
-                    "row {row} ({current}) is not larger than row {} ({previous})",
-                    row - 1
+                    "row {index} ({current}) is not larger than row {} ({previous})",
+                    index - 1
                 );
             }
-            let largest = (0..grid.height())
+            let largest = grid
+                .rows()
                 .map(|row| grid.cell_area_km2(row))
                 .fold(f64::NEG_INFINITY, f64::max);
-            assert!((grid.cell_area_km2(middle) - largest).abs() / largest < 1e-12);
+            let (middle_row, _) = cell(&grid, middle, 0);
+            assert!((grid.cell_area_km2(middle_row) - largest).abs() / largest < 1e-12);
         }
     }
 
@@ -722,16 +850,17 @@ mod tests {
         #[test]
         fn centre_round_trips_on_the_full_grid(row in 0u32..21600, col in 0u32..43200) {
             let grid = gpw();
-            prop_assert_eq!(grid.cell_containing(grid.centre_of(row, col)), Some((row, col)));
+            let at = cell(&grid, row, col);
+            prop_assert_eq!(grid.cell_containing(grid.centre_of(at.0, at.1)), Some(at));
         }
 
         #[test]
         fn centre_round_trips_on_the_decimated_grid(row in 0u32..180, col in 0u32..360) {
             let grid = decimated();
-            prop_assert_eq!(grid.cell_containing(grid.centre_of(row, col)), Some((row, col)));
+            let at = cell(&grid, row, col);
+            prop_assert_eq!(grid.cell_containing(grid.centre_of(at.0, at.1)), Some(at));
         }
 
-        #[test]
         #[test]
         fn a_whole_turn_of_longitude_finds_the_same_cell(
             row in 0u32..21600,
@@ -739,9 +868,10 @@ mod tests {
             k in -3i32..=3,
         ) {
             let grid = gpw();
-            let centre = grid.centre_of(row, col);
+            let at = cell(&grid, row, col);
+            let centre = grid.centre_of(at.0, at.1);
             let shifted = LatLon { lat: centre.lat, lon: centre.lon + 360.0 * f64::from(k) };
-            prop_assert_eq!(grid.cell_containing(shifted), Some((row, col)));
+            prop_assert_eq!(grid.cell_containing(shifted), Some(at));
         }
 
         #[test]
