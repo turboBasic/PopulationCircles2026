@@ -3,6 +3,8 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 insta = { version = "1", features = ["json"] }
 proptest = "1"
 serde = { version = "1", features = ["derive"] }

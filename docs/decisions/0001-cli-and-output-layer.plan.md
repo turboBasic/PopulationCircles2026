@@ -111,7 +111,7 @@ what it must be.
 
 Everything here lands in `crates/popcircles-cli/`.
 
-- [ ] **3.1 `distance`, end to end.** `clap` joins `[workspace.dependencies]` as
+- [x] **3.1 `distance`, end to end.** `clap` joins `[workspace.dependencies]` as
       `{ version = "4", default-features = false, features = ["std", "derive", "help", "usage",
       "error-context"] }` and `anyhow` as `"1"`, both inherited by the CLI crate only. A `Cli` struct
       with `#[command(name = "popcircles", version)]`, a `Command` enum, and a `distance` variant taking
@@ -119,9 +119,11 @@ Everything here lands in `crates/popcircles-cli/`.
       payload in the envelope and writes it to stdout with `serde_json`. `main` returns
       `std::process::ExitCode`; `anyhow` carries context to the edge and nowhere else.
       *Verify:* `mise run cli -- distance 0 0 0 90 2>/dev/null | jq -e '.result.great_circle_km'`
-      prints `10007.557221017962` — piping through `jq -e` with stderr discarded is what proves stdout
-      carries a JSON document and nothing else; `mise run cli -- --help` lists `distance`; `cargo tree
-      -p popcircles -e normal | rg 'clap|anyhow'` still returns nothing.
+      prints `10007.55722101796` — one ulp below the exact `R·π/2`, which is haversine's `atan2` path
+      rather than a bug, and the value the 2.2 snapshot already pins; piping through `jq -e` with
+      stderr discarded is what proves stdout carries a JSON document and nothing else; `mise run cli
+      -- --help` lists `distance`; `cargo tree -p popcircles -e normal | rg 'clap|anyhow'` still
+      returns nothing.
 
 - [ ] **3.2 `grid describe`, and errors that become exit codes.** A `grid` subcommand taking width,
       height, origin and steps as flags, constructing a `Grid` and emitting the summary payload. A pure

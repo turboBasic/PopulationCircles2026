@@ -12,4 +12,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
 popcircles = { path = "../popcircles" }
+serde_json.workspace = true
