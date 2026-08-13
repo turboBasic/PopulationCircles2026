@@ -58,5 +58,42 @@ Identifiers are flat, sequential and never reused.
     section and the second is ordinary emphasis. The rule needs the heading to exist *or* the quote to
     be recognisable as prose, which is why this cannot be a one-line grep.
 
-  It has no host yet: there is no library crate and no Python package, and a shell script would be a
-  fourth place hooks are configured.
+  It has no host yet: `crates/popcircles/` is a library about spherical geometry, there is no Python
+  package, and a shell script would be a fourth place hooks are configured.
+
+### FU-04 - Diagnostics have no facade
+
+Numbered past `FU-03`, which
+[ADR 0001's plan](decisions/0001-cli-and-output-layer.plan.md) reserves for its close-out. The gap is
+deliberate: identifiers are never reused, and renumbering a reserved one to close a temporary hole is
+churn.
+
+- **Status** — `dormant`.
+- **Condition** — either signal that ad-hoc printing has outgrown itself. `rg -n 'print!|println!|eprintln!' crates/popcircles/src`
+  matches anything: the library is printing, which is an `application.md` "Architecture" violation
+  before it is a logging question. Or `rg -n 'verbose|quiet' crates/popcircles-cli/src` matches: the CLI
+  is hand-rolling the level filtering `EnvFilter` exists for. Progress reporting is **not** this
+  condition — ADR 0001 decision 4 routes progress through a sink the caller supplies, and a sink is not
+  a log.
+- **Fix** — a record **extending** ADR 0001's `tracing` clause rather than a fresh decision. That clause
+  is a live ruling, and `write-adr` requires a record reopening a settled question to say which of the
+  two it does. Then `tracing` on the emitting side and `tracing-subscriber` with `json` and `env-filter`
+  on the consuming side, which is what makes it the analogue of structured logging in Python: fields on
+  events, and spans carrying context down a nesting the search already has — per radius, per latitude
+  band, per candidate.
+
+  The cost is what the record has to argue, measured 2026-08-13 with `cargo tree -e normal` in a scratch
+  project outside this tree:
+
+  | Addition | Crates |
+  | --- | --- |
+  | `log` facade in a library | 1, and it has no dependencies of its own |
+  | `tracing` facade in a library | 13 |
+  | `log` + `env_logger` in a binary | 25 |
+  | `tracing` + `tracing-subscriber` with `json`, `env-filter` | 41 |
+
+  Forty-one is nearly triple the trimmed clap tree ADR 0001 accepted, and the 13 lands on the library
+  whose dependency surface that record fought to hold at serde. So the cheaper shape has to be ruled out
+  rather than skipped: `log` in the library, bridged into the binary's subscriber by `tracing-log`, costs
+  one crate and buys no spans. If the nesting turns out shallow, that is the better answer and the record
+  should say so.
