@@ -5,11 +5,6 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 
-/// How every Git LFS pointer file begins. `platform.md` "Large input data" requires a clone that has
-/// not fetched the objects to be told so by name, rather than having 134 bytes of text parsed as a
-/// TIFF and reported as a format error.
-const LFS_POINTER: &[u8] = b"version https://git-lfs";
-
 use tiff::decoder::{ChunkType, Decoder, DecodingResult};
 use tiff::tags::Tag;
 
@@ -27,6 +22,11 @@ const GEOGRAPHIC_TYPE: u16 = 2048;
 const MODEL_TYPE_GEOGRAPHIC: u16 = 2;
 const RASTER_PIXEL_IS_AREA: u16 = 1;
 const SAMPLE_FORMAT_IEEEFP: u16 = 3;
+
+/// How every Git LFS pointer file begins. `platform.md` "Large input data" requires a clone that has
+/// not fetched the objects to be told so by name, rather than having 134 bytes of text parsed as a
+/// TIFF and reported as a format error.
+const LFS_POINTER: &[u8] = b"version https://git-lfs";
 
 /// A striped, single-band `GeoTIFF` validated against a [`RasterSpec`].
 ///
@@ -1014,6 +1014,339 @@ mod tests {
         assert!(matches!(error, Some(RasterError::Decode(_))));
         // Terminal: a caller that logs the error and keeps polling is not handed it for ever.
         assert!(source.next_row().is_none());
+    }
+
+    /// One name per [`RasterError`] variant. The exhaustive match in [`kind`] is what makes a variant
+    /// added later a compile error here rather than an untested rejection, and [`EVERY_KIND`] beside it
+    /// is where the author is then made to produce a case for it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    enum Kind {
+        Dimensions,
+        Origin,
+        Step,
+        Tiled,
+        SamplesPerPixel,
+        PixelFormat,
+        RasterType,
+        ModelType,
+        Epsg,
+        ModelTransformation,
+        NodataMismatch,
+        NodataNotANumber,
+        NodataMissing,
+        MissingTag,
+        MissingGeoKey,
+        UnfetchedPointer,
+        Io,
+        Decode,
+    }
+
+    const EVERY_KIND: [Kind; 18] = [
+        Kind::Dimensions,
+        Kind::Origin,
+        Kind::Step,
+        Kind::Tiled,
+        Kind::SamplesPerPixel,
+        Kind::PixelFormat,
+        Kind::RasterType,
+        Kind::ModelType,
+        Kind::Epsg,
+        Kind::ModelTransformation,
+        Kind::NodataMismatch,
+        Kind::NodataNotANumber,
+        Kind::NodataMissing,
+        Kind::MissingTag,
+        Kind::MissingGeoKey,
+        Kind::UnfetchedPointer,
+        Kind::Io,
+        Kind::Decode,
+    ];
+
+    fn kind(error: &RasterError) -> Kind {
+        match error {
+            RasterError::Dimensions { .. } => Kind::Dimensions,
+            RasterError::Origin { .. } => Kind::Origin,
+            RasterError::Step { .. } => Kind::Step,
+            RasterError::Tiled => Kind::Tiled,
+            RasterError::SamplesPerPixel { .. } => Kind::SamplesPerPixel,
+            RasterError::PixelFormat { .. } => Kind::PixelFormat,
+            RasterError::RasterType { .. } => Kind::RasterType,
+            RasterError::ModelType { .. } => Kind::ModelType,
+            RasterError::Epsg { .. } => Kind::Epsg,
+            RasterError::ModelTransformation => Kind::ModelTransformation,
+            RasterError::NodataMismatch { .. } => Kind::NodataMismatch,
+            RasterError::NodataNotANumber { .. } => Kind::NodataNotANumber,
+            RasterError::NodataMissing { .. } => Kind::NodataMissing,
+            RasterError::MissingTag { .. } => Kind::MissingTag,
+            RasterError::MissingGeoKey { .. } => Kind::MissingGeoKey,
+            RasterError::UnfetchedPointer => Kind::UnfetchedPointer,
+            RasterError::Io(_) => Kind::Io,
+            RasterError::Decode(_) => Kind::Decode,
+        }
+    }
+
+    /// A file this reader must reject, and the variant it owes the rejection to. Asserting the variant
+    /// rather than merely that an error occurred is the point: "it errored" is what a reader that
+    /// happens to work on one file also does.
+    fn geotransform_rejections() -> Vec<(&'static str, Kind, Fixture)> {
+        let step = 1.0 / 120.0;
+        let base = Fixture::new(4, 3, sample_values(4, 3));
+        vec![
+            (
+                "a raster wider than the grid",
+                Kind::Dimensions,
+                Fixture::new(5, 3, sample_values(5, 3)),
+            ),
+            (
+                "a step a whole cell too large",
+                Kind::Step,
+                Fixture {
+                    pixel_scale: Some([step * 2.0, step, 0.0]),
+                    ..base.clone()
+                },
+            ),
+            (
+                // A westward lon_step is a grid `Grid::new` accepts, so this rejection is the raster's
+                // own and not one construction would have made for it.
+                "a step running the other way",
+                Kind::Step,
+                Fixture {
+                    pixel_scale: Some([-step, step, 0.0]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "an origin a whole cell south",
+                Kind::Origin,
+                Fixture {
+                    tiepoint: Some([0.0, 0.0, 0.0, -180.0, 90.0 - step, 0.0]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "an origin a whole cell east",
+                Kind::Origin,
+                Fixture {
+                    tiepoint: Some([0.0, 0.0, 0.0, -180.0 + step, 90.0, 0.0]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "a rotation the pixel-scale form cannot express",
+                Kind::ModelTransformation,
+                Fixture {
+                    model_transformation: Some([0.0; 16]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "no pixel scale at all",
+                Kind::MissingTag,
+                Fixture {
+                    pixel_scale: None,
+                    ..base
+                },
+            ),
+        ]
+    }
+
+    fn tag_rejections() -> Vec<(&'static str, Kind, Fixture)> {
+        let base = Fixture::new(4, 3, sample_values(4, 3));
+        vec![
+            (
+                "a tiled raster",
+                Kind::Tiled,
+                Fixture {
+                    tiled: true,
+                    ..base.clone()
+                },
+            ),
+            (
+                "three samples per pixel",
+                Kind::SamplesPerPixel,
+                Fixture {
+                    samples_per_pixel: 3,
+                    photometric: 2,
+                    ..base.clone()
+                },
+            ),
+            (
+                "32-bit integers rather than floats",
+                Kind::PixelFormat,
+                Fixture {
+                    sample_format: 1,
+                    ..base.clone()
+                },
+            ),
+            (
+                "64-bit floats",
+                Kind::PixelFormat,
+                Fixture {
+                    bits_per_sample: 64,
+                    ..base.clone()
+                },
+            ),
+            (
+                "a projected CRS",
+                Kind::Epsg,
+                Fixture {
+                    geo_keys: Some(GeoKeys {
+                        epsg: Some(3857),
+                        ..GeoKeys::default()
+                    }),
+                    ..base.clone()
+                },
+            ),
+            (
+                // RasterPixelIsPoint needs a half-cell shift this reader does not apply, so the key is
+                // checked rather than assumed.
+                "a point raster rather than an area raster",
+                Kind::RasterType,
+                Fixture {
+                    geo_keys: Some(GeoKeys {
+                        raster_type: Some(2),
+                        ..GeoKeys::default()
+                    }),
+                    ..base.clone()
+                },
+            ),
+            (
+                "a projected model type",
+                Kind::ModelType,
+                Fixture {
+                    geo_keys: Some(GeoKeys {
+                        model_type: Some(1),
+                        ..GeoKeys::default()
+                    }),
+                    ..base.clone()
+                },
+            ),
+            (
+                "no CRS key",
+                Kind::MissingGeoKey,
+                Fixture {
+                    geo_keys: Some(GeoKeys {
+                        epsg: None,
+                        ..GeoKeys::default()
+                    }),
+                    ..base.clone()
+                },
+            ),
+            (
+                "no key directory at all",
+                Kind::MissingTag,
+                Fixture {
+                    geo_keys: None,
+                    ..base.clone()
+                },
+            ),
+        ]
+    }
+
+    fn nodata_rejections() -> Vec<(&'static str, Kind, Fixture)> {
+        let base = Fixture::new(4, 3, sample_values(4, 3));
+        vec![
+            (
+                "somebody else's sentinel",
+                Kind::NodataMismatch,
+                Fixture {
+                    nodata: Some("-9999".to_owned()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "a sentinel that is not a number",
+                Kind::NodataNotANumber,
+                Fixture {
+                    nodata: Some("no data".to_owned()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "no sentinel at all",
+                Kind::NodataMissing,
+                Fixture {
+                    nodata: None,
+                    ..base
+                },
+            ),
+        ]
+    }
+
+    // A pointer, a missing file and a file that is not a TIFF: the three failures that are not the
+    // raster disagreeing with the caller.
+    fn pointer_bytes() -> Vec<u8> {
+        "version https://git-lfs.github.com/spec/v1\n\
+         oid sha256:956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d\n\
+         size 428522394\n"
+            .as_bytes()
+            .to_vec()
+    }
+
+    fn out_of_band_rejections() -> Vec<(&'static str, Kind, RasterError)> {
+        let spec = spec_for(declared_grid(4, 3, -180.0));
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        vec![
+            (
+                "an unfetched pointer",
+                Kind::UnfetchedPointer,
+                GeoTiffSource::from_reader(Cursor::new(pointer_bytes()), &spec)
+                    .expect_err("a pointer is not a raster"),
+            ),
+            (
+                "a file that is not there",
+                Kind::Io,
+                GeoTiffSource::open(directory.path().join("absent.tif"), &spec)
+                    .expect_err("an absent file cannot be read"),
+            ),
+            (
+                // The variant exists so a decoder failure is not mistaken for a rejection, which is only
+                // true if something proves the two are distinguishable.
+                "bytes that are not a TIFF",
+                Kind::Decode,
+                GeoTiffSource::from_reader(Cursor::new(b"this is not a TIFF file".to_vec()), &spec)
+                    .expect_err("a text file is not a raster"),
+            ),
+        ]
+    }
+
+    #[test]
+    fn each_rejection_names_its_own_variant() {
+        let spec = spec_for(declared_grid(4, 3, -180.0));
+        for (what, expected, fixture) in geotransform_rejections()
+            .into_iter()
+            .chain(tag_rejections())
+            .chain(nodata_rejections())
+        {
+            let error = open(&fixture, &spec).expect_err(what);
+            assert_eq!(kind(&error), expected, "{what}: {error}");
+        }
+        for (what, expected, error) in out_of_band_rejections() {
+            assert_eq!(kind(&error), expected, "{what}: {error}");
+        }
+    }
+
+    #[test]
+    fn every_variant_of_the_rejection_enum_has_a_case() {
+        let mut seen: std::collections::HashSet<Kind> = out_of_band_rejections()
+            .iter()
+            .map(|(_, expected, _)| *expected)
+            .collect();
+        seen.extend(
+            geotransform_rejections()
+                .iter()
+                .chain(tag_rejections().iter())
+                .chain(nodata_rejections().iter())
+                .map(|(_, expected, _)| *expected),
+        );
+        seen.insert(Kind::Decode);
+
+        for expected in EVERY_KIND {
+            assert!(
+                seen.contains(&expected),
+                "{expected:?} is a rejection no test above produces"
+            );
+        }
     }
 
     #[test]
