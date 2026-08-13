@@ -10,7 +10,12 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
+      # Files that .gitattributes routes to LFS are exempt (the hook resolves
+      # `git check-attr filter` itself), so this guards the blobs that would actually bloat
+      # the pack. --enforce-all because `lint:lfs` runs it with --all-files, where nothing
+      # is staged and the default filter to added-only would check nothing at all.
       - id: check-added-large-files
+        args: [--enforce-all]
       - id: check-merge-conflict
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -38,6 +43,36 @@ repos:
 
   - repo: local
     hooks:
+      # .gitattributes stays lean — it lists only the formats this repo actually commits.
+      # This hook is the tripwire for every other geo format: one arriving for the first
+      # time fails here until its LFS line exists, which is why the extension list lives
+      # beside the check rather than in .gitattributes as a speculative catalogue.
+      - id: geo-data-lfs
+        name: geospatial data is LFS-tracked
+        language: system
+        files: '(?i)\.(tiff?|jp2|ovr|img|ige|hgt|adf|grd|bil|bip|bsq|dt[012]|nc4?|hdf5?|h5|grib2?|grb2?|shp|shx|dbf|sbn|sbx|qix|atx|gpkg|fgb|mbtiles|pmtiles|kmz|pbf|parquet|las|laz)$'
+        entry: >-
+          bash -c 'rc=0; for f in "$@"; do a=$(git check-attr filter -- "$f");
+          [ "${a##*: }" = lfs ] && continue;
+          echo "$f: geospatial data belongs in Git LFS, not a Git blob.";
+          echo "  fix: git lfs track \"*.${f##*.}\" && git add .gitattributes && git add --renormalize \"$f\"";
+          rc=1; done; exit $rc' --
+
+      # A file .gitattributes routes to LFS is exempt from the large-file hook, which is
+      # right until the filter silently does not run — git lfs never installed, or the
+      # extension added after the file was already committed raw. Then full-size bytes land
+      # in history with nothing objecting, so confirm the staged blob is really a pointer.
+      - id: lfs-pointers
+        name: LFS-declared files are staged as pointers
+        language: system
+        entry: >-
+          bash -c 'rc=0; for f in "$@"; do a=$(git check-attr filter -- "$f");
+          [ "${a##*: }" = lfs ] || continue;
+          git cat-file blob ":$f" 2>/dev/null | head -c 64 | grep -q git-lfs.github.com/spec && continue;
+          echo "$f: declared LFS in .gitattributes but staged as raw bytes.";
+          echo "  fix: git lfs install && git rm --cached \"$f\" && git add \"$f\"";
+          rc=1; done; exit $rc' --
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --

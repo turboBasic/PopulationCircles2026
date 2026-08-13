@@ -40,9 +40,17 @@ run = "uv run ruff check ."
 description = "Lint GitHub Actions workflows"
 run = "actionlint"
 
+# CI never runs prek, so the commit hooks would be local-only advice. This task selects the
+# three data-integrity hooks by id and `lint` depends on it, which puts them in CI without a
+# second copy of the logic: .pre-commit-config.yaml stays the only implementation.
+# --all-files rather than the staged set, because on a CI checkout nothing is staged.
+[tasks."lint:lfs"]
+description = "Check geo data is LFS-tracked and no large blob is committed outside LFS"
+run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
+
 [tasks.lint]
 description = "Run every linter"
-depends = ["lint:rust", "lint:python", "lint:workflows"]
+depends = ["lint:rust", "lint:python", "lint:workflows", "lint:lfs"]
 
 [tasks.typecheck]
 description = "Type-check Rust"
