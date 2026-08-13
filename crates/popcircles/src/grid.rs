@@ -4,10 +4,11 @@ use std::fmt;
 use crate::geodesy::LatLon;
 
 // A step arrives as a decimal from a geotransform and need not round-trip to the rational it
-// means, so height * lat_step can land a few ulps past -90 on a grid that in fact ends there. The
-// size is what keeps this from swallowing a real overrun: one row too many costs a whole cell,
-// 1/120° at the finest grid here, eight orders of magnitude above this.
-const POLE_TOLERANCE_DEG: f64 = 1e-9;
+// means, so a span computed from one lands a few ulps off the whole number it is meant to hit —
+// past -90 for a grid that in fact ends at the pole, short of 360 for one that in fact closes on
+// itself. The size is what keeps this from swallowing a real discrepancy: being out by one cell
+// costs 1/120° on the finest grid here, eight orders of magnitude above this.
+const BOUNDARY_TOLERANCE_DEG: f64 = 1e-9;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridError {
@@ -55,6 +56,20 @@ impl fmt::Display for GridError {
 
 impl Error for GridError {}
 
+/// Named fields rather than a tuple because 3.1's zone formula subtracts these two in one
+/// direction only, and a silent swap there flips a sign rather than failing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LatBand {
+    pub north: f64,
+    pub south: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LonSpan {
+    pub west: f64,
+    pub east: f64,
+}
+
 /// Rows run north to south, so `lat_step` is negative — the GDAL north-up convention, kept so a
 /// geotransform read from a raster needs no sign flip.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -100,7 +115,7 @@ impl Grid {
 
         // u32 -> f64 is exact: f64 represents every integer below 2^53.
         let south_edge = origin.lat + f64::from(height) * lat_step;
-        if south_edge < -90.0 - POLE_TOLERANCE_DEG {
+        if south_edge < -90.0 - BOUNDARY_TOLERANCE_DEG {
             return Err(GridError::RunsPastSouthPole { south_edge });
         }
 
@@ -137,6 +152,84 @@ impl Grid {
     pub const fn lat_step(&self) -> f64 {
         self.lat_step
     }
+
+    /// The centre of a cell, not its corner: an index addresses a sample, and every distance in the
+    /// search is measured between sample centres.
+    #[must_use]
+    pub fn centre_of(&self, row: u32, col: u32) -> LatLon {
+        // u32 -> f64 is exact below 2^53, so these carry no rounding of their own.
+        LatLon {
+            lat: self.origin.lat + (f64::from(row) + 0.5) * self.lat_step,
+            lon: self.origin.lon + (f64::from(col) + 0.5) * self.lon_step,
+        }
+    }
+
+    #[must_use]
+    pub fn lat_bounds(&self, row: u32) -> LatBand {
+        let north = self.origin.lat + f64::from(row) * self.lat_step;
+        // lat_step is negative by construction, so north is the larger of the two.
+        LatBand {
+            north,
+            south: north + self.lat_step,
+        }
+    }
+
+    #[must_use]
+    pub fn lon_bounds(&self, col: u32) -> LonSpan {
+        let a = self.origin.lon + f64::from(col) * self.lon_step;
+        let b = a + self.lon_step;
+        // lon_step's sign is not constrained, so order by value rather than by index.
+        LonSpan {
+            west: a.min(b),
+            east: a.max(b),
+        }
+    }
+
+    /// The cell containing a coordinate, or `None` when it falls outside the grid.
+    ///
+    /// Longitude is reduced modulo a full turn first, so on a whole-globe grid every longitude
+    /// lands in a column and the antimeridian is not a boundary. On a window grid a longitude
+    /// outside the window has no column, and that is the `None`.
+    #[must_use]
+    pub fn cell_containing(&self, at: LatLon) -> Option<(u32, u32)> {
+        if !at.lat.is_finite() || !at.lon.is_finite() {
+            return None;
+        }
+
+        let row = index_from_offset((at.lat - self.origin.lat) / self.lat_step, self.height)?;
+
+        let cells_from_origin = (at.lon - self.origin.lon) / self.lon_step;
+        // Reducing by the width rather than by 360/step is what makes "every longitude has a
+        // column" exact on a closed grid: 360/step can exceed the width by a rounding sliver, and
+        // longitudes falling in that sliver would otherwise have no column at all.
+        let modulus = if self.spans_full_turn() {
+            f64::from(self.width)
+        } else {
+            360.0 / self.lon_step.abs()
+        };
+        let col = index_from_offset(cells_from_origin.rem_euclid(modulus), self.width)?;
+
+        Some((row, col))
+    }
+
+    /// Whether the columns close on themselves, as a whole-globe raster's do.
+    #[must_use]
+    pub fn spans_full_turn(&self) -> bool {
+        (f64::from(self.width) * self.lon_step.abs() - 360.0).abs() <= BOUNDARY_TOLERANCE_DEG
+    }
+}
+
+/// `offset` is a position in cells from the origin along one axis; the index is the cell it falls
+/// in, or `None` when that is off the end.
+fn index_from_offset(offset: f64, limit: u32) -> Option<u32> {
+    let floored = offset.floor();
+    if !(0.0..f64::from(limit)).contains(&floored) {
+        return None;
+    }
+    // The range check above proves floored is an integral f64 in [0, limit) and limit is a u32, so
+    // this conversion is exact. std offers no fallible f64 -> u32, which is why it is a cast.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Some(floored as u32)
 }
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
@@ -146,9 +239,31 @@ impl Grid {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     const GPW_STEP: f64 = 1.0 / 120.0;
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-12
+    }
+
+    // The decimated grid application.md "Approach" calls for: same code path, coarse enough to
+    // enumerate exhaustively in a test.
+    fn decimated() -> Grid {
+        Grid::new(
+            360,
+            180,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a 1 degree whole-globe grid is valid")
+    }
 
     fn gpw() -> Grid {
         Grid::new(
@@ -315,5 +430,157 @@ mod tests {
             -GPW_STEP,
         )
         .expect("a window grid inside the globe is valid");
+    }
+
+    #[test]
+    fn centres_sit_half_a_cell_inside_each_corner() {
+        let grid = gpw();
+        let half = GPW_STEP / 2.0;
+
+        let nw = grid.centre_of(0, 0);
+        assert!(close(nw.lat, 90.0 - half) && close(nw.lon, -180.0 + half));
+
+        let ne = grid.centre_of(0, 43199);
+        assert!(close(ne.lat, 90.0 - half) && close(ne.lon, 180.0 - half));
+
+        let sw = grid.centre_of(21599, 0);
+        assert!(close(sw.lat, -90.0 + half) && close(sw.lon, -180.0 + half));
+
+        let se = grid.centre_of(21599, 43199);
+        assert!(close(se.lat, -90.0 + half) && close(se.lon, 180.0 - half));
+    }
+
+    #[test]
+    fn polar_rows_stay_on_the_globe() {
+        let grid = gpw();
+        for row in [0, grid.height() - 1] {
+            let centre = grid.centre_of(row, 0);
+            assert!(centre.lat.abs() < 90.0, "row {row} centre left the globe");
+            assert_eq!(grid.cell_containing(centre), Some((row, 0)));
+        }
+    }
+
+    #[test]
+    fn the_antimeridian_is_not_a_boundary() {
+        let grid = gpw();
+        let last = grid.width() - 1;
+
+        // The two columns either side of the seam are the first and the last, and a longitude in
+        // each lands in it — the seam is where the index wraps, not where the grid stops.
+        assert_eq!(
+            grid.cell_containing(grid.centre_of(0, last)),
+            Some((0, last))
+        );
+        assert_eq!(grid.cell_containing(grid.centre_of(0, 0)), Some((0, 0)));
+
+        // -180 and +180 are the same meridian, so both land in a column, and +180 wraps to the
+        // first rather than falling off the last.
+        assert_eq!(
+            grid.cell_containing(LatLon {
+                lat: 0.0,
+                lon: -180.0
+            }),
+            Some((10800, 0))
+        );
+        assert_eq!(
+            grid.cell_containing(LatLon {
+                lat: 0.0,
+                lon: 180.0
+            }),
+            Some((10800, 0))
+        );
+    }
+
+    #[test]
+    fn bounds_bracket_the_centre() {
+        let grid = gpw();
+        for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)] {
+            let centre = grid.centre_of(row, col);
+            let band = grid.lat_bounds(row);
+            let span = grid.lon_bounds(col);
+            assert!(band.north > centre.lat && centre.lat > band.south);
+            assert!(span.west < centre.lon && centre.lon < span.east);
+            assert!(close(band.north - band.south, GPW_STEP));
+            assert!(close(span.east - span.west, GPW_STEP));
+        }
+    }
+
+    #[test]
+    fn adjacent_rows_share_an_edge() {
+        // The bands tile the globe with no gap and no overlap, which is what lets 3.1's sum
+        // telescope.
+        let grid = decimated();
+        for row in 0..grid.height() - 1 {
+            assert!(close(
+                grid.lat_bounds(row).south,
+                grid.lat_bounds(row + 1).north
+            ));
+        }
+        assert!(close(grid.lat_bounds(0).north, 90.0));
+        assert!(close(grid.lat_bounds(grid.height() - 1).south, -90.0));
+    }
+
+    #[test]
+    fn a_latitude_off_the_grid_has_no_cell() {
+        let grid = gpw();
+        for lat in [90.5, -90.5, f64::NAN, f64::INFINITY] {
+            assert_eq!(grid.cell_containing(LatLon { lat, lon: 0.0 }), None);
+        }
+    }
+
+    #[test]
+    fn a_longitude_outside_a_window_grid_has_no_cell() {
+        // The counterpart of "every longitude has a column": that holds because the globe closes,
+        // and a window does not close, so its outside is a real None.
+        let window = Grid::new(
+            600,
+            600,
+            LatLon {
+                lat: 60.0,
+                lon: -10.0,
+            },
+            GPW_STEP,
+            -GPW_STEP,
+        )
+        .expect("a window grid is valid");
+        assert!(!window.spans_full_turn());
+        assert_eq!(
+            window.cell_containing(LatLon {
+                lat: 57.0,
+                lon: 120.0
+            }),
+            None
+        );
+        assert!(
+            window
+                .cell_containing(LatLon {
+                    lat: 57.0,
+                    lon: -7.0
+                })
+                .is_some()
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn centre_round_trips_on_the_full_grid(row in 0u32..21600, col in 0u32..43200) {
+            let grid = gpw();
+            prop_assert_eq!(grid.cell_containing(grid.centre_of(row, col)), Some((row, col)));
+        }
+
+        #[test]
+        fn centre_round_trips_on_the_decimated_grid(row in 0u32..180, col in 0u32..360) {
+            let grid = decimated();
+            prop_assert_eq!(grid.cell_containing(grid.centre_of(row, col)), Some((row, col)));
+        }
+
+        #[test]
+        fn every_longitude_has_a_column(lon in -3600.0f64..3600.0) {
+            let grid = gpw();
+            // Bound out of the assert: prop_assert! stringifies its expression into a format
+            // string, so a struct literal's braces break the macro.
+            let at = LatLon { lat: 0.0, lon };
+            prop_assert!(grid.cell_containing(at).is_some());
+        }
     }
 }
