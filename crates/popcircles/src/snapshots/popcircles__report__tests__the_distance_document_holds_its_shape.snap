@@ -1,0 +1,20 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(DistanceReport::new(from, to, great_circle_km(from, to)))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "from": {
+      "lat": 0.0,
+      "lon": 0.0
+    },
+    "to": {
+      "lat": 0.0,
+      "lon": 90.0
+    },
+    "great_circle_km": 10007.557221
+  }
+}

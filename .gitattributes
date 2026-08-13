@@ -7,6 +7,7 @@
 *.yml text
 *.yaml text
 *.sh text eol=lf
+*.snap text
 
 # Raster population data. Tracked by LFS but deliberately not fetched on clone —
 # see .lfsconfig and the `data:pull` mise task.

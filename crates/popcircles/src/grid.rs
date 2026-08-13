@@ -213,6 +213,14 @@ impl Grid {
         }
     }
 
+    /// The row halfway down the grid. The one mint that returns a [`Row`] rather than an
+    /// `Option<Row>`, because the constructor rejects a zero height, so the middle index always
+    /// names a row and a caller has no absent case to invent a number for.
+    #[must_use]
+    pub const fn middle_row(&self) -> Row {
+        Row(self.height / 2)
+    }
+
     /// Every row north to south, and every column west to east on a north-up grid. These exist so a
     /// traversal needs no index it has to check: the iterator is the mint.
     pub fn rows(&self) -> impl Iterator<Item = Row> {
@@ -652,6 +660,30 @@ mod tests {
         let cols: Vec<u32> = grid.cols().map(Col::get).collect();
         assert_eq!(rows, (0..grid.height()).collect::<Vec<u32>>());
         assert_eq!(cols, (0..grid.width()).collect::<Vec<u32>>());
+    }
+
+    #[test]
+    fn the_middle_row_is_a_row_of_every_grid() {
+        // Including the one-row grid, which is where a mint returning no Option has to be right:
+        // there the middle is the only row there is.
+        for grid in [
+            decimated(),
+            gpw(),
+            Grid::new(
+                1,
+                1,
+                LatLon {
+                    lat: 90.0,
+                    lon: -180.0,
+                },
+                360.0,
+                -180.0,
+            )
+            .expect("a single-cell whole-globe grid is valid"),
+        ] {
+            let middle = grid.middle_row();
+            assert_eq!(grid.row(middle.get()), Some(middle));
+        }
     }
 
     #[test]

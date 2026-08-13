@@ -68,8 +68,10 @@ and their inverse, cell edges, and cell area. Both are pure computation with no 
    step 3. Cache every radius tried so a rerun resumes instead of repeating work.
 5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
 
-A module per subject inside the one crate, splitting into more crates only when a dependency forces
-it. [`platform.md`](platform.md) "Structure" needs nothing for this: `crates/` is already a root
+A module per subject, and two crates: the library `crates/popcircles/` and the binary
+`crates/popcircles-cli/`. A dependency forced that boundary and is what a further split takes too —
+`clap` and `anyhow` live in the CLI's manifest, and the library's may not grow them.
+[`platform.md`](platform.md) "Structure" needs nothing for this: `crates/` is already a root
 there, and that section carries roots rather than an inventory.
 
 ## Architecture

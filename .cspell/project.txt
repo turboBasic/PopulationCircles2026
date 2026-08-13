@@ -47,6 +47,10 @@ pmtiles
 tiffinfo
 
 # --- Library and API identifiers ---
+bpaf
+indicatif
+insta
+mangen
 proptest
 thiserror
 

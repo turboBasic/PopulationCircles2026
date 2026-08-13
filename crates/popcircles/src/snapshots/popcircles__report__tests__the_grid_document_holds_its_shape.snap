@@ -1,0 +1,21 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(GridSummary::from(&grid))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "width": 360,
+    "height": 180,
+    "origin": {
+      "lat": 90.0,
+      "lon": -180.0
+    },
+    "lon_step": 1.0,
+    "lat_step": -1.0,
+    "spans_full_turn": true,
+    "middle_row_cell_area_km2": 12363.718145180046
+  }
+}

@@ -40,6 +40,10 @@ run = [
   "git config --local pull.ff only",
 ]
 
+[tasks.cli]
+description = "Run the popcircles CLI"
+run = "cargo run -p popcircles-cli --"
+
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
 run = [
