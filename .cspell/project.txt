@@ -39,11 +39,13 @@ Valeriepieris
 EPSG
 GDAL
 grib
+IUGG
 mbtiles
 pmtiles
 tiffinfo
 
 # --- Library and API identifiers ---
+proptest
 thiserror
 
 # --- Repository jargon ---
