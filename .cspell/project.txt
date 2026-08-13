@@ -29,6 +29,7 @@ geotiff
 geotransform
 gridding
 kernels
+Neumaier
 nodata
 Quah
 raster
