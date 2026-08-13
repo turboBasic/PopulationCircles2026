@@ -49,9 +49,10 @@ record takes and the judgment writing one needs.
    events proved them wrong.
 5. **Write the sibling plan when the work needs one.** Implementation spanning more than one sitting
    or more than one task warrants one, provided this ADR decided it — roadmap work stays in issues.
-   Its sections are fixed by `docs/ai/platform.md` "Implementation plans". Drafting the
-   plan before the ADR is often the better order: the ruling and its costs are clearer once the work
-   is laid out. Running it afterwards is the `run-plan` skill.
+   Authoring one is the `write-plan` skill, and its sections are fixed by `docs/ai/platform.md`
+   "Implementation plans". Drafting the plan before the ADR is often the better order: the ruling
+   and its costs are clearer once the work is laid out. Running it afterwards is the `run-plan`
+   skill.
 
 ## Judgment
 
@@ -65,5 +66,3 @@ record takes and the judgment writing one needs.
   both files. Doing neither leaves two live rulings on one question and no way to tell which governs.
 - **A decision this repository did not make is not an ADR.** Upstream conventions, a language's
   defaults and a tool's behaviour are cited, not ruled on.
-- New vocabulary the record introduces goes in `.cspell/project.txt` in the same change, or the
-  hooks fail on the commit that adds it.
