@@ -61,12 +61,25 @@ Identifiers are flat, sequential and never reused.
   It has no host yet: `crates/popcircles/` is a library about spherical geometry, there is no Python
   package, and a shell script would be a fourth place hooks are configured.
 
-### FU-04 - Diagnostics have no facade
+### FU-03 - Nothing couples a wire-format change to a version bump
 
-Numbered past `FU-03`, which
-[ADR 0001's plan](decisions/0001-cli-and-output-layer.plan.md) reserves for its close-out. The gap is
-deliberate: identifiers are never reused, and renumbering a reserved one to close a temporary hole is
-churn.
+- **Status** — `dormant`.
+- **Condition** — a commit **modifies** an existing file under `crates/popcircles/src/snapshots/`
+  without changing `SCHEMA_VERSION` in `crates/popcircles/src/report.rs`. The sweep is
+  `git log --diff-filter=M --format=%H -- crates/popcircles/src/snapshots/`, and for each commit it
+  names, `git show <sha> -- crates/popcircles/src/report.rs | rg SCHEMA_VERSION` coming back empty.
+  Modification and not addition is the filter, because a new payload type is additive and owes no bump;
+  a *changed* shape under an unchanged number is what leaves an old document unreadable without saying
+  so.
+- **Fix** — a `repo: local` hook beside `geo-data-lfs`, `files: ^crates/popcircles/src/snapshots/` and
+  `pass_filenames: false`, failing when `git diff --cached --diff-filter=M --name-only` over that
+  directory is non-empty while `git diff --cached -U0 -- crates/popcircles/src/report.rs` carries no
+  `SCHEMA_VERSION` line. Both halves were run against this tree on 2026-08-13: the sole commit touching
+  the directory adds the snapshots, so the sweep is clean, and a staged edit to one of them fires the
+  check. It cannot judge whether a shape change was breaking, which makes it a tripwire of the same
+  kind as `geo-data-lfs` rather than a lint of its own.
+
+### FU-04 - Diagnostics have no facade
 
 - **Status** — `dormant`.
 - **Condition** — either signal that ad-hoc printing has outgrown itself. `rg -n 'print!|println!|eprintln!' crates/popcircles/src`

@@ -5,7 +5,7 @@ created: 2026-08-13
 
 # Implementation plan — ADR 0001, the CLI crate and the JSON contract
 
-**Status: in progress (2026-08-13).** Carries the work
+**Status: complete (2026-08-13).** Carries the work
 [ADR 0001](0001-cli-and-output-layer.md) decided. It lands the frame, not the command surface: the four
 commands #8 names need #3 through #7, and #16's need #13 through #15. What is executable today is the
 crate boundary, the wire format's owner, and one command surface thin enough to prove both against code
@@ -164,7 +164,7 @@ and no gate catches it. 4.2 is a register entry and two `gh` comments.
       *Verify:* `rg -n 'library and binary'` and `rg -n 'inside the one crate'` both return nothing;
       `README.md`'s Layout table has a row for `crates/popcircles-cli/`; `prek run --all-files` green.
 
-- [ ] **4.2 Close the plan.** `FU-03` in [`../follow-ups.md`](../follow-ups.md), in that file's format
+- [x] **4.2 Close the plan.** `FU-03` in [`../follow-ups.md`](../follow-ups.md), in that file's format
       and meeting its bar: nothing couples a change to a `report` type to a bump of `SCHEMA_VERSION`,
       and the condition a sweep can evaluate is a commit that changes a file under
       `crates/popcircles/src/snapshots/` without changing `SCHEMA_VERSION`.
@@ -195,9 +195,4 @@ and no gate catches it. 4.2 is a register entry and two `gh` comments.
 
 ## Follow-ups
 
-One candidate, not an entry until 4.2 writes it:
-
-- **Nothing couples a wire-format change to a version bump.** `SCHEMA_VERSION` is a constant a change to
-  a `report` type is free to ignore, and the snapshots will happily record the new shape under the old
-  number. The condition is checkable — a commit touching `crates/popcircles/src/snapshots/` without
-  touching `SCHEMA_VERSION` — which is what makes it a register entry rather than a note here.
+`FU-03` in [`../follow-ups.md`](../follow-ups.md).
