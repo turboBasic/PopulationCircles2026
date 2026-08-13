@@ -2,6 +2,8 @@
 // decoding is the sibling module's business and appears in no type here, so replacing it — ADR 0002
 // names the conditions — is not a breaking change to anything downstream has matched on.
 
+pub mod geotiff;
+
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
