@@ -46,7 +46,11 @@ quiet workaround.
 
 ## Approach
 
-The intended shape, stated as targets rather than as existing code — nothing is implemented yet.
+Steps 1 to 5 are targets rather than existing code. What exists is the ground they stand on: one
+library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping and
+great-circle distance, and `grid` holding the raster's geometry — the checked `Grid`, pixel centres
+and their inverse, cell edges, and cell area. Both are pure computation with no I/O, and steps 1 and
+2 are the first callers.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full
@@ -63,8 +67,9 @@ The intended shape, stated as targets rather than as existing code — nothing i
    step 3. Cache every radius tried so a rerun resumes instead of repeating work.
 5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
 
-Nothing above is a commitment to a module layout. When the first code lands, this section gets
-updated to describe what exists, and [`platform.md`](platform.md) "Structure" gains the directories.
+A module per subject inside the one crate, splitting into more crates only when a dependency forces
+it. [`platform.md`](platform.md) "Structure" needs nothing for this: `crates/` is already a root
+there, and that section carries roots rather than an inventory.
 
 ## Correctness invariants
 
