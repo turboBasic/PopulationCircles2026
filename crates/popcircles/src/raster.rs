@@ -2,11 +2,12 @@
 // decoding is the sibling module's business and appears in no type here, so replacing it — ADR 0002
 // names the conditions — is not a breaking change to anything downstream has matched on.
 
+use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 
 use crate::geodesy::LatLon;
-use crate::grid::Grid;
+use crate::grid::{Grid, Row};
 
 /// What the caller declares a raster must be, and what a reader hands back on success: the grid a
 /// consumer sees is this one, never one assembled from the file's own tags. A geotransform arrives as
@@ -165,11 +166,150 @@ pub enum RasterError {
     Decode(#[source] Box<dyn Error + Send + Sync>),
 }
 
+/// One row of a raster, borrowed from whatever buffer the source decoded it into.
+///
+/// The index is a [`Row`] rather than an integer because the accessors on [`Grid`] take nothing else:
+/// handing out a `u32` would mean every consumer re-mints it, or does not, and carries a raw index the
+/// grid has already stopped accepting.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RasterRow<'a> {
+    pub row: Row,
+    pub values: &'a [f32],
+}
+
+/// A raster read one row at a time, in row order, with nodata already turned into zero.
+///
+/// The borrow in [`RasterSource::next_row`] ends when the row is dropped, so a caller cannot hold two
+/// input rows at once. That costs a prefix-sum pass nothing — it carries the previous *output* row in
+/// its own accumulator, not the previous input row — and it is what lets a source hand out a slice of
+/// the strip it just decoded instead of a copy.
+pub trait RasterSource {
+    /// The **declared** grid, never one assembled from a file's own tags.
+    fn grid(&self) -> Grid;
+
+    /// The next row, or `None` when the raster is drained. The grid is the mint and the bound at once:
+    /// this returns `None` exactly when `grid().row(i)` does, so the stream needs no length of its own.
+    fn next_row(&mut self) -> Option<Result<RasterRow<'_>, RasterError>>;
+
+    /// The tallies, once the stream is exhausted.
+    ///
+    /// It consumes the source rather than reading through a `&self` getter, because a count taken
+    /// halfway through a read is not wrong for any reason a caller could state. Consuming makes the
+    /// half-formed read unrepresentable instead of documented. `where Self: Sized` keeps the streaming
+    /// half of this trait usable through `dyn RasterSource`, which is what a consumer holding several
+    /// kinds of source wants.
+    fn finish(self) -> CellTallies
+    where
+        Self: Sized;
+}
+
+/// The one place a sentinel becomes a zero, and the only thing in this crate that knows a nodata value
+/// from a population count. `application.md` "Nodata" is why it is one place: a second copy is how a
+/// later stage ends up having to tell them apart again.
+///
+/// The sentinel is matched on bits, not with `==`. A `GDAL_NODATA` of `nan` is a legal tag that `==`
+/// would never match, and the registry raster's sentinel sits two ulps from `-f32::MAX`, so a
+/// comparison that is nearly right is a world population of zero.
+pub fn sanitise_row(values: &mut [f32], nodata: f32, tallies: &mut CellTallies) {
+    let sentinel = nodata.to_bits();
+    for value in values {
+        if value.to_bits() == sentinel {
+            tallies.nodata += 1;
+            *value = 0.0;
+        } else if *value < 0.0 {
+            tallies.unexpected_negative += 1;
+            *value = 0.0;
+        } else if *value > 0.0 {
+            tallies.populated += 1;
+        } else {
+            // Zero, and everything else that is not a count: a NaN which is not the sentinel compares
+            // false both ways and lands here. Writing zero rather than leaving it is what keeps "no
+            // later stage has to know a sentinel from a count" true of NaN too.
+            tallies.zero += 1;
+            *value = 0.0;
+        }
+    }
+}
+
+/// A raster held in memory, for a caller that wants a raster without a file — every consumer of this
+/// trait is tested against one.
+///
+/// Public and unconditional rather than `#[cfg(test)]`: the tests that want it live in `tests/` and in
+/// other crates, where a test-only item is invisible.
+#[derive(Debug, Clone)]
+pub struct Synthetic {
+    grid: Grid,
+    nodata: f32,
+    remaining: VecDeque<Vec<f32>>,
+    next: u32,
+    current: Vec<f32>,
+    tallies: CellTallies,
+}
+
+impl Synthetic {
+    /// `rows` are raw values, sentinels included, one inner vector per grid row: a fixture states what
+    /// the file would hold and gets the same conversion a decoded strip gets.
+    ///
+    /// # Errors
+    /// [`RasterError::Dimensions`] when the rows are not the shape the grid declares.
+    pub fn new(grid: Grid, nodata: f32, rows: Vec<Vec<f32>>) -> Result<Self, RasterError> {
+        let widths: Vec<usize> = rows.iter().map(Vec::len).collect();
+        let found_width = widths.first().copied().unwrap_or(0);
+        let ragged = widths.iter().any(|width| *width != found_width);
+        let declared = (grid.width(), grid.height());
+
+        // usize -> u32 saturates rather than wrapping, so an oversized fixture is reported as too
+        // large instead of as some smaller shape that happens to fit.
+        let found = (
+            u32::try_from(found_width).unwrap_or(u32::MAX),
+            u32::try_from(rows.len()).unwrap_or(u32::MAX),
+        );
+        if ragged || found != declared {
+            return Err(RasterError::Dimensions { declared, found });
+        }
+
+        Ok(Self {
+            grid,
+            nodata,
+            remaining: rows.into(),
+            next: 0,
+            current: Vec::with_capacity(found_width),
+            tallies: CellTallies::default(),
+        })
+    }
+}
+
+impl RasterSource for Synthetic {
+    fn grid(&self) -> Grid {
+        self.grid
+    }
+
+    fn next_row(&mut self) -> Option<Result<RasterRow<'_>, RasterError>> {
+        let row = self.grid.row(self.next)?;
+        let raw = self.remaining.pop_front()?;
+        self.next += 1;
+
+        self.current = raw;
+        sanitise_row(&mut self.current, self.nodata, &mut self.tallies);
+        Some(Ok(RasterRow {
+            row,
+            values: &self.current,
+        }))
+    }
+
+    fn finish(self) -> CellTallies {
+        self.tallies
+    }
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
-// narrow exemption; docs/ai/code.md allows both in tests.
+// narrow exemption; docs/ai/code.md allows both in tests. float_cmp is here because the sanitiser's
+// contract is exact: a cell is zero or it is the value the file held, never within a tolerance of one.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     fn spec_grid() -> Grid {
@@ -363,6 +503,152 @@ mod tests {
                     "{error:?} says {message:?}, which does not name {fragment:?}"
                 );
             }
+        }
+    }
+
+    // Four cells, one of each class: the declared sentinel, a negative nothing explains, a zero and a
+    // count.
+    fn one_of_each() -> Synthetic {
+        let grid = Grid::new(
+            4,
+            1,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            90.0,
+            -90.0,
+        )
+        .expect("a four-cell band is a valid grid");
+        Synthetic::new(grid, GPW_NODATA, vec![vec![GPW_NODATA, -1.0, 0.0, 12.5]])
+            .expect("the fixture is the shape the grid declares")
+    }
+
+    #[test]
+    fn a_sentinel_and_an_unexplained_negative_both_come_out_as_zero() {
+        let mut raster = one_of_each();
+        let row = raster.next_row().expect("the first row").expect("no error");
+        assert_eq!(row.values, [0.0, 0.0, 0.0, 12.5]);
+        assert_eq!(row.row, raster.grid().row(0).unwrap());
+
+        assert!(raster.next_row().is_none());
+        // The counts are only a fact about the raster once the last row is read, which is why they are
+        // reachable through `finish` and nowhere else.
+        let tallies = raster.finish();
+        assert_eq!(
+            tallies,
+            CellTallies {
+                nodata: 1,
+                unexpected_negative: 1,
+                zero: 1,
+                populated: 1,
+            }
+        );
+        assert_eq!(tallies.total(), 4);
+    }
+
+    #[test]
+    fn a_drained_raster_hands_out_its_grids_rows_in_order_and_then_nothing() {
+        let grid = Grid::new(
+            360,
+            180,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a one-degree whole-globe grid is valid");
+        let rows = vec![vec![1.0; 360]; 180];
+        let mut raster =
+            Synthetic::new(grid, GPW_NODATA, rows).expect("the fixture matches the grid");
+
+        let mut seen = Vec::new();
+        while let Some(row) = raster.next_row() {
+            seen.push(row.expect("no error").row);
+        }
+        assert_eq!(seen, grid.rows().collect::<Vec<_>>());
+        // Stays drained: a caller polling a second time gets None rather than the first row again.
+        assert!(raster.next_row().is_none());
+        assert!(raster.next_row().is_none());
+        assert_eq!(raster.finish().populated, 360 * 180);
+    }
+
+    #[test]
+    fn the_streaming_half_works_through_a_trait_object() {
+        // What `where Self: Sized` on finish buys: a consumer holding several kinds of source reads
+        // rows through one pointer, and pays only by not being able to end the stream through it.
+        let mut raster = one_of_each();
+        let source: &mut dyn RasterSource = &mut raster;
+        assert_eq!(source.grid().width(), 4);
+        let row = source.next_row().expect("the first row").expect("no error");
+        assert_eq!(row.values, [0.0, 0.0, 0.0, 12.5]);
+    }
+
+    #[test]
+    fn a_fixture_that_is_not_the_grids_shape_is_rejected() {
+        let grid = one_of_each().grid();
+        for rows in [
+            vec![vec![1.0, 2.0, 3.0]],
+            vec![vec![1.0; 4], vec![1.0; 4]],
+            vec![vec![1.0, 2.0, 3.0, 4.0], vec![1.0, 2.0]],
+            vec![],
+        ] {
+            assert!(matches!(
+                Synthetic::new(grid, GPW_NODATA, rows),
+                Err(RasterError::Dimensions { .. })
+            ));
+        }
+    }
+
+    // A cell is a sentinel, a negative, a zero or a count, and the strategy has to produce all four —
+    // a generator of arbitrary f32 would hit the sentinel's exact bits about never.
+    fn a_cell() -> impl Strategy<Value = f32> {
+        prop_oneof![
+            1 => Just(GPW_NODATA),
+            1 => -1e6f32..0.0,
+            1 => Just(0.0f32),
+            3 => 0.0f32..1e6,
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn no_cell_leaves_the_seam_negative_and_the_counts_survive(
+            width in 1u32..8,
+            height in 1u32..8,
+            seed in prop::collection::vec(a_cell(), 1..64),
+        ) {
+            let grid = Grid::new(
+                width,
+                height,
+                LatLon { lat: 90.0, lon: -180.0 },
+                360.0 / f64::from(width),
+                -180.0 / f64::from(height),
+            )?;
+            let cells: Vec<f32> = (0..width * height)
+                .map(|index| seed[index as usize % seed.len()])
+                .collect();
+            let rows: Vec<Vec<f32>> = cells
+                .chunks(width as usize)
+                .map(<[f32]>::to_vec)
+                .collect();
+
+            let mut raster = Synthetic::new(grid, GPW_NODATA, rows)?;
+            let mut out = Vec::new();
+            while let Some(row) = raster.next_row() {
+                out.extend_from_slice(row?.values);
+            }
+
+            let expected: f32 = cells
+                .iter()
+                .filter(|value| **value > 0.0)
+                .sum();
+            prop_assert!(out.iter().all(|value| *value >= 0.0));
+            prop_assert_eq!(out.iter().sum::<f32>(), expected);
+            let tallies = raster.finish();
+            prop_assert_eq!(tallies.total(), u64::from(width) * u64::from(height));
         }
     }
 
