@@ -74,8 +74,9 @@ invariant matters more than pinning the output: a summation table agrees with a 
 inputs; a circle's contained population is monotonic in radius. [`platform.md`](platform.md) "Testing"
 holds how those tests are organised.
 
-- **Ground distance.** Distances are geodesic on the sphere — or the ellipsoid, once one is chosen and
-  documented here. **Never treat pixel or degree distance as ground distance, and never measure
+- **Ground distance.** Distances are great-circle arcs on a sphere. `crates/popcircles/src/geodesy.rs`
+  states the radius and the formula and is the only place either appears; a second copy anywhere is a
+  defect to fix there. **Never treat pixel or degree distance as ground distance, and never measure
   Euclidean in pixel or degree space.** That is a correctness bug, not an approximation: it produces a
   plausible wrong answer rather than a failure, which is why it needs a test and not just a review.
 - **Antimeridian and poles.** A circle may wrap longitude or cover a pole. Every raster traversal
