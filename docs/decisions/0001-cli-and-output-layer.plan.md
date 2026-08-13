@@ -78,7 +78,7 @@ mistake that reaches four issues.
 Both tasks land in `crates/popcircles/src/report.rs`, declared in `lib.rs`. Nothing here knows about
 clap, a path, or a stream.
 
-- [ ] **2.1 The envelope and two payloads.** `report::SCHEMA_VERSION`, an `Envelope<T>` carrying the
+- [x] **2.1 The envelope and two payloads.** `report::SCHEMA_VERSION`, an `Envelope<T>` carrying the
       schema version, the tool name and the tool version from `CARGO_PKG_*`, and the payload under a
       `result` key. Two payload types, each `Serialize` and each built from domain values by an explicit
       conversion rather than a derive on the domain: a distance report (the two coordinates and the
