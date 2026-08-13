@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::geodesy::{EARTH_RADIUS_KM, LatLon};
+use crate::geodesy::{LatBand, LatLon, zone_area_km2};
 
 // A step arrives as a decimal from a geotransform and need not round-trip to the rational it
 // means, so a span computed from one lands a few ulps off the whole number it is meant to hit —
@@ -59,14 +59,6 @@ impl fmt::Display for GridError {
 }
 
 impl Error for GridError {}
-
-/// Named fields rather than a tuple because 3.1's zone formula subtracts these two in one
-/// direction only, and a silent swap there flips a sign rather than failing.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LatBand {
-    pub north: f64,
-    pub south: f64,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LonSpan {
@@ -292,20 +284,14 @@ impl Grid {
         Some((row, col))
     }
 
-    /// The ground area of any cell in a row, by the spherical zone formula
-    /// `R² · Δλ · (sin φ_north − sin φ_south)`. Every cell in a row has the same area, so this takes
-    /// no column.
+    /// The ground area of any cell in a row. Every cell in a row has the same area, so this takes no
+    /// column.
     ///
     /// It reads the row's edges through [`Grid::lat_bounds`] rather than recomputing them, which is
     /// what stops the area and the coordinate of a row from ever disagreeing about where the row is.
     #[must_use]
     pub fn cell_area_km2(&self, row: Row) -> f64 {
-        let band = self.lat_bounds(row);
-        let delta_lon_rad = self.lon_step.abs().to_radians();
-        EARTH_RADIUS_KM
-            * EARTH_RADIUS_KM
-            * delta_lon_rad
-            * (band.north.to_radians().sin() - band.south.to_radians().sin())
+        zone_area_km2(self.lat_bounds(row), self.lon_step.abs())
     }
 
     /// Whether the columns close on themselves, as a whole-globe raster's do.
@@ -338,7 +324,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::geodesy::wrap_lon;
+    use crate::geodesy::{EARTH_RADIUS_KM, wrap_lon};
 
     const GPW_STEP: f64 = 1.0 / 120.0;
 

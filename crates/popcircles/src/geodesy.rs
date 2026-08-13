@@ -46,6 +46,30 @@ pub fn great_circle_km(from: LatLon, to: LatLon) -> f64 {
     EARTH_RADIUS_KM * angular_distance_rad(from, to)
 }
 
+/// The band of latitude between two parallels: what a spherical zone stands on, and what a grid row
+/// occupies.
+///
+/// Named fields rather than a tuple because [`zone_area_km2`] subtracts these two in one direction
+/// only, and a silent swap there flips a sign rather than failing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LatBand {
+    pub north: f64,
+    pub south: f64,
+}
+
+/// The area a band cuts from the sphere across `delta_lon_deg` of longitude, by the spherical zone
+/// formula `R² · Δλ · (sin φ_north − sin φ_south)`.
+///
+/// It lives beside the radius rather than beside its caller so that the sphere appears in one module:
+/// a second `EARTH_RADIUS_KM` in an expression elsewhere is how the earth model starts to drift.
+#[must_use]
+pub fn zone_area_km2(band: LatBand, delta_lon_deg: f64) -> f64 {
+    EARTH_RADIUS_KM
+        * EARTH_RADIUS_KM
+        * delta_lon_deg.to_radians()
+        * (band.north.to_radians().sin() - band.south.to_radians().sin())
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
 // narrow exemption; docs/ai/code.md allows both in tests. float_cmp covers the symmetry assertion,
 // where exact equality is the property: the formula is symmetric in its arguments, so any
@@ -219,6 +243,46 @@ mod tests {
                 "{what}: {actual} km against WGS 84's {ellipsoidal_km} km, off by {relative}"
             );
         }
+    }
+
+    #[test]
+    fn a_zone_over_the_whole_sphere_is_four_pi_r_squared() {
+        let whole = zone_area_km2(
+            LatBand {
+                north: 90.0,
+                south: -90.0,
+            },
+            360.0,
+        );
+        assert_rel(
+            whole,
+            4.0 * std::f64::consts::PI * EARTH_RADIUS_KM * EARTH_RADIUS_KM,
+            "the whole sphere",
+        );
+        // Half the longitude is half the area at any latitude, which is what makes a per-row area
+        // independent of column.
+        assert_rel(
+            zone_area_km2(
+                LatBand {
+                    north: 90.0,
+                    south: -90.0,
+                },
+                180.0,
+            ),
+            whole / 2.0,
+            "half the turn",
+        );
+    }
+
+    #[test]
+    fn a_band_given_upside_down_reports_a_negative_area() {
+        // Not a supported call, pinned because it is the failure the named fields exist to make
+        // visible: a swap does not fail, it changes sign.
+        let band = LatBand {
+            north: -90.0,
+            south: 90.0,
+        };
+        assert!(zone_area_km2(band, 360.0) < 0.0);
     }
 
     #[test]
