@@ -165,13 +165,31 @@ and no gate catches it. 4.2 is a register entry and two `gh` comments.
 - [ ] **4.2 Close the plan.** `FU-03` in [`../follow-ups.md`](../follow-ups.md), in that file's format
       and meeting its bar: nothing couples a change to a `report` type to a bump of `SCHEMA_VERSION`,
       and the condition a sweep can evaluate is a commit that changes a file under
-      `crates/popcircles/src/snapshots/` without changing `SCHEMA_VERSION`. Comment on #8 naming ADR
-      0001, which of its four boxes the frame already satisfies and which remain; comment on #16 that
-      the envelope is the contract it extends rather than replaces. Then this plan's status line reads
-      `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section below holds `FU-03`.
-      *Verify:* `rg -n 'FU-03' docs/follow-ups.md` matches an entry with all three fields; #8 and #16
-      each carry the comment; this file's status line reads complete and its Follow-ups section names
-      no candidate that is not a register entry.
+      `crates/popcircles/src/snapshots/` without changing `SCHEMA_VERSION`.
+
+      Then four issue notes, because the frame reaches past the two CLI issues. **None of them edits a
+      "Done when" list.** Those are what the roadmap discovered #8 and #16 must satisfy, and a box this
+      frame half-satisfies is still unsatisfied; a comment records what a record has since decided
+      without rewriting what the issue asked.
+      - **#8** — name ADR 0001 and which *fragments* of its four boxes the frame satisfies: stable key
+        ordering but not the synthetic fixture, version stamping but not provenance, a machine-readable
+        stdout but no progress, bad input but neither missing data nor interruption. Its Goal, the four
+        commands, is untouched.
+      - **#16** — the envelope is the contract its second box bumps rather than one that box defines,
+        and `SCHEMA_VERSION` is where "existing world-level output stays readable" gets decided.
+      - **#3** — `serde` is already in the library, which its cache header needs; its bounded build is
+        the first caller of the progress sink ADR 0001 decision 4 fixes the shape of; and `FU-03` is the
+        pattern for binding a format version to the thing it versions.
+      - **#9, and #11's body** — #11 reads "#9 needs only the schema from #8". After ADR 0001 the schema
+        is the library's `report` module and #8 writes it rather than defining it. That sentence is the
+        one body edit this task makes, because it names an owner that moved.
+
+      Then this plan's status line reads `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section
+      below holds `FU-03`.
+      *Verify:* `rg -n 'FU-03' docs/follow-ups.md` matches an entry with all three fields; #8, #16, #3
+      and #9 each carry the comment and no "Done when" list in any of them has changed; #11's body no
+      longer says #9 takes the schema from #8; this file's status line reads complete and its Follow-ups
+      section names no candidate that is not a register entry.
 
 ## Follow-ups
 
