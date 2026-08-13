@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::geodesy::{LatBand, LatLon, zone_area_km2};
+use crate::geodesy::{LatBand, LatLon, wrap_lon, zone_area_km2};
 
 // A step arrives as a decimal from a geotransform and need not round-trip to the rational it
 // means, so a span computed from one lands a few ulps off the whole number it is meant to hit —
@@ -156,7 +156,14 @@ impl Grid {
         Ok(Self {
             width,
             height,
-            origin,
+            // Reducing the origin once here is what keeps `centre_of` and `cell_containing` talking
+            // about the same longitudes: the inverse reduces modulo a turn and so is indifferent to
+            // an origin a few turns out, while the forward direction would carry that offset into
+            // every coordinate it returns and hand a renderer a longitude of 540.
+            origin: LatLon {
+                lat: origin.lat,
+                lon: wrap_lon(origin.lon),
+            },
             lon_step,
             lat_step,
         })
@@ -218,6 +225,11 @@ impl Grid {
 
     /// The centre of a cell, not its corner: an index addresses a sample, and every distance in the
     /// search is measured between sample centres.
+    ///
+    /// The longitude is reduced only as far as the origin was, so a grid whose columns cross the
+    /// antimeridian returns one past 180 rather than folded — folding it here is what would put west
+    /// east of east in a [`LonSpan`]. Distance does not care, since it works on a difference;
+    /// anything presenting a coordinate reduces with [`crate::geodesy::wrap_lon`].
     #[must_use]
     pub fn centre_of(&self, row: Row, col: Col) -> LatLon {
         debug_assert!(row.0 < self.height && col.0 < self.width);
@@ -324,7 +336,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::geodesy::{EARTH_RADIUS_KM, wrap_lon};
+    use crate::geodesy::EARTH_RADIUS_KM;
 
     const GPW_STEP: f64 = 1.0 / 120.0;
 
@@ -546,6 +558,29 @@ mod tests {
     }
 
     #[test]
+    fn an_origin_off_the_seam_is_reduced_at_construction() {
+        for lon in [180.0, 540.0, -540.0] {
+            let grid = Grid::new(360, 180, LatLon { lat: 90.0, lon }, 1.0, -1.0)
+                .expect("a whole-globe grid is valid at any origin longitude");
+            assert_eq!(grid.origin().lon, -180.0, "origin lon {lon}");
+        }
+        // A window keeps the longitude it was given when that is already canonical, so reducing the
+        // origin does not move a mask off the region it covers.
+        let window = Grid::new(
+            600,
+            600,
+            LatLon {
+                lat: 60.0,
+                lon: 170.0,
+            },
+            GPW_STEP,
+            -GPW_STEP,
+        )
+        .expect("a window grid is valid");
+        assert_eq!(window.origin().lon, 170.0);
+    }
+
+    #[test]
     fn an_index_off_the_end_is_never_minted() {
         // The accessors have no bound of their own, so this is the only thing standing between a
         // caller's arithmetic and a latitude off the globe or a negative cell area.
@@ -718,15 +753,17 @@ mod tests {
                 -GPW_STEP,
             )
             .expect("shifting the origin by whole turns keeps the grid valid");
+            // Same grid, not merely a grid that agrees once wrapped: the constructor reduces the
+            // origin, so there is no offset left for a coordinate to carry.
+            assert_eq!(shifted, base, "k={k}");
             for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)]
                 .map(|(row, col)| cell(&shifted, row, col))
             {
                 let here = shifted.centre_of(row, col);
                 let there = base.centre_of(row, col);
-                assert!(close(here.lat, there.lat));
                 assert!(
-                    (wrap_lon(here.lon) - wrap_lon(there.lon)).abs() < 1e-9,
-                    "k={k} ({}, {})",
+                    here == there,
+                    "k={k} ({}, {}): {here:?} against {there:?}",
                     row.get(),
                     col.get()
                 );
