@@ -9,6 +9,7 @@ insta = { version = "1", features = ["json", "redactions"] }
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tempfile = "3"
 thiserror = "2"
 # The trimmed feature set is ADR 0002's ruling, not a default: deflate, fax and jpeg are decode
 # paths a Float32 population raster cannot reach, and enabling one costs eleven more crates.

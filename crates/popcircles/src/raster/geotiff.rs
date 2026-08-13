@@ -5,6 +5,11 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 
+/// How every Git LFS pointer file begins. `platform.md` "Large input data" requires a clone that has
+/// not fetched the objects to be told so by name, rather than having 134 bytes of text parsed as a
+/// TIFF and reported as a format error.
+const LFS_POINTER: &[u8] = b"version https://git-lfs";
+
 use tiff::decoder::{ChunkType, Decoder, DecodingResult};
 use tiff::tags::Tag;
 
@@ -56,7 +61,19 @@ impl GeoTiffSource<BufReader<File>> {
 }
 
 impl<R: Read + Seek> GeoTiffSource<R> {
-    fn from_reader(reader: R, spec: &RasterSpec) -> Result<Self, RasterError> {
+    fn from_reader(mut reader: R, spec: &RasterSpec) -> Result<Self, RasterError> {
+        // Before any byte reaches the decoder, because a pointer is valid text and an invalid TIFF, and
+        // the second thing is what a decoder would report.
+        let mut head = Vec::with_capacity(LFS_POINTER.len());
+        (&mut reader)
+            .take(LFS_POINTER.len() as u64)
+            .read_to_end(&mut head)
+            .map_err(RasterError::Io)?;
+        if head == LFS_POINTER {
+            return Err(RasterError::UnfetchedPointer);
+        }
+        reader.rewind().map_err(RasterError::Io)?;
+
         // The default Limits stand, per ADR 0002: the registry raster's 86 KB strip offsets and 173 KB
         // strips sit far inside them, so unlimited would only widen what a malformed header can ask for.
         let mut decoder = decoded(Decoder::new(reader))?;
@@ -997,6 +1014,26 @@ mod tests {
         assert!(matches!(error, Some(RasterError::Decode(_))));
         // Terminal: a caller that logs the error and keeps polling is not handed it for ever.
         assert!(source.next_row().is_none());
+    }
+
+    #[test]
+    fn an_unfetched_pointer_names_the_task_that_fetches_it() {
+        // The shape `git lfs` leaves in a clone that skipped the objects, which is every clone by
+        // default: valid text, and an invalid TIFF that a decoder would report as a format error.
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let path = directory.path().join("gpw.tif");
+        std::fs::write(
+            &path,
+            "version https://git-lfs.github.com/spec/v1\n\
+             oid sha256:956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d\n\
+             size 428522394\n",
+        )
+        .expect("writing a pointer-shaped file");
+
+        let error = GeoTiffSource::open(&path, &spec_for(declared_grid(4, 3, -180.0)))
+            .expect_err("a pointer is not a raster");
+        assert!(matches!(error, RasterError::UnfetchedPointer));
+        assert!(error.to_string().contains("mise run data:pull"));
     }
 
     #[test]
