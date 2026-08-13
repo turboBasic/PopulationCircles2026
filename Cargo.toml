@@ -2,6 +2,9 @@
 members = ["crates/*"]
 resolver = "3"
 
+[workspace.dependencies]
+proptest = "1"
+
 [workspace.package]
 edition = "2024"
 rust-version = "1.97"
