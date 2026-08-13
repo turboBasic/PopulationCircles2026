@@ -142,11 +142,15 @@ mod tests {
             lat: 0.0,
             lon: 90.0,
         };
-        insta::assert_json_snapshot!(Envelope::new(DistanceReport::new(
-            from,
-            to,
-            great_circle_km(from, to)
-        )));
+        // Rounded because sin, cos and atan2 are not bit-identical across libm implementations: the
+        // full expansion of this f64 differs in its last digits between arm64 and x86_64, so pinning
+        // it would make the snapshot a test of the host rather than of the document. Six decimals is
+        // a millimetre, far below anything the sphere model itself is good for. The wire format still
+        // carries the unrounded value.
+        insta::assert_json_snapshot!(
+            Envelope::new(DistanceReport::new(from, to, great_circle_km(from, to))),
+            { ".result.great_circle_km" => insta::rounded_redaction(6) }
+        );
     }
 
     #[test]

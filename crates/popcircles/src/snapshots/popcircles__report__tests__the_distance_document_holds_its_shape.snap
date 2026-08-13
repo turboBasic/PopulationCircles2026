@@ -15,6 +15,6 @@ expression: "Envelope::new(DistanceReport::new(from, to, great_circle_km(from, t
       "lat": 0.0,
       "lon": 90.0
     },
-    "great_circle_km": 10007.55722101796
+    "great_circle_km": 10007.557221
   }
 }
