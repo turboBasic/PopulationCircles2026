@@ -142,6 +142,85 @@ mod tests {
         );
     }
 
+    // Published worked examples, each stating its own earth model. The assertion is on the central
+    // angle because that is radius-independent: every source uses a different sphere from ours
+    // (6371.2, 6371, and one implied by the nautical mile), and comparing angles removes that
+    // disagreement rather than hiding it inside a tolerance. Each tolerance is the precision the
+    // source printed — five or six significant figures — not a number picked to pass.
+    //
+    // 1. White House to Eiffel Tower — "Haversine formula", Wikipedia. Sphere of 6371.2 km.
+    // 2. Valparaiso to Shanghai — "Great-circle navigation", Wikipedia. Sphere of 6371 km. This
+    //    one crosses the antimeridian and is 168.56 deg long, so it also covers the long-line case.
+    // 3. LAX to JFK — Ed Williams, "Aviation Formulary" v1.47, https://edwilliams.org/avform147.htm
+    //    Spherical, published directly in radians.
+    #[test]
+    fn published_central_angles_agree() {
+        let cases = [
+            (
+                "White House to Eiffel Tower",
+                at(38.898, -77.037),
+                at(48.858, 2.294),
+                55.411_f64.to_radians(),
+                1e-5,
+            ),
+            (
+                "Valparaiso to Shanghai",
+                at(-33.0, -71.6),
+                at(31.4, 121.8),
+                168.56_f64.to_radians(),
+                5e-5,
+            ),
+            (
+                "LAX to JFK",
+                at(33.0 + 57.0 / 60.0, -(118.0 + 24.0 / 60.0)),
+                at(40.0 + 38.0 / 60.0, -(73.0 + 47.0 / 60.0)),
+                0.623_585,
+                2e-6,
+            ),
+        ];
+
+        for (what, from, to, expected_rad, tolerance) in cases {
+            let actual = angular_distance_rad(from, to);
+            let relative = (actual - expected_rad).abs() / expected_rad;
+            assert!(
+                relative < tolerance,
+                "{what}: {actual} rad against published {expected_rad} rad, off by {relative}"
+            );
+        }
+    }
+
+    // The counterpart check, and the one whose tolerance has to be argued: these are ellipsoidal
+    // figures from the same two sources, and a sphere disagrees with WGS 84 by up to about 0.5%
+    // (both sources say so). So 0.5% is what they get. Nothing tighter would be meaningful, and the
+    // test's job is catching a unit slip, a lat/lon swap or a wrong radius — each of which misses by
+    // far more than half a percent — rather than pinning accuracy we do not claim.
+    #[test]
+    fn published_ellipsoidal_distances_agree_to_half_a_percent() {
+        let cases = [
+            (
+                "White House to Eiffel Tower",
+                at(38.898, -77.037),
+                at(48.858, 2.294),
+                6177.45,
+            ),
+            (
+                "Valparaiso to Shanghai",
+                at(-33.0, -71.6),
+                at(31.4, 121.8),
+                18752.0,
+            ),
+        ];
+
+        for (what, from, to, ellipsoidal_km) in cases {
+            let actual = great_circle_km(from, to);
+            let relative = (actual - ellipsoidal_km).abs() / ellipsoidal_km;
+            assert!(
+                relative < 0.005,
+                "{what}: {actual} km against WGS 84's {ellipsoidal_km} km, off by {relative}"
+            );
+        }
+    }
+
     #[test]
     fn pole_to_pole_is_finite_from_every_meridian() {
         for lon in [-180.0, -73.0, 0.0, 73.0, 179.9] {
