@@ -242,6 +242,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::geodesy::wrap_lon;
 
     const GPW_STEP: f64 = 1.0 / 120.0;
 
@@ -529,6 +530,59 @@ mod tests {
     }
 
     #[test]
+    fn a_latitude_past_a_pole_is_rejected_not_folded() {
+        // The failure this rules out: 91 folding to 89 and quietly answering with a cell on the
+        // wrong side of the pole. Rejection is the whole point, so assert it is not the fold.
+        let grid = gpw();
+        let folded = grid.cell_containing(LatLon {
+            lat: 89.0,
+            lon: 0.0,
+        });
+        assert!(folded.is_some());
+        assert_eq!(
+            grid.cell_containing(LatLon {
+                lat: 91.0,
+                lon: 0.0
+            }),
+            None
+        );
+        assert_eq!(
+            grid.cell_containing(LatLon {
+                lat: -91.0,
+                lon: 0.0
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn a_grid_whose_origin_is_a_whole_turn_away_is_the_same_grid() {
+        let base = gpw();
+        for k in -3..=3 {
+            let shifted = Grid::new(
+                43200,
+                21600,
+                LatLon {
+                    lat: 90.0,
+                    lon: -180.0 + 360.0 * f64::from(k),
+                },
+                GPW_STEP,
+                -GPW_STEP,
+            )
+            .expect("shifting the origin by whole turns keeps the grid valid");
+            for (row, col) in [(0u32, 0u32), (10800, 21600), (21599, 43199)] {
+                let here = shifted.centre_of(row, col);
+                let there = base.centre_of(row, col);
+                assert!(close(here.lat, there.lat));
+                assert!(
+                    (wrap_lon(here.lon) - wrap_lon(there.lon)).abs() < 1e-9,
+                    "k={k} ({row}, {col})"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_longitude_outside_a_window_grid_has_no_cell() {
         // The counterpart of "every longitude has a column": that holds because the globe closes,
         // and a window does not close, so its outside is a real None.
@@ -572,6 +626,19 @@ mod tests {
         fn centre_round_trips_on_the_decimated_grid(row in 0u32..180, col in 0u32..360) {
             let grid = decimated();
             prop_assert_eq!(grid.cell_containing(grid.centre_of(row, col)), Some((row, col)));
+        }
+
+        #[test]
+        #[test]
+        fn a_whole_turn_of_longitude_finds_the_same_cell(
+            row in 0u32..21600,
+            col in 0u32..43200,
+            k in -3i32..=3,
+        ) {
+            let grid = gpw();
+            let centre = grid.centre_of(row, col);
+            let shifted = LatLon { lat: centre.lat, lon: centre.lon + 360.0 * f64::from(k) };
+            prop_assert_eq!(grid.cell_containing(shifted), Some((row, col)));
         }
 
         #[test]
