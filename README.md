@@ -6,8 +6,8 @@ Finds the smallest circle on Earth containing a given share of the world's popul
 ~1 km resolution population raster — smallest measured on the globe, not on a projected map, which
 is what makes the answer differ from the familiar viral versions. Also renders the results as maps.
 
-**Status: scaffolding only.** Tooling, CI, and conventions are in place; no algorithm is
-implemented yet.
+**Status: early.** Grid geometry and spherical geodesy are implemented and tested; raster ingest,
+the summation table, the kernels and the search itself are not.
 
 ## Getting started
 
@@ -40,7 +40,7 @@ about this copy is still unverified.
 
 | Path | What it is |
 | --- | --- |
-| `crates/popcircles/` | Rust binary — the search |
+| `crates/popcircles/` | Rust library and binary — the search |
 | `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
