@@ -46,6 +46,9 @@ content: CI runs with LFS content absent.
 - Conventional Commits, commitizen's default types. The PR title follows the same format; the
   commit-msg hook enforces it locally and CI checks both the title and the commits.
 - Branch off `main`; do not push to `main` directly.
+- Rebase, never merge. `main` rejects a merge commit, and PRs land squashed or rebased; when your
+  branch falls behind, `git rebase main` rather than merging it in. `mise run setup` also points this
+  clone at the same rule, so an accidental `git pull` fails early instead of after a push.
 - **Do not port code from the upstream C++ project.** It carries no licence. Implementations
   written from a description of the algorithm are welcome; transliterations are not.
 - Documentation moves with the change. Stale framing is a defect, not a follow-up.

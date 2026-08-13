@@ -145,6 +145,12 @@ moment. The failure to avoid is not a wrong answer but a quiet third convention.
 - Conventional Commits, commitizen's default types; the PR title is held to the same format. Both
   are checked — locally by the commit-msg hook, in CI by the shared workflow.
 - Commit or push only when asked. Branch first if on the default branch.
+- **No merge commits.** History is linear, so a branch is rebased onto `main` rather than merged into
+  it. The gate is server-side: a ruleset requires linear history on `main`, and the merge-commit
+  button is off, so a PR lands as a squash or a rebase. `mise run git:ff-only` configures the clone to
+  refuse the accidental case, but `git merge --no-ff` overrides it — it is a guardrail, not a second
+  gate, and describing it as one would promise something nobody is holding. Never resolve a divergence
+  by merging `main` in.
 - Never commit a secret, a generated artefact, or a raster.
 
 ## CI
