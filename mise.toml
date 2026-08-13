@@ -33,11 +33,16 @@ run = "git config --local lfs.fetchexclude '*'"
 # earlier: the accidental merge — `git pull` or `git merge main` on a diverged branch — fails here
 # instead of after a push, with nothing to rewrite. It is not a gate; `git merge --no-ff` overrides
 # it. Repo-local like data:skip, because a developer's global preference is theirs to set.
+#
+# fetch.prune is here rather than in a task of its own because it corrects the same clone-side gap:
+# the repository deletes a head branch when its PR merges, and without this the tracking ref for a
+# branch that no longer exists survives every later fetch.
 [tasks."git:ff-only"]
-description = "Refuse to create a merge commit in this clone"
+description = "Refuse to create a merge commit in this clone, and drop refs the remote deleted"
 run = [
   "git config --local merge.ff only",
   "git config --local pull.ff only",
+  "git config --local fetch.prune true",
 ]
 
 [tasks.cli]
