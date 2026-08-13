@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::geodesy::LatLon;
+use crate::geodesy::{EARTH_RADIUS_KM, LatLon};
 
 // A step arrives as a decimal from a geotransform and need not round-trip to the rational it
 // means, so a span computed from one lands a few ulps off the whole number it is meant to hit —
@@ -210,6 +210,22 @@ impl Grid {
         let col = index_from_offset(cells_from_origin.rem_euclid(modulus), self.width)?;
 
         Some((row, col))
+    }
+
+    /// The ground area of any cell in a row, by the spherical zone formula
+    /// `R² · Δλ · (sin φ_north − sin φ_south)`. Every cell in a row has the same area, so this takes
+    /// no column.
+    ///
+    /// It reads the row's edges through [`Grid::lat_bounds`] rather than recomputing them, which is
+    /// what stops the area and the coordinate of a row from ever disagreeing about where the row is.
+    #[must_use]
+    pub fn cell_area_km2(&self, row: u32) -> f64 {
+        let band = self.lat_bounds(row);
+        let delta_lon_rad = self.lon_step.abs().to_radians();
+        EARTH_RADIUS_KM
+            * EARTH_RADIUS_KM
+            * delta_lon_rad
+            * (band.north.to_radians().sin() - band.south.to_radians().sin())
     }
 
     /// Whether the columns close on themselves, as a whole-globe raster's do.
@@ -613,6 +629,64 @@ mod tests {
                 })
                 .is_some()
         );
+    }
+
+    #[test]
+    fn whole_globe_cell_areas_sum_to_the_sphere() {
+        // The zone formula telescopes: summing a whole globe leaves sin(90) - sin(-90) = 2, so this
+        // is an identity rather than an approximation, and a loose tolerance here would hide a real
+        // disagreement rather than absorb rounding. Naive summation over 21600 rows costs about
+        // 5e-14 relative, four orders inside the bound.
+        let exact = 4.0 * std::f64::consts::PI * EARTH_RADIUS_KM * EARTH_RADIUS_KM;
+        for grid in [gpw(), decimated()] {
+            let total: f64 = (0..grid.height())
+                .map(|row| f64::from(grid.width()) * grid.cell_area_km2(row))
+                .sum();
+            let relative = (total - exact).abs() / exact;
+            assert!(
+                relative < 1e-9,
+                "{} x {}: {total} km2 against 4piR^2 = {exact} km2, off by {relative}",
+                grid.width(),
+                grid.height()
+            );
+        }
+    }
+
+    #[test]
+    fn cell_areas_are_positive_and_symmetric_about_the_equator() {
+        let grid = decimated();
+        let last = grid.height() - 1;
+        for row in 0..grid.height() {
+            let area = grid.cell_area_km2(row);
+            assert!(area > 0.0, "row {row} has area {area}");
+            let mirrored = grid.cell_area_km2(last - row);
+            assert!(
+                (area - mirrored).abs() / area < 1e-12,
+                "row {row} and its mirror disagree: {area} against {mirrored}"
+            );
+        }
+    }
+
+    #[test]
+    fn cell_areas_grow_towards_the_equator() {
+        // A cell spans a fixed angle, so its ground width shrinks with the cosine of latitude. The
+        // largest cells are the two straddling the equator, and nothing on the way there dips.
+        for grid in [gpw(), decimated()] {
+            let middle = grid.height() / 2;
+            for row in 1..middle {
+                let previous = grid.cell_area_km2(row - 1);
+                let current = grid.cell_area_km2(row);
+                assert!(
+                    current > previous,
+                    "row {row} ({current}) is not larger than row {} ({previous})",
+                    row - 1
+                );
+            }
+            let largest = (0..grid.height())
+                .map(|row| grid.cell_area_km2(row))
+                .fold(f64::NEG_INFINITY, f64::max);
+            assert!((grid.cell_area_km2(middle) - largest).abs() / largest < 1e-12);
+        }
     }
 
     proptest! {
