@@ -125,7 +125,7 @@ Everything here lands in `crates/popcircles-cli/`.
       -- --help` lists `distance`; `cargo tree -p popcircles -e normal | rg 'clap|anyhow'` still
       returns nothing.
 
-- [ ] **3.2 `grid describe`, and errors that become exit codes.** A `grid` subcommand taking width,
+- [x] **3.2 `grid describe`, and errors that become exit codes.** A `grid` subcommand taking width,
       height, origin and steps as flags, constructing a `Grid` and emitting the summary payload. A pure
       function in the CLI crate maps `GridError` to an exit code by **exhaustive match** — no `_` arm —
       so a variant added to the library fails this crate's build rather than falling into a default.
