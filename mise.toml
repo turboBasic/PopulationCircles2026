@@ -19,6 +19,7 @@ run = [
   "uv sync --locked",
   "prek install",
   "mise run data:skip",
+  "mise run git:ff-only",
 ]
 
 # A Git config setting overrides .lfsconfig, so a machine with a global lfs.fetchexclude
@@ -27,6 +28,17 @@ run = [
 [tasks."data:skip"]
 description = "Pin this clone to skip LFS data until data:pull asks for it"
 run = "git config --local lfs.fetchexclude '*'"
+
+# History is linear, and the ruleset on main is what enforces that. This only moves the failure
+# earlier: the accidental merge — `git pull` or `git merge main` on a diverged branch — fails here
+# instead of after a push, with nothing to rewrite. It is not a gate; `git merge --no-ff` overrides
+# it. Repo-local like data:skip, because a developer's global preference is theirs to set.
+[tasks."git:ff-only"]
+description = "Refuse to create a merge commit in this clone"
+run = [
+  "git config --local merge.ff only",
+  "git config --local pull.ff only",
+]
 
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
