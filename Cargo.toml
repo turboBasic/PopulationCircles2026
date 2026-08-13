@@ -16,6 +16,8 @@ missing_debug_implementations = "warn"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+# warn, not deny: every numeric conversion should be a decision with a stated reason, and denying
+# these would push authors toward a blanket allow instead of that reason.
 cast_possible_truncation = "warn"
 cast_precision_loss = "warn"
 unwrap_used = "warn"

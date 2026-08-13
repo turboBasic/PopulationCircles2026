@@ -35,24 +35,29 @@ mise run data:pull      # fetch the rasters
 mise run data:status    # present locally, or pointer-only
 ```
 
-The committed `.lfsconfig` is a default, not a guarantee: git-lfs lets a global
-`lfs.fetchexclude` override it, which is why the environment variable and `data:skip` exist. See
-[`data/README.md`](data/README.md#fetching).
+Skipping is a layered default, not a guarantee — [`data/README.md`](data/README.md#fetching) explains
+which layer holds and why the environment variable is still on you.
 
-Never commit a generated summation table or a rendered map. A new input dataset goes in
-`data/<kind>/` with a registry entry. Never make a test depend on raster content — CI runs with LFS
-content absent.
+A new input dataset goes in `data/<kind>/` with a registry entry. Never make a test depend on raster
+content: CI runs with LFS content absent.
 
 ## Sending a change
 
 - Conventional Commits, commitizen's default types. The PR title follows the same format; the
   commit-msg hook enforces it locally and CI checks both the title and the commits.
 - Branch off `main`; do not push to `main` directly.
-- The conventions AI tools follow are the conventions humans follow here:
-  [`docs/ai-instructions.md`](docs/ai-instructions.md) is the source of truth, with the
-  application-specific rules in
-  [`docs/ai-instructions-application.md`](docs/ai-instructions-application.md). Read both before a
-  first change.
 - **Do not port code from the upstream C++ project.** It carries no licence. Implementations
   written from a description of the algorithm are welcome; transliterations are not.
 - Documentation moves with the change. Stale framing is a defect, not a follow-up.
+
+## The conventions
+
+The conventions AI tools follow are the conventions humans follow here.
+[`docs/ai-instructions.md`](docs/ai-instructions.md) holds the project invariants and maps the rest;
+[`docs/ai/`](docs/ai/) holds the per-subject detail, and every file in it applies to every change —
+the split is so each subject can be corrected on its own, not so any of them is optional. Read those
+before a first change. [`docs/decisions/`](docs/decisions/) says why a constraint exists, and
+[`docs/follow-ups.md`](docs/follow-ups.md) what is still owed; open those when you need them.
+
+A decision about how the repository is built is recorded as an ADR rather than argued again; the work
+that follows from one is its sibling plan file, while the algorithm roadmap stays in GitHub issues.

@@ -25,9 +25,8 @@ mise run data:pull                  # fetch them when you actually need them
 mise run data:status                # what is present locally versus pointer-only
 ```
 
-`mise run setup` pins the skip in repo-local Git config. The committed `.lfsconfig` is only a
-default — git-lfs lets a global `lfs.fetchexclude` override it — so the environment variable is
-what makes the first clone cheap. Details in [`data/README.md`](data/README.md#fetching).
+Skipping is a layered default rather than a guarantee, and the layers are worth knowing before a
+clone surprises you: [`data/README.md`](data/README.md#fetching).
 
 ## Data
 
@@ -44,10 +43,14 @@ about this copy is still unverified.
 | `crates/popcircles/` | Rust binary — the search |
 | `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
-| `docs/ai-instructions.md` | Platform conventions, the source of truth for AI tools |
-| `docs/ai-instructions-application.md` | This application: the problem, the approach, the constraints |
+| `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
+| `docs/ai/` | Per-task conventions: [platform](docs/ai/platform.md), [code](docs/ai/code.md), [application](docs/ai/application.md) |
+| `docs/decisions/` | Architecture decision records and their implementation plans |
+| `docs/follow-ups.md` | The register of pending obligations |
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and the task loop.
+Those documents are the conventions for humans as much as for AI tools. They are split across files so
+each subject can be corrected and reviewed on its own, not so that any of them is optional — all of
+them apply to every change. [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and the task loop.
 
 ## Inspiration
 
@@ -55,7 +58,7 @@ The problem, and the demonstration that it is tractable at full raster resolutio
 [alexmijo/PopulationCircles](https://github.com/alexmijo/PopulationCircles) — a C++ project that
 produced the published maps of these circles. This is an independent implementation: the approach
 is reused, the code is not. That repository carries no licence, so none of its source is copied or
-ported here; see [the application doc](docs/ai-instructions-application.md#provenance-and-the-copying-rule).
+ported here; see [the application doc](docs/ai/application.md#provenance-and-the-copying-rule).
 
 Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepieris].
 
