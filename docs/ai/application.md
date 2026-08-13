@@ -1,7 +1,8 @@
 # Application
 
 Read this when working on the search itself: what the program answers, how it is meant to get there,
-what must hold for an answer to be right, and whose code may not be reused doing it.
+how the code doing it is arranged, what must hold for an answer to be right, and whose code may not
+be reused doing it.
 [`platform.md`](platform.md) wins wherever it and this file would conflict.
 
 ## What this program does
@@ -70,6 +71,40 @@ and their inverse, cell edges, and cell area. Both are pure computation with no 
 A module per subject inside the one crate, splitting into more crates only when a dependency forces
 it. [`platform.md`](platform.md) "Structure" needs nothing for this: `crates/` is already a root
 there, and that section carries roots rather than an inventory.
+
+## Architecture
+
+The search is a library; the CLI and the renderer are clients of it. Dependencies point one way —
+view depends on results, CLI depends on domain, domain depends on neither — and a change that reverses
+an arrow is an architecture change, not a refactor.
+
+- **Model the domain in types, not primitives.** A latitude, a longitude, a pixel index, a radius in
+  km and a population count are five different things, and a bare `f64` or `usize` standing in for
+  one is where a wrong-units bug lives undetected. `Grid` is the existing example: the constructor
+  rejects the invalid shape, so no later stage revalidates and no caller can build the impossible
+  value. Prefer a type whose invalid states do not construct over a check repeated at every use.
+- **The domain computes and returns; it does not read, write, print, or format.** geodesy, grid,
+  ingest, table, kernels and search take domain types and give back domain types. Paths, file formats,
+  stdout, progress reporting and CLI flags are not domain concerns — a module that grows one has taken
+  a second responsibility (SRP), and the test that used to be a pure function call now needs a
+  filesystem. Where a long-running step must report progress or a raster must be sourced, take the
+  sink or the source as a parameter (DIP) so a fixture, a decimated raster and an mmap-backed table
+  are the same seam. Keep those abstractions narrow (ISP): the search needs "population of this
+  rectangle", not a general raster API.
+- **The CLI is a shell.** Parse arguments, resolve paths and datasets, build a config value, call the
+  library, serialise the result, map errors to exit codes. Any arithmetic on coordinates or
+  populations, any candidate ordering, any tolerance, belongs below it — if the CLI acquires a branch
+  the library should have owned, move the branch down rather than duplicating the logic.
+- **The view is downstream of results, never of the domain.** Rendering reads the serialised result
+  (see [Language split](#language-split)) and knows nothing of the raster, the table or the domain
+  types. That serialised shape is the contract between the two halves: extend it additively, and
+  treat a renderer that needs a new field as a reason to publish the field, not to reach past the
+  boundary.
+- **Substitutability is behavioural.** An implementation swapped in behind one of those abstractions —
+  a coarser grid, a cached table, a masked raster — must preserve the invariants below, not merely
+  typecheck (LSP). OCP is the weakest of the five here: a new dataset, mask or output format should
+  arrive as a new implementation of an existing seam, but do not build extension points ahead of a
+  second caller.
 
 ## Correctness invariants
 
