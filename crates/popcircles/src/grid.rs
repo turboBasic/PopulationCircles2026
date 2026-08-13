@@ -19,6 +19,7 @@ pub enum GridError {
     ZeroStep { lon_step: f64, lat_step: f64 },
     LatStepNotSouthward { lat_step: f64 },
     RunsPastSouthPole { south_edge: f64 },
+    RunsPastAFullTurn { lon_span: f64 },
 }
 
 impl fmt::Display for GridError {
@@ -49,6 +50,9 @@ impl fmt::Display for GridError {
             ),
             Self::RunsPastSouthPole { south_edge } => {
                 write!(f, "grid rows reach {south_edge}, past the south pole")
+            }
+            Self::RunsPastAFullTurn { lon_span } => {
+                write!(f, "grid columns span {lon_span} degrees, past a full turn")
             }
         }
     }
@@ -117,6 +121,14 @@ impl Grid {
         let south_edge = origin.lat + f64::from(height) * lat_step;
         if south_edge < -90.0 - BOUNDARY_TOLERANCE_DEG {
             return Err(GridError::RunsPastSouthPole { south_edge });
+        }
+
+        // The longitude axis needs its own bound, and for a different reason than the latitude one:
+        // past a full turn two columns address the same meridian, so `cell_containing` cannot invert
+        // `centre_of` and the round trip fails on a plausible answer rather than on an error.
+        let lon_span = f64::from(width) * lon_step.abs();
+        if lon_span > 360.0 + BOUNDARY_TOLERANCE_DEG {
+            return Err(GridError::RunsPastAFullTurn { lon_span });
         }
 
         Ok(Self {
@@ -414,9 +426,26 @@ mod tests {
     }
 
     #[test]
+    fn rejects_columns_past_a_full_turn() {
+        // The failure this rules out is not an off-globe coordinate but a lost bijection: at 43201
+        // columns the last one repeats the first meridian, and centre_of would hand back a longitude
+        // that cell_containing resolves to a different column.
+        assert!(matches!(
+            err(43201, 21600, 90.0, GPW_STEP, -GPW_STEP),
+            GridError::RunsPastAFullTurn { .. }
+        ));
+        // A negative lon_step spans the same turn westward, so the bound is on the magnitude.
+        assert!(matches!(
+            err(43201, 21600, 90.0, -GPW_STEP, -GPW_STEP),
+            GridError::RunsPastAFullTurn { .. }
+        ));
+    }
+
+    #[test]
     fn a_step_a_hair_too_large_still_reaches_the_pole() {
-        // What POLE_TOLERANCE_DEG is for: this grid ends at -90 in intent but computes a south edge
-        // just past it. Rejecting it would fail a real raster on a rounding artefact.
+        // What BOUNDARY_TOLERANCE_DEG is for, on both axes at once: this grid ends at -90 and closes
+        // on itself in intent, but computes a south edge just past the pole and a span just past a
+        // turn. Rejecting it would fail a real raster on a rounding artefact.
         let step = f64::from_bits((GPW_STEP).to_bits() + 1);
         assert!(90.0 + f64::from(21600u32) * -step < -90.0);
         Grid::new(
