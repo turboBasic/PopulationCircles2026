@@ -49,9 +49,13 @@ quiet workaround.
 
 Steps 1 to 5 are targets rather than existing code. What exists is the ground they stand on: one
 library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping and
-great-circle distance, and `grid` holding the raster's geometry — the checked `Grid`, pixel centres
-and their inverse, cell edges, and cell area. Both are pure computation with no I/O, and steps 1 and
-2 are the first callers.
+great-circle distance, `grid` holding the raster's geometry — the checked `Grid`, pixel centres and
+their inverse, cell edges, and cell area — and `raster` holding the boundary a raster crosses: the
+`RasterSource` trait that hands out one row at a time with nodata already turned into zero, the
+tallies saying where every cell of a drained raster went, and an in-memory `Synthetic` a later step's
+tests can be written against instead of a file. geodesy, grid and `raster` itself are pure computation
+with no I/O; the file, the decoder and the tag validation are `raster/geotiff.rs`, and nothing above it
+names either. Step 1 is the trait's first caller.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full
