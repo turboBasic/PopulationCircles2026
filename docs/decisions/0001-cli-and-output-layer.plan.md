@@ -92,7 +92,7 @@ clap, a path, or a stream.
       nothing; a unit test asserts the serialised envelope's first key is `schema_version` and its value
       is `1`.
 
-- [ ] **2.2 Snapshots pin the wire format.** `insta` with its `json` feature as a dev-dependency of the
+- [x] **2.2 Snapshots pin the wire format.** `insta` with its `json` feature as a dev-dependency of the
       library, and one snapshot per payload type over a fixed input — the quarter-circumference pair
       (0, 0) to (0, 90) for the distance report, the 1° whole-globe grid for the summary. The snapshots
       live with the library because ADR 0001 puts the contract there: they must be able to fail without

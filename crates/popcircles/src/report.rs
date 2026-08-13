@@ -106,6 +106,7 @@ impl From<&Grid> for GridSummary {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::geodesy::great_circle_km;
 
     #[test]
     fn the_envelope_leads_with_its_schema_version() {
@@ -126,5 +127,41 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(json, r#"{"lat":12.5,"lon":-170.0}"#);
+    }
+
+    // The snapshots below are the wire format itself: they fail on a renamed field, a reordered one
+    // and a changed number alike, which is what a document read by two renderers and written by two
+    // command surfaces needs. Each input is fixed and named for what makes it a good witness.
+    #[test]
+    fn the_distance_document_holds_its_shape() {
+        // The quarter circumference: a value checkable against the sphere by hand, unlike a pair of
+        // cities, so a snapshot accepted by mistake is visible as a wrong number rather than only as
+        // a diff.
+        let from = LatLon { lat: 0.0, lon: 0.0 };
+        let to = LatLon {
+            lat: 0.0,
+            lon: 90.0,
+        };
+        insta::assert_json_snapshot!(Envelope::new(DistanceReport::new(
+            from,
+            to,
+            great_circle_km(from, to)
+        )));
+    }
+
+    #[test]
+    fn the_grid_document_holds_its_shape() {
+        let grid = Grid::new(
+            360,
+            180,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a 1 degree whole-globe grid is valid");
+        insta::assert_json_snapshot!(Envelope::new(GridSummary::from(&grid)));
     }
 }

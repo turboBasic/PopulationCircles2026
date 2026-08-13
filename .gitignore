@@ -2,6 +2,8 @@
 /target/
 **/*.rs.bk
 *.pdb
+# insta's pending snapshots, accepted into the .snap beside them or discarded
+*.snap.new
 
 # Python
 .venv/
