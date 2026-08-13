@@ -144,7 +144,7 @@ Everything here lands in `crates/popcircles-cli/`.
 layer, where a correction that says more than the change owes is the repository's standing failure mode
 and no gate catches it. 4.2 is a register entry and two `gh` comments.
 
-- [ ] **4.1 Documentation the split invalidated.** Two claims stop being true and both are about crate
+- [x] **4.1 Documentation the split invalidated.** Two claims stop being true and both are about crate
       count, not about the CLI:
       - `docs/ai/application.md` line 71, "A module per subject inside the one crate, splitting into
         more crates only when a dependency forces it" — the split happened and a dependency is exactly

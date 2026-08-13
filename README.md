@@ -40,7 +40,8 @@ about this copy is still unverified.
 
 | Path | What it is |
 | --- | --- |
-| `crates/popcircles/` | Rust library and binary — the search |
+| `crates/popcircles/` | Rust library — the search |
+| `crates/popcircles-cli/` | The `popcircles` binary — a client of the library |
 | `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
