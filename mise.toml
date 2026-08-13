@@ -18,7 +18,15 @@ run = [
   "cargo fetch",
   "uv sync --locked",
   "prek install",
+  "mise run data:skip",
 ]
+
+# A Git config setting overrides .lfsconfig, so a machine with a global lfs.fetchexclude
+# ignores the committed one. Repo-local config beats global, which makes this the layer
+# that actually holds. Clone-time is still on the user: GIT_LFS_SKIP_SMUDGE=1 git clone.
+[tasks."data:skip"]
+description = "Pin this clone to skip LFS data until data:pull asks for it"
+run = "git config --local lfs.fetchexclude '*'"
 
 [tasks.fmt]
 description = "Format Rust, Python and TOML"

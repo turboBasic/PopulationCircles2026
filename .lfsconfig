@@ -1,5 +1,9 @@
-# Clone and pull skip LFS content by default: the population rasters are hundreds of
-# megabytes each and most work in this repo never touches them. `mise run data:pull`
-# overrides this with an explicit --exclude="" for the files it needs.
+# Pull skips LFS content by default: the population rasters are hundreds of megabytes
+# each and most work in this repo never touches them. `mise run data:pull` overrides this
+# with an explicit --exclude="" for the files it needs.
+#
+# This is a default, not a guarantee: git-lfs lets any Git config file override
+# .lfsconfig, so a global lfs.fetchexclude wins over this one. `mise run data:skip` sets
+# the same value in repo-local config, which does take precedence — see data/README.md.
 [lfs]
 	fetchexclude = *

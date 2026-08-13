@@ -71,10 +71,15 @@ updated to describe what exists.
 
 ## Data
 
-- Input rasters are Git LFS objects, not fetched by default: `mise run data:pull`. See the platform
-  doc's **Large input data**.
-- The raster used, its source, its licence, and its grid dimensions get recorded in `README.md`
-  when one is actually wired up. Do not assume the upstream project's 2015 GHSL dataset — it was
-  never in that repo either.
+- Input datasets live in `data/<kind>/` as Git LFS objects, not fetched by default:
+  `mise run data:pull`. See the platform doc's **Large input data**.
+- [`data/README.md`](../data/README.md) is the dataset registry: grid, CRS, nodata, checksum,
+  provenance. A dataset gets its row in the same change that adds it.
+- The committed population raster is **GPWv4.11 UN WPP-adjusted population count, 2020, 30
+  arc-second** (CIESIN / NASA SEDAC, CC BY 4.0). It carries an **attribution requirement**: any
+  published map or figure derived from it ships the citation in `data/README.md`. Which release this
+  copy came from, and whether it was modified after download, is unverified — do not upgrade that
+  caveat to a clean bill of health without comparing checksums against a fresh download.
 - Population totals are properties of a dataset, never constants in code: derive the world total
-  from the raster, do not hardcode a figure taken from elsewhere.
+  from the raster, do not hardcode a figure taken from elsewhere. The registry records the measured
+  total as a sanity check, not as a value to embed.

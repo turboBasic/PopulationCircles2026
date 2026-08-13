@@ -67,12 +67,23 @@ never activate a venv by hand, never install a Rust toolchain outside mise.
 
 ### Large input data
 
-Population rasters are Git LFS objects that a clone deliberately does not fetch —
-`.lfsconfig` sets `lfs.fetchexclude = *`. Fetch them with `mise run data:pull`, inspect what is
-present with `mise run data:status`.
+Input datasets live in `data/`, one directory per kind, contents in Git LFS. Fetch them with
+`mise run data:pull`, inspect what is present with `mise run data:status`, and register any new
+dataset in [`data/README.md`](../data/README.md) with its grid, CRS, nodata value and checksum.
 
-- Never commit a raster, a generated summation table, or a rendered map. `.gitignore` covers the
-  generated artefacts; rasters belong in LFS and only when deliberately added.
+Skipping the download by default is layered, because `.lfsconfig` alone does not hold — git-lfs
+lets any Git config file override it, so a global `lfs.fetchexclude` beats the committed one:
+
+- `GIT_LFS_SKIP_SMUDGE=1 git clone` — the environment outranks every config file.
+- `mise run data:skip` (part of `setup`) — repo-local config, which outranks a global setting.
+- `.lfsconfig` — the committed default, for a machine with no override.
+
+Never claim in docs or a commit message that a clone *cannot* fetch the rasters. It is a default
+that a user's own config can defeat.
+
+- Never commit a generated summation table or a rendered map: `.gitignore` covers them and they are
+  reproducible from the inputs. A new *input* dataset goes to `data/<kind>/` through LFS, with a
+  registry entry, and only deliberately.
 - Never make a test depend on a raster being present. Tests run on a clone with no LFS content.
 - Code that reads a raster fails with a clear message naming `mise run data:pull` when the file is
   an unfetched LFS pointer, rather than parsing the pointer as data.

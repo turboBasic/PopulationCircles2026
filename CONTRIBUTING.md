@@ -25,16 +25,23 @@ format because prek reads it.
 
 ## Data
 
-Population rasters live in Git LFS and are **not** fetched by a normal clone
-(`.lfsconfig` sets `lfs.fetchexclude = *`). Fetch them only when you need them:
+Input datasets live in [`data/`](data/README.md) with their contents in Git LFS. Clone without
+pulling hundreds of megabytes, then fetch only when you need them:
 
 ```sh
-mise run data:pull
-mise run data:status
+GIT_LFS_SKIP_SMUDGE=1 git clone <url>
+mise run setup          # also pins the skip in repo-local git config
+mise run data:pull      # fetch the rasters
+mise run data:status    # present locally, or pointer-only
 ```
 
-Never commit a raster, a generated summation table, or a rendered map. Never make a test depend on
-raster content — CI runs with LFS content absent.
+The committed `.lfsconfig` is a default, not a guarantee: git-lfs lets a global
+`lfs.fetchexclude` override it, which is why the environment variable and `data:skip` exist. See
+[`data/README.md`](data/README.md#fetching).
+
+Never commit a generated summation table or a rendered map. A new input dataset goes in
+`data/<kind>/` with a registry entry. Never make a test depend on raster content — CI runs with LFS
+content absent.
 
 ## Sending a change
 

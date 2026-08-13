@@ -16,19 +16,33 @@ mise run setup      # toolchains, dependencies, git hooks
 mise run ci         # lint, typecheck, test — the same checks CI runs
 ```
 
-Population rasters are Git LFS objects that a clone deliberately does **not** fetch, so cloning
-stays fast and cheap:
+Input datasets live in [`data/`](data/README.md) and their contents are Git LFS objects, kept out
+of a normal clone so cloning stays fast and cheap:
 
 ```sh
-mise run data:pull      # fetch the rasters when you actually need them
-mise run data:status    # what is present locally versus pointer-only
+GIT_LFS_SKIP_SMUDGE=1 git clone …   # clone without downloading the rasters
+mise run data:pull                  # fetch them when you actually need them
+mise run data:status                # what is present locally versus pointer-only
 ```
+
+`mise run setup` pins the skip in repo-local Git config. The committed `.lfsconfig` is only a
+default — git-lfs lets a global `lfs.fetchexclude` override it — so the environment variable is
+what makes the first clone cheap. Details in [`data/README.md`](data/README.md#fetching).
+
+## Data
+
+The population raster is [GPWv4.11 UN WPP-adjusted population count for 2020][gpw] at 30
+arc-second resolution — CIESIN / Columbia University, distributed by NASA SEDAC, DOI
+[10.7927/H4PN93PB][gpw-doi], [CC BY 4.0][cc-by]. Attribution is required of anything published from
+it; [`data/README.md`](data/README.md#provenance) holds the citation, the grid details, and what
+about this copy is still unverified.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
 | `crates/popcircles/` | Rust binary — the search |
+| `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
 | `docs/ai-instructions.md` | Platform conventions, the source of truth for AI tools |
 | `docs/ai-instructions-application.md` | This application: the problem, the approach, the constraints |
@@ -51,8 +65,11 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 
 <!-- Link references: badges at the top of this file. -->
 
+[cc-by]: https://creativecommons.org/licenses/by/4.0/
 [ci]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml/badge.svg?branch=main
+[gpw]: https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11
+[gpw-doi]: https://doi.org/10.7927/H4PN93PB
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/turboBasic/PopulationCircles2026
 [rust]: https://www.rust-lang.org/
