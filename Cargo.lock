@@ -115,6 +115,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "popcircles-cli"
+version = "0.0.0"
+dependencies = [
+ "popcircles",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"

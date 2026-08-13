@@ -56,7 +56,7 @@ These add to the normal task loop; they do not replace it.
 **Model: Sonnet 5.** A file move, two manifests and a task. The judgment was ADR 0001's; what is left is
 mechanical, and its verification is a `cargo tree` line rather than a reading.
 
-- [ ] **1.1 The binary is its own crate.** `crates/popcircles-cli/` exists with `src/main.rs` — the
+- [x] **1.1 The binary is its own crate.** `crates/popcircles-cli/` exists with `src/main.rs` — the
       current three-line stub, moved, not rewritten — and a manifest inheriting `edition`,
       `rust-version`, `license`, `repository` and `authors` with `field.workspace = true`, carrying
       `[lints] workspace = true` and a path dependency on `popcircles`. `crates/popcircles/src/main.rs`

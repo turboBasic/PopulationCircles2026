@@ -1,0 +1,15 @@
+[package]
+name = "popcircles-cli"
+version = "0.0.0"
+description = "CLI for finding the smallest circle on Earth containing a given share of world population"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+popcircles = { path = "../popcircles" }
