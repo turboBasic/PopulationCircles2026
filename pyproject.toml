@@ -1,0 +1,43 @@
+# Python is present for data preparation and map rendering. There is no importable
+# package yet, so this is a virtual project: uv manages the environment and the dev
+# tooling without building anything.
+[project]
+name = "population-circles-tools"
+version = "0.0.0"
+description = "Data preparation and map rendering tooling for PopulationCircles2026"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+  "pyright>=1.1.407",
+  "pytest>=9.0.2",
+  "ruff>=0.16.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "COM812", # conflicts with the formatter
+  "D",      # docstrings are not used in this repo
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["population_circles"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]

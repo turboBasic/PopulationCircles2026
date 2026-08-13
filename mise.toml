@@ -1,0 +1,76 @@
+[tools]
+# clippy and rustfmt are named explicitly: the default rustup profile on a CI runner
+# does not install them, and `lint`/`fmt` need both.
+rust = { version = "1.97.1", components = ["clippy", "rustfmt"] }
+python = "3.14"
+uv = "latest"
+prek = "latest"
+actionlint = "latest"
+shellcheck = "latest"
+taplo = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.setup]
+description = "Install dependencies and git hooks"
+run = [
+  "cargo fetch",
+  "uv sync --locked",
+  "prek install",
+]
+
+[tasks.fmt]
+description = "Format Rust, Python and TOML"
+run = [
+  "cargo fmt --all",
+  "uv run ruff format .",
+  "taplo fmt",
+]
+
+[tasks."lint:rust"]
+description = "Lint Rust with clippy, warnings are errors"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[tasks."lint:python"]
+description = "Lint Python with ruff"
+run = "uv run ruff check ."
+
+[tasks."lint:workflows"]
+description = "Lint GitHub Actions workflows"
+run = "actionlint"
+
+[tasks.lint]
+description = "Run every linter"
+depends = ["lint:rust", "lint:python", "lint:workflows"]
+
+[tasks.typecheck]
+description = "Type-check Rust"
+run = "cargo check --all-targets --all-features"
+
+# Wire into `lint`/`ci` once Python sources exist: pyright fails when it resolves no
+# source files, so an empty tree would make CI red for the wrong reason.
+[tasks."typecheck:python"]
+description = "Type-check Python with pyright (needs Python sources to exist)"
+run = "uv run pyright"
+
+[tasks.test]
+description = "Run the Rust test suite"
+run = "cargo test --all-features"
+
+# Wire into `ci` once tests/ exists: pytest exits 5 on an empty suite.
+[tasks."test:python"]
+description = "Run the Python test suite (needs tests/ to exist)"
+run = "uv run pytest"
+
+[tasks.ci]
+description = "Run everything CI runs, locally"
+depends = ["lint", "typecheck", "test"]
+
+[tasks."data:pull"]
+description = "Fetch the Git LFS raster data that a normal clone deliberately skips"
+run = "git lfs pull --include='*.tif' --exclude=''"
+
+[tasks."data:status"]
+description = "Show which LFS objects are present locally versus pointer-only"
+run = "git lfs ls-files --size"

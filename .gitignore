@@ -1,0 +1,23 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+
+# Generated data products: summation tables, rendered maps, profiling output
+*.bin
+/out/
+perf.data
+perf.data.old
+
+# Local environment
+.env
+.DS_Store
+tmp/

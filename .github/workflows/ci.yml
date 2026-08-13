@@ -1,0 +1,52 @@
+# Inline rather than a call into turboBasic/github-actions: its python-ci.yml is bound to
+# `uv sync --locked` and `uv run pre-commit`, which is neither Rust nor prek. Extracting a
+# shared rust-ci.yml there is the next step; keep this job driven by mise tasks so the
+# extraction is mechanical and so CI cannot drift from `mise run ci`.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  # Rasters stay pointer-only in CI. Nothing here may depend on their content.
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Sync Python tooling
+        run: uv sync --locked
+
+      - run: mise run lint
+      - run: mise run typecheck
+      - run: mise run test

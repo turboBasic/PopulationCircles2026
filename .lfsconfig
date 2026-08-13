@@ -1,0 +1,5 @@
+# Clone and pull skip LFS content by default: the population rasters are hundreds of
+# megabytes each and most work in this repo never touches them. `mise run data:pull`
+# overrides this with an explicit --exclude="" for the files it needs.
+[lfs]
+	fetchexclude = *

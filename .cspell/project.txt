@@ -1,0 +1,84 @@
+# Project vocabulary: repository names, tooling and library identifiers.
+# One word per line; case-insensitive unless the entry is capitalised.
+
+# --- Names ---
+Andrii
+Melnyk
+alexmijo
+
+# --- Repository and tooling ---
+turboBasic
+actionlint
+commitizen
+cspell
+mise
+popcircles
+prek
+pyright
+pytest
+ruff
+shellcheck
+taplo
+
+# --- Domain vocabulary ---
+antimeridian
+arcsec
+datasheet
+equirectangular
+geotiff
+geotransform
+gridding
+kernels
+nodata
+Quah
+raster
+rasters
+Valeriepieris
+
+# --- Geospatial tooling and standards ---
+EPSG
+GDAL
+grib
+mbtiles
+pmtiles
+tiffinfo
+
+# --- Library and API identifiers ---
+thiserror
+
+# --- Repository jargon ---
+backticked
+docstrings
+frontmatter
+lockfiles
+misordered
+negotiables
+overexplanation
+relitigate
+rescope
+restater
+unfetched
+unfireable
+
+# --- Data sources ---
+CIESIN
+Earthdata
+GHSL
+GPWv
+JRC
+NASA
+Palisades
+POPDATA
+SEDAC
+unwpp
+WPP
+
+# --- Config keys and CLI ---
+addopts
+codegen
+fetchexclude
+lfsconfig
+nextest
+smudge
+testpaths
+typecheck

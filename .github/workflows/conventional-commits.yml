@@ -1,0 +1,22 @@
+name: Conventional Commits
+
+# pull_request, not pull_request_target: the called workflow gates both jobs on
+# `github.event_name == 'pull_request'`, so pull_request_target skips them silently, and
+# its checkout would resolve the base ref rather than the commits under review.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    uses: turboBasic/github-actions/.github/workflows/conventional-commits.yml@v2
+    permissions:
+      contents: read
+      pull-requests: read
