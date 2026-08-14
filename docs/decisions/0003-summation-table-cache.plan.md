@@ -105,7 +105,7 @@ in this phase touches a file or adds a crate.
       and watch the test fail, which is what makes the assertion about the construction rather than
       about f64.
 
-- [ ] **1.4 Decimation folds in the builder.** A factor that must divide both grid dimensions, rejected
+- [x] **1.4 Decimation folds in the builder.** A factor that must divide both grid dimensions, rejected
       at construction otherwise; blocks accumulate in f64 before the prefix pass; the factor travels
       with the built table so 2.1's header can record it. Decision 6, and the reason it is here rather
       than behind the seam is the 29.5-person measurement.

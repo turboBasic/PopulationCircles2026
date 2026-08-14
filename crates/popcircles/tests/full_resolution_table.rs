@@ -15,7 +15,7 @@ use std::convert::Infallible;
 use popcircles::geodesy::LatLon;
 use popcircles::grid::Grid;
 use popcircles::raster::{CellTallies, RasterError, RasterRow, RasterSource, sanitise_row};
-use popcircles::table::build;
+use popcircles::table::{Decimation, build};
 
 const WIDTH: u32 = 43200;
 const HEIGHT: u32 = 21600;
@@ -185,7 +185,7 @@ fn the_full_resolution_table_stays_inside_decision_2s_tolerance() {
         tallies: CellTallies::default(),
     };
 
-    let built = build(source, &mut (), |row| {
+    let built = build(source, Decimation::none(grid), &mut (), |row| {
         reference.take(row);
         Ok::<(), Infallible>(())
     })

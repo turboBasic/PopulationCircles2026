@@ -1,14 +1,26 @@
 // The computing half of the summation table. ADR 0003 decision 1 keeps the file, the header and
 // everything that serialises in `table/cache.rs`, so nothing here can be reached without a grid and a
 // slice.
-use crate::grid::{Col, Grid, Row};
+use crate::grid::{Col, Grid, GridError, Row};
 use crate::progress::Progress;
 use crate::raster::{CellTallies, RasterError, RasterSource};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum TableError {
     #[error("a padded table over this grid holds {expected} cells; the payload holds {found}")]
     PayloadLength { expected: usize, found: usize },
+
+    #[error(
+        "a decimation factor must divide both grid dimensions; {factor} does not divide {width} x {height}"
+    )]
+    Decimation {
+        factor: u32,
+        width: u32,
+        height: u32,
+    },
+
+    #[error("the decimated grid is not a grid")]
+    DecimatedGrid(#[source] GridError),
 }
 
 /// Why a build stopped. The sink's own failure stays its own type, so this module needs no vocabulary
@@ -164,16 +176,94 @@ fn padded_len(grid: &Grid) -> usize {
     usize::try_from(cells).unwrap_or(usize::MAX)
 }
 
+/// How coarse a table is, and the grid that makes it: a factor of k folds every k by k block of source
+/// cells into one table cell.
+///
+/// It is built against the grid it will be applied to, because the factor's whole constraint is a
+/// relation to that grid — k has to divide both dimensions, so that no block is partial and the coarser
+/// grid covers the same ground. Refusing it here is what keeps a half-filled block from being a case
+/// the build, the query and the cache each need an answer for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Decimation {
+    factor: u32,
+    source: Grid,
+    grid: Grid,
+}
+
+impl Decimation {
+    /// # Errors
+    /// [`TableError::Decimation`] when `factor` does not divide both of the grid's dimensions, zero
+    /// included; [`TableError::DecimatedGrid`] when the coarser grid is not one this crate accepts.
+    pub fn new(source: Grid, factor: u32) -> Result<Self, TableError> {
+        // A factor of zero needs no case of its own: the grid's dimensions are never zero, and no
+        // non-zero number is a multiple of zero, so the rule below refuses it without dividing by it.
+        if !source.width().is_multiple_of(factor) || !source.height().is_multiple_of(factor) {
+            return Err(TableError::Decimation {
+                factor,
+                width: source.width(),
+                height: source.height(),
+            });
+        }
+
+        let grid = Grid::new(
+            source.width() / factor,
+            source.height() / factor,
+            source.origin(),
+            source.lon_step() * f64::from(factor),
+            source.lat_step() * f64::from(factor),
+        )
+        .map_err(TableError::DecimatedGrid)?;
+
+        Ok(Self {
+            factor,
+            source,
+            grid,
+        })
+    }
+
+    /// One table cell per source cell. Total rather than fallible, because 1 divides everything and the
+    /// coarser grid is the source's own.
+    #[must_use]
+    pub const fn none(source: Grid) -> Self {
+        Self {
+            factor: 1,
+            source,
+            grid: source,
+        }
+    }
+
+    #[must_use]
+    pub const fn factor(&self) -> u32 {
+        self.factor
+    }
+
+    /// The grid the table is over — the source's own when the factor is one.
+    #[must_use]
+    pub const fn grid(&self) -> &Grid {
+        &self.grid
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> &Grid {
+        &self.source
+    }
+}
+
 /// What a build produced beside the rows it emitted, and everything a cache header needs of them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BuiltTable {
     /// The identity of the cells this table was built from — ADR 0003 decision 3, and the only thing
-    /// that says two tables are the same table.
+    /// that says two tables are the same table. Of the source's cells, not the table's: a decimated
+    /// table and a full one over the same raster carry the same digest and differ by the factor beside
+    /// it, so a mismatch in either is reported as itself.
     pub digest: u64,
     pub tallies: CellTallies,
     /// The whole raster's population: the table's last cell, so it carries the compensation the rest
     /// of the table carries rather than being summed a second way.
     pub total: f64,
+    /// What the rows that were emitted are over, so a cache header needs nothing the build did not
+    /// already settle.
+    pub decimation: Decimation,
 }
 
 // Decision 3's digest in full, because a digest whose word width or order is left to the
@@ -191,12 +281,17 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// rather than its area. The accumulator holds the correctly rounded column sum and the correction
 /// holds exactly what f64 could not, renormalised after every row; that is why the accumulator can be
 /// emitted as it stands, where Neumaier's deferred correction would need a third row resident to add
-/// the two together into.
+/// the two together into. A decimated build adds one row of the coarser width to gather into.
 ///
 /// # Errors
 /// [`BuildError::Raster`] when the source fails mid-stream, [`BuildError::Sink`] when `emit` does.
+///
+/// # Panics
+/// If `decimation` was built against a grid other than this source's. The types cannot catch that —
+/// both are grids — and the alternative to stopping is a table of a shape nobody asked for.
 pub fn build<S, P, F, E>(
     mut source: S,
+    decimation: Decimation,
     progress: &mut P,
     mut emit: F,
 ) -> Result<BuiltTable, BuildError<E>>
@@ -206,16 +301,29 @@ where
     F: FnMut(&[f64]) -> Result<(), E>,
 {
     let grid = source.grid();
+    assert_eq!(
+        *decimation.source(),
+        grid,
+        "the decimation was built against a different grid than this source declares"
+    );
     let width = grid.width() as usize;
     let rows = u64::from(grid.height());
+    let factor = decimation.factor() as usize;
 
     let mut acc = vec![0.0f64; width + 1];
     let mut corr = vec![0.0f64; width + 1];
+    // Empty at factor 1, where the accumulator is already the row to emit: that is what holds a
+    // full-resolution build to two rows resident rather than three.
+    let mut coarse = if factor == 1 {
+        Vec::new()
+    } else {
+        vec![0.0f64; decimation.grid().width() as usize + 1]
+    };
     let mut digest = FNV_OFFSET_BASIS;
 
     // The zero row, which is the padding itself: emitting it here is what lets a rectangle touching
     // the north edge subtract four corners like any other.
-    emit(&acc).map_err(BuildError::Sink)?;
+    emit(decimated(&acc, &mut coarse, factor)).map_err(BuildError::Sink)?;
     progress.advance(0, rows);
 
     let mut done = 0u64;
@@ -239,8 +347,12 @@ where
             (acc[column], corr[column]) = two_sum(sum, corr[column] + dropped);
         }
 
-        emit(&acc).map_err(BuildError::Sink)?;
         done += 1;
+        // Every k-th row, because the factor divides the height and so the last row always completes a
+        // block: no partial block ever reaches this.
+        if done.is_multiple_of(factor as u64) {
+            emit(decimated(&acc, &mut coarse, factor)).map_err(BuildError::Sink)?;
+        }
         progress.advance(done, rows);
     }
 
@@ -248,7 +360,25 @@ where
         digest,
         tallies: source.finish(),
         total: acc[width],
+        decimation,
     })
+}
+
+/// The row to emit: the accumulator itself, or every k-th cell of it.
+///
+/// A decimated summation table **is** the full one's every k-th row and column, because the prefix sum
+/// over k by k blocks and the prefix sum over cells agree at every block corner. So decimation needs no
+/// block sum of its own, and the one thing decision 6 forbids — a block rounded before the table sees it
+/// — has nothing to round: every source cell is folded into the f64 accumulators exactly as it would be
+/// at full resolution, and the coarser table is what is read back out.
+fn decimated<'r>(acc: &'r [f64], coarse: &'r mut [f64], factor: usize) -> &'r [f64] {
+    if factor == 1 {
+        return acc;
+    }
+    for (index, cell) in coarse.iter_mut().enumerate() {
+        *cell = acc[index * factor];
+    }
+    coarse
 }
 
 /// Knuth's two-sum: the rounded sum, and exactly what the rounding dropped, for any two magnitudes.
@@ -404,15 +534,42 @@ mod tests {
     /// real reader does.
     const NODATA: f32 = -3.402_823e38;
 
-    fn built(grid: Grid, rows: Vec<Vec<f32>>) -> (Vec<f64>, BuiltTable) {
-        let source = Synthetic::new(grid, NODATA, rows).expect("the rows are the grid's shape");
+    fn built(decimation: Decimation, rows: Vec<Vec<f32>>) -> (Vec<f64>, BuiltTable) {
+        let source = Synthetic::new(*decimation.source(), NODATA, rows)
+            .expect("the rows are the grid's shape");
         let mut payload = Vec::new();
-        let built = build(source, &mut (), |row| {
+        let built = build(source, decimation, &mut (), |row| {
             payload.extend_from_slice(row);
             Ok::<(), Infallible>(())
         })
         .expect("neither a synthetic source nor this sink can fail");
         (payload, built)
+    }
+
+    /// One ulp at `value`'s magnitude, which is the unit the decimation budget below is in.
+    fn ulp(value: f64) -> f64 {
+        f64::from_bits((((value.abs().to_bits() >> 52) & 0x7ff) - 52) << 52)
+    }
+
+    /// A cell with a full 23-bit significand, spread over four orders of magnitude, so a tolerance
+    /// asserted against it is about arithmetic rather than about integers f64 adds exactly.
+    fn spread(index: u32) -> f32 {
+        f32::from_bits(((120 + index % 14) << 23) | (index.wrapping_mul(2_654_435_761) & 0x7f_ffff))
+    }
+
+    /// 3 and 4 both divide 12; only 3 divides 6.
+    fn divisible() -> Grid {
+        Grid::new(
+            12,
+            6,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            30.0,
+            -30.0,
+        )
+        .expect("a 12 x 6 whole-globe grid is valid")
     }
 
     #[test]
@@ -433,12 +590,94 @@ mod tests {
             -180.0,
         )
         .expect("a 3 x 1 whole-globe grid is valid");
-        let (_, built) = built(grid, vec![vec![1.0, NODATA, 2.5]]);
+        let (_, built) = built(Decimation::none(grid), vec![vec![1.0, NODATA, 2.5]]);
 
         assert_eq!(built.digest, 0x3a5d_5e3b_082f_2fb7);
         assert_eq!(built.total, 3.5);
         assert_eq!(built.tallies.nodata, 1);
         assert_eq!(built.tallies.populated, 2);
+    }
+
+    #[test]
+    fn a_factor_that_does_not_divide_the_grid_is_refused() {
+        // 5 divides neither dimension; 4 divides the width alone, and a block half off the south edge
+        // is not a smaller block — it is a row of cells the table has nowhere to put.
+        assert_eq!(
+            Decimation::new(divisible(), 5).unwrap_err(),
+            TableError::Decimation {
+                factor: 5,
+                width: 12,
+                height: 6
+            }
+        );
+        assert_eq!(
+            Decimation::new(divisible(), 4).unwrap_err(),
+            TableError::Decimation {
+                factor: 4,
+                width: 12,
+                height: 6
+            }
+        );
+    }
+
+    #[test]
+    fn a_decimated_table_agrees_with_the_full_one_over_the_same_ground() {
+        const FACTOR: u32 = 3;
+        let grid = divisible();
+        let cells: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| {
+                (0..grid.width())
+                    .map(|col| spread(row * 12 + col))
+                    .collect()
+            })
+            .collect();
+
+        let decimation = Decimation::new(grid, FACTOR).expect("3 divides both 12 and 6");
+        let (fine_payload, _) = built(Decimation::none(grid), cells.clone());
+        let (coarse_payload, coarse_built) = built(decimation, cells);
+
+        assert_eq!(coarse_built.decimation.factor(), FACTOR);
+        let fine = Table::new(grid, &fine_payload).expect("the build emits the padded product");
+        let coarse = Table::new(*decimation.grid(), &coarse_payload)
+            .expect("a decimated build emits the coarser padded product");
+
+        // Every rectangle of the coarse table against the ground it stands for, half-open in both axes
+        // so the factor multiplies the bounds directly. It holds bit for bit here, because a decimated
+        // table is the full one subsampled and so was summed in the same order; the budget is what the
+        // claim is, and the margin is what this construction happens to give.
+        let (rows, cols) = (grid.height() / FACTOR, grid.width() / FACTOR);
+        for r1 in 0..rows {
+            for r2 in r1 + 1..=rows {
+                for c1 in 0..cols {
+                    for c2 in c1 + 1..=cols {
+                        let coarse_band = RowBand::new(
+                            coarse.grid().row(r1).unwrap(),
+                            coarse.grid().row(r2 - 1).unwrap(),
+                        );
+                        let coarse_span = ColSpan::Through {
+                            west: coarse.grid().col(c1).unwrap(),
+                            east: coarse.grid().col(c2 - 1).unwrap(),
+                        };
+                        let fine_band = RowBand::new(
+                            grid.row(r1 * FACTOR).unwrap(),
+                            grid.row(r2 * FACTOR - 1).unwrap(),
+                        );
+                        let fine_span = ColSpan::Through {
+                            west: grid.col(c1 * FACTOR).unwrap(),
+                            east: grid.col(c2 * FACTOR - 1).unwrap(),
+                        };
+
+                        let over_ground = fine.population(fine_band, fine_span);
+                        let difference =
+                            (coarse.population(coarse_band, coarse_span) - over_ground).abs();
+                        assert!(
+                            difference <= 4.0 * ulp(over_ground),
+                            "[{r1}, {r2}) x [{c1}, {c2}) decimated by {FACTOR} is out by {difference}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     proptest! {
@@ -472,7 +711,7 @@ mod tests {
                 .iter()
                 .map(|row| row.iter().map(|cell| *cell as f32).collect())
                 .collect();
-            let (payload, built) = built(grid, values.clone());
+            let (payload, built) = built(Decimation::none(grid), values.clone());
             let table = Table::new(grid, &payload).expect("the build emits the padded product");
 
             let direct = |rows: &[u32], cols: &[u32]| -> f64 {
