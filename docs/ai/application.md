@@ -47,7 +47,7 @@ quiet workaround.
 
 ## Approach
 
-Steps 4 and 5 are targets rather than existing code. Steps 1 to 3 and the ground they stand on are one
+Step 5 is a target rather than existing code. Steps 1 to 4 and the ground they stand on are one
 library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping,
 great-circle distance, the angle an arc subtends and the checked radius a circle is asked for,
 `grid` holding the raster's geometry — the checked
@@ -61,14 +61,19 @@ compensated build that streams a raster into it, the rectangle query over a borr
 factor a coarser table folds at; `kernel` holding the spherical cap — the membership rule a span
 means, the per-row half width as an offset from a centre column, and the placement that turns one into
 the columns a query takes; `circle` holding the fold between the last two — one rectangle per row a
-placed kernel names, added in the order it yields them; and `search` holding the branch and bound over
+placed kernel names, added in the order it yields them; `search` holding the branch and bound over
 candidate centres — the rectangle of centres a bound speaks for, the two-hop slack that bounds the ground
-distance across one, and the level loop that prunes a rectangle or halves it. The build is the
-`RasterSource` trait's first caller, the circle is `place`'s, and the search is the circle's.
-circle, geodesy, grid, kernel, progress, search, `raster` itself and `table` itself are pure computation with no I/O;
+distance across one, and the level loop that prunes a rectangle or halves it; and `smallest` holding the
+search over radius — the checked share a circle is asked for, the radius at which a circle is the whole
+grid, the climb and bisection over whole kilometres, the slack inside which the comparison between two
+radii is uncertain, and the ledger seam a resumed run reads. The build is the
+`RasterSource` trait's first caller, the circle is `place`'s, the search is the circle's, and the search
+over radius is the search's.
+circle, geodesy, grid, kernel, progress, search, smallest, `raster` itself and `table` itself are pure computation with no I/O;
 the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
-the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, and nothing above
-either module names what is inside it.
+the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, the ledger document and
+its own publication are `crates/popcircles/src/smallest/cache.rs`, and nothing above any of those modules
+names what is inside it.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full
@@ -82,10 +87,18 @@ either module names what is inside it.
    the best candidates, pruning a rectangle of candidate centres by the population of a circle wide
    enough to cover every one of them. The answer is the maximum over the grid's cell centres exactly:
    refinement runs to single cells, the bound is rounded outward and pruning discards no tie, so the
-   reported tolerance is zero and what separates it from the truth is step 1's own 4 ulp per query.
-   Adversarial input costs time here, not accuracy.
-4. **Smallest circle for a given population.** Binary search over integer radius in km, driving
-   step 3. Cache every radius tried so a rerun resumes instead of repeating work.
+   reported tolerance is zero and what separates it from the truth is the arithmetic beneath it — a
+   circle's population is a sum of one query per row, so step 1's 4 ulp per query composes rather than
+   carrying over, and step 4's reported slack is that composition. Adversarial input costs time here, not
+   accuracy.
+4. **Smallest circle for a given population.** A search over integer radius in km driving step 3, with
+   every radius tried kept in a ledger so a rerun resumes instead of repeating work. The order climbs
+   before it bisects — doubling until one radius reaches the target, then halving the bracket that closed
+   — because step 3's strict prune makes a radius covering most of the globe a plateau it refines cell by
+   cell. The radius at which a circle is the whole grid is answered by step 1's whole-extent query rather
+   than searched, which is what makes a target of the entire population exact rather than a rounding away.
+   The answer is the smallest radius reaching the target, reported with the radius below it that did not;
+   minimality holds for a target further from a plateau than the summation slack the result carries.
 5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
 
 A module per subject, and two crates: the library `crates/popcircles/` and the binary
