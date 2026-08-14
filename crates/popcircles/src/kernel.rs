@@ -287,7 +287,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::geodesy::great_circle_km;
+    use crate::geodesy::{EARTH_RADIUS_KM, great_circle_km};
 
     /// A whole-globe grid, which is the shape that has kernels at all.
     fn globe(cells_per_degree: u32) -> Grid {
@@ -703,6 +703,76 @@ mod tests {
     fn a_finer_grids_column_is_no_centre_here() {
         let centre = col(&globe(4), 1439);
         let _ = kernel(globe(1), 90, 500.0).place(centre);
+    }
+
+    /// The ground the kernel covers: each row's cell count times that row's cell area. It reads the area
+    /// through the grid rather than recomputing a zone, so the earth model stays in one place.
+    fn area_km2(grid: &Grid, kernel: &Kernel) -> f64 {
+        kernel
+            .rows()
+            .map(|(row, span)| {
+                let cells = match span {
+                    Span::FullTurn => grid.width(),
+                    Span::Around { half_width } => 2 * half_width + 1,
+                };
+                f64::from(cells) * grid.cell_area_km2(row)
+            })
+            .sum()
+    }
+
+    #[test]
+    fn a_kernels_area_is_the_spherical_caps() {
+        // Against 2πR²(1 − cos θ), which is the cap's area on the sphere and owes nothing to this code.
+        // The bounds are twice the error measured off this membership rule, and two things they cannot
+        // be:
+        //
+        // - One figure for every case. The error scales with cell size over cap radius, so at one cell
+        //   per degree a 1000 km cap at 60 N is 1.2e-2 out while an 8000 km cap is 8.5e-4, and a bound
+        //   loose enough for the first would let the second be wrong by an order of magnitude.
+        // - Monotone under refinement case by case. Row 45 at 3000 km goes 1.05e-4 at one cell per degree
+        //   to 4.28e-4 at four: the discretisation error is not a bias that shrinks but a residue that
+        //   resamples, so refining moves which cells straddle the boundary rather than reducing their
+        //   effect. What does converge is the envelope over a fixed set of caps, which is the last
+        //   assertion here.
+        //
+        // Each case is a row index on the one-degree grid, scaled by the resolution so the same cap is
+        // measured at both, with the bound measured at each.
+        let cases = [
+            (90u32, 3000.0, [1.1e-2, 1.1e-3]),
+            (45, 3000.0, [2.1e-4, 8.6e-4]),
+            (30, 1000.0, [2.5e-2, 3.7e-3]),
+            (2, 1000.0, [1.2e-2, 2.5e-3]),
+            (120, 8000.0, [1.7e-3, 3.6e-5]),
+        ];
+        let mut worst = [0.0f64; 2];
+
+        for (resolution, cells_per_degree) in [1u32, 4].into_iter().enumerate() {
+            let grid = globe(cells_per_degree);
+            for (row1, radius_km, bounds) in cases {
+                let kernel = kernel(grid, row1 * cells_per_degree, radius_km);
+                let exact = 2.0
+                    * std::f64::consts::PI
+                    * EARTH_RADIUS_KM
+                    * EARTH_RADIUS_KM
+                    * (1.0 - central_angle_rad(radius_km).cos());
+                let relative = (area_km2(&grid, &kernel) - exact).abs() / exact;
+
+                assert!(
+                    relative < bounds[resolution],
+                    "{cells_per_degree} cells per degree, row {row1}, {radius_km} km: off by \
+                     {relative}, past {}",
+                    bounds[resolution]
+                );
+                worst[resolution] = worst[resolution].max(relative);
+            }
+        }
+
+        // The convergence claim the per-case figures cannot make: 1.2e-2 at one cell per degree against
+        // 1.8e-3 at four, over the same five caps.
+        assert!(
+            worst[1] < worst[0],
+            "refining did not shrink the envelope: {worst:?}"
+        );
     }
 
     /// Whether `wider` covers every column `narrower` does, both being spans about one centre.
