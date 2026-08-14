@@ -50,6 +50,24 @@ impl Share {
         Ok(Self(share))
     }
 
+    /// The same share given in whole percent, which is the unit a command line takes.
+    ///
+    /// Here rather than in whatever parses a flag, because a percent is a unit this type has an opinion
+    /// about: [`Self::new`] already refuses zero and anything above one, so the conversion is those same
+    /// checks over an integer and no caller repeats them.
+    ///
+    /// Exact where it matters. [`f64::from`] is lossless for a `u32` and IEEE division is correctly
+    /// rounded, so `from_percent(10)` is bit for bit the f64 a caller typing `0.1` would have got —
+    /// where a walk accumulating a step of a tenth reaches `0.30000000000000004` by its third share and
+    /// publishes it.
+    ///
+    /// # Errors
+    /// [`ShareError::NotPositive`] at zero and [`ShareError::AboveOne`] past 100. Never
+    /// [`ShareError::NotFinite`]: an integer divided by a hundred is a number.
+    pub fn from_percent(percent: u32) -> Result<Self, ShareError> {
+        Self::new(f64::from(percent) / 100.0)
+    }
+
     #[must_use]
     pub const fn get(self) -> f64 {
         self.0
@@ -103,7 +121,7 @@ pub fn ceiling_radius() -> RadiusKm {
 ///
 /// A trait rather than a type for [`crate::raster::RasterSource`]'s reason: what the search needs of a
 /// ledger is these two operations, and a fixture, an in-memory map and the JSON document
-/// [`cache`](crate::smallest::cache) publishes are then the same seam. The error is associated because a
+/// [`cache`] publishes are then the same seam. The error is associated because a
 /// ledger's failures are its own — this module has no vocabulary for a filesystem — which is the shape
 /// [`crate::table::build`] takes with its sink.
 ///
@@ -387,7 +405,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
                 population: total,
             },
             target,
-            share_achieved: achieved(total, total),
+            share_achieved: share_of(total, total),
             short_below,
             covers_whole_grid: true,
             predicate_slack_persons: predicate_slack_persons(&grid, total),
@@ -422,7 +440,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         radius: RadiusKm::from(high),
         centre: best,
         target,
-        share_achieved: achieved(best.population, total),
+        share_achieved: share_of(best.population, total),
         // Only the radius directly below the answer is a witness to its minimality; a short probe further
         // down is one the bisection has already superseded.
         short_below: short_below.filter(|(km, _)| Some(*km) == high.checked_sub(1)),
@@ -435,7 +453,10 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
 
 /// The share a population is of a total, and zero when the total is nothing: every circle over an empty
 /// table achieves the same nothing, and `0 / 0` would publish a `NaN` standing for it.
-fn achieved(population: f64, total: f64) -> f64 {
+///
+/// `pub(crate)` because [`crate::report`] publishes the same quotient for a circle nothing searched for,
+/// and two answers to one question is how a renderer ends up printing `NaN%`.
+pub(crate) fn share_of(population: f64, total: f64) -> f64 {
     if total > 0.0 { population / total } else { 0.0 }
 }
 
@@ -655,6 +676,29 @@ mod tests {
             Share::new(f64::INFINITY),
             Err(ShareError::NotFinite { .. })
         ));
+    }
+
+    #[test]
+    fn a_whole_percent_is_the_share_a_caller_would_have_typed() {
+        // Bit for bit, which is the claim: a flag in percent costs a user nothing in precision, and it is
+        // what keeps a sweep's published shares free of the residue an accumulated step leaves.
+        for (percent, fraction) in [(1u32, 0.01), (10, 0.1), (30, 0.3), (50, 0.5), (100, 1.0)] {
+            assert_eq!(
+                Share::from_percent(percent).unwrap().get().to_bits(),
+                Share::new(fraction).unwrap().get().to_bits(),
+                "{percent}% is not the f64 {fraction} is"
+            );
+        }
+
+        // Two of `Share::new`'s three grounds, reported as themselves rather than as one "bad percent".
+        assert_eq!(
+            Share::from_percent(0).unwrap_err(),
+            ShareError::NotPositive { share: 0.0 }
+        );
+        assert_eq!(
+            Share::from_percent(101).unwrap_err(),
+            ShareError::AboveOne { share: 1.01 }
+        );
     }
 
     #[test]

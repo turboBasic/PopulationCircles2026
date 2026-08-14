@@ -63,13 +63,15 @@ means, the per-row half width as an offset from a centre column, and the placeme
 the columns a query takes; `circle` holding the fold between the last two — one rectangle per row a
 placed kernel names, added in the order it yields them; `search` holding the branch and bound over
 candidate centres — the rectangle of centres a bound speaks for, the two-hop slack that bounds the ground
-distance across one, and the level loop that prunes a rectangle or halves it; and `smallest` holding the
+distance across one, and the level loop that prunes a rectangle or halves it; `smallest` holding the
 search over radius — the checked share a circle is asked for, the radius at which a circle is the whole
 grid, the climb and bisection over whole kilometres, the slack inside which the comparison between two
-radii is uncertain, and the ledger seam a resumed run reads. The build is the
+radii is uncertain, and the ledger seam a resumed run reads; and `report` holding the wire format — the
+versioned envelope, the provenance a document names its table by, and one payload type per question a
+command answers, which owns what a consumer of that format needs to know. The build is the
 `RasterSource` trait's first caller, the circle is `place`'s, the search is the circle's, and the search
 over radius is the search's.
-circle, geodesy, grid, kernel, progress, search, smallest, `raster` itself and `table` itself are pure computation with no I/O;
+circle, geodesy, grid, kernel, progress, report, search, smallest, `raster` itself and `table` itself are pure computation with no I/O;
 the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
 the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, the ledger document and
 its own publication are `crates/popcircles/src/smallest/cache.rs`, and nothing above any of those modules

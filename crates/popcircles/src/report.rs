@@ -1,14 +1,68 @@
-// The published shape of a result, and the only place in this crate a serde derive appears. ADR 0001
-// decision 3: the domain types change when the search changes, so what is serialised is a separate
-// representation with its own version, and a field here is a promise to two renderers and two
-// command surfaces.
+//! The published shape of a result, and the only place in this crate a serde derive appears. ADR 0001
+//! decision 3: the domain types change when the search changes, so what is serialised is a separate
+//! representation with its own version, and a field here is a promise to two renderers and two command
+//! surfaces.
+//!
+//! # The envelope
+//!
+//! Every document is an [`Envelope`], whose keys come in declaration order because that is the order serde
+//! emits them in. `schema_version` is first so a consumer reads the version before anything it might not
+//! understand, and `provenance` precedes `result` for the same reason one step out: what produced a
+//! document is read before the document.
+//!
+//! # Provenance, and what it does not attest
+//!
+//! [`Provenance`] is where a document's **identity** lives: which table it was answered from, and where
+//! that table sits. It is absent — the key omitted, not null — from a document whose command read no
+//! cached table.
+//!
+//! A payload's own `digest` or `grid` is a different thing and not a second answer to the same question.
+//! [`TableQueryReport`] is the one place the distinction is visible: it carries both in its payload and
+//! carries no provenance, because there the table is what the command is *about* rather than what it was
+//! answered from.
+//!
+//! **The `grid` in provenance is the grid the caller declared, not one the cache attested to.** A cache
+//! header binds a digest, a width, a height and a decimation factor — and no origin and no steps. So a
+//! table built over one geometry opens cleanly for a command declaring another, at which point every
+//! coordinate resolves to the wrong cell while the digest agrees. `digest` and `decimation` are the two
+//! fields a cache did compare. `FU-11` is the gap; closing it is a record's call.
+//!
+//! # The documents
+//!
+//! | Payload | What it answers |
+//! | --- | --- |
+//! | [`DistanceReport`] | a great-circle distance between two coordinates |
+//! | [`GridSummary`] | the geometry of a declared grid |
+//! | [`TableBuildReport`] | what a summation table build settled, and where it went |
+//! | [`TableQueryReport`] | the population of one rectangle of a table |
+//! | [`CircleReport`] | the population inside one circle a caller named |
+//! | [`MostPopulousReport`] | the most populous circle of a fixed radius |
+//! | [`SmallestDocument`] | the smallest circle reaching one share |
+//! | [`SweepDocument`] | the smallest circle for each of a range of shares |
+//!
+//! The last two are documents rather than bare payloads because a ledger belongs to the run and not to any
+//! one circle, and because a payload meaning either "a circle" or "some circles" would leave a consumer
+//! branching on which it got.
+//!
+//! **A [`SweepDocument`]'s `records` ascend by `target.share`.** That is part of the contract and held by
+//! construction, so a renderer plotting share against radius may read them in the order it gets them.
+//!
+//! # Growth
+//!
+//! The format grows **additively**: a new field or a new payload type owes no version bump, and
+//! [`SCHEMA_VERSION`] rises only for a change an existing consumer would misread — a renamed or removed
+//! field, or one whose meaning moved. A consumer should therefore ignore keys it does not know rather than
+//! refuse a document carrying them.
 use std::path::Path;
 
 use serde::Serialize;
 
-use crate::geodesy::{LatLon, wrap_lon};
-use crate::grid::Grid;
+use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
+use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
+use crate::search::{MostPopulous, SearchStats};
+use crate::smallest::{Smallest, SmallestStats, Target, share_of};
+use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
 /// Bumped when a change to a document below is not additive — a renamed or removed field, or one
@@ -18,16 +72,20 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// Every document the program writes.
 ///
 /// `schema_version` is declared first because serde emits struct fields in declaration order, so a
-/// consumer reads the version before anything it might not understand.
+/// consumer reads the version before anything it might not understand. `provenance` precedes `result`
+/// for the same reason one step out: what produced a document is read before the document.
 #[derive(Debug, Clone, Serialize)]
 pub struct Envelope<T> {
     schema_version: u32,
     tool: &'static str,
     tool_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provenance: Option<Provenance>,
     result: T,
 }
 
 impl<T> Envelope<T> {
+    /// A document with no provenance to declare, which is every command that reads no cached table.
     #[must_use]
     pub const fn new(result: T) -> Self {
         Self {
@@ -36,7 +94,48 @@ impl<T> Envelope<T> {
             // the caller's name would make one document's producer unidentifiable from another's.
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            provenance: None,
             result,
+        }
+    }
+
+    /// The fields are spelled out rather than updated over [`Self::new`]: a functional update would drop
+    /// the `None` it replaces, and dropping a value with glue is not something a `const fn` may do.
+    #[must_use]
+    pub const fn with_provenance(result: T, provenance: Provenance) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            tool: env!("CARGO_PKG_NAME"),
+            tool_version: env!("CARGO_PKG_VERSION"),
+            provenance: Some(provenance),
+            result,
+        }
+    }
+}
+
+/// The table a command answered from, and where it sits.
+///
+/// Two of the three facts here are the cache's own and the third is not, which is why the distinction is
+/// documented rather than left to a reader: `digest` and `decimation` are what a cache **attested** to,
+/// because opening one compares both. `grid` is the grid the caller **declared** — the header binds a
+/// width, a height and a factor and no origin or step, so a table built over one geometry opens cleanly
+/// for a query declaring another. `FU-11` is that gap; closing it is a record's call.
+#[derive(Debug, Clone, Serialize)]
+pub struct Provenance {
+    digest: String,
+    decimation: u32,
+    grid: GridSummary,
+    cache: CacheFiles,
+}
+
+impl Provenance {
+    #[must_use]
+    pub fn new(identity: &Identity, header: &Path, payload: &Path) -> Self {
+        Self {
+            digest: hexadecimal(identity.digest),
+            decimation: identity.decimation.factor(),
+            grid: GridSummary::from(identity.decimation.grid()),
+            cache: CacheFiles::new(header, payload),
         }
     }
 }
@@ -147,9 +246,18 @@ pub struct CacheFiles {
     payload: String,
 }
 
-impl TableBuildReport {
+impl CacheFiles {
     /// A path is published with whatever is not UTF-8 replaced, because a document a renderer parses is
     /// UTF-8 and a path is not promised to be.
+    fn new(header: &Path, payload: &Path) -> Self {
+        Self {
+            header: header.to_string_lossy().into_owned(),
+            payload: payload.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+impl TableBuildReport {
     #[must_use]
     pub fn new(built: &BuiltTable, header: &Path, payload: &Path) -> Self {
         Self {
@@ -158,10 +266,7 @@ impl TableBuildReport {
             grid: GridSummary::from(built.decimation.grid()),
             total_population: built.total,
             cells: built.tallies.into(),
-            cache: CacheFiles {
-                header: header.to_string_lossy().into_owned(),
-                payload: payload.to_string_lossy().into_owned(),
-            },
+            cache: CacheFiles::new(header, payload),
         }
     }
 }
@@ -245,19 +350,340 @@ impl TableQueryReport {
     }
 }
 
+/// One circle a caller named, and the population it holds.
+///
+/// Both coordinates are published because they are different questions. `requested` is what was asked
+/// for; `centre` is the centre of the cell the grid resolved it to, which is where the circle actually
+/// sits — up to half a cell away, and 500 m of that at the registry raster's resolution.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct CircleReport {
+    requested: Coordinate,
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    radius_km: f64,
+    population: f64,
+    total_population: f64,
+    share_of_total: f64,
+}
+
+impl CircleReport {
+    #[must_use]
+    pub fn new(
+        requested: LatLon,
+        cell: (Row, Col),
+        grid: &Grid,
+        radius: RadiusKm,
+        population: f64,
+        total: f64,
+    ) -> Self {
+        let (row, col) = cell;
+        Self {
+            requested: requested.into(),
+            centre: grid.centre_of(row, col).into(),
+            row: row.get(),
+            col: col.get(),
+            radius_km: radius.km(),
+            population,
+            total_population: total,
+            share_of_total: share_of(population, total),
+        }
+    }
+}
+
+/// What a fixed-radius search did beside answering, as published.
+///
+/// All five counters, because the pair that matters is a ratio: `blocks_pruned` against
+/// `blocks_examined` is whether the bound bit at all, and a document carrying only the answer cannot say
+/// whether it came from a branch and bound or from a scan wearing its name.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SearchStatsReport {
+    levels: u32,
+    blocks_examined: u64,
+    blocks_pruned: u64,
+    circles_evaluated: u64,
+    kernels_built: u64,
+}
+
+impl From<SearchStats> for SearchStatsReport {
+    fn from(stats: SearchStats) -> Self {
+        Self {
+            levels: stats.levels,
+            blocks_examined: stats.blocks_examined,
+            blocks_pruned: stats.blocks_pruned,
+            circles_evaluated: stats.circles_evaluated,
+            kernels_built: stats.kernels_built,
+        }
+    }
+}
+
+/// The most populous circle of a fixed radius, as published.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MostPopulousReport {
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    radius_km: f64,
+    population: f64,
+    total_population: f64,
+    share_of_total: f64,
+    tolerance_persons: f64,
+    stats: SearchStatsReport,
+}
+
+impl MostPopulousReport {
+    /// `total` is the table's own whole extent, which is what makes `share_of_total` this table's answer
+    /// rather than a figure from somewhere else.
+    #[must_use]
+    pub fn new(found: &MostPopulous, grid: &Grid, total: f64) -> Self {
+        let centre = found.centre;
+        Self {
+            centre: grid.centre_of(centre.row, centre.col).into(),
+            row: centre.row.get(),
+            col: centre.col.get(),
+            radius_km: found.radius.km(),
+            population: centre.population,
+            total_population: total,
+            share_of_total: share_of(centre.population, total),
+            tolerance_persons: found.tolerance_persons,
+            stats: found.stats.into(),
+        }
+    }
+}
+
+/// The share a circle was asked for, resolved against the population it is a share of.
+///
+/// All three, because two of them are derived and a consumer checking the third against the raster's own
+/// total is the check that catches a document answered from the wrong table.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct TargetReport {
+    share: f64,
+    persons: f64,
+    total: f64,
+}
+
+impl From<Target> for TargetReport {
+    fn from(target: Target) -> Self {
+        Self {
+            share: target.share.get(),
+            persons: target.persons,
+            total: target.total,
+        }
+    }
+}
+
+/// The radius one kilometre short of the answer, and what it held.
+///
+/// The other end of the bracket, and the field that makes minimality readable off the document: this
+/// population is under the target and the answer's is not, both measured rather than inferred.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ShortBelowReport {
+    radius_km: u32,
+    population: f64,
+}
+
+/// What a search over radius did beside answering.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SmallestStatsReport {
+    radii_evaluated: u64,
+    /// Radii answered from a previous run's record instead of searched. The two counters sum to the radii
+    /// the run settled, so a resumed run reads as the first falling and this one rising by as much.
+    radii_reused: u64,
+    searched: SearchStatsReport,
+}
+
+impl From<SmallestStats> for SmallestStatsReport {
+    fn from(stats: SmallestStats) -> Self {
+        Self {
+            radii_evaluated: stats.radii_evaluated,
+            radii_reused: stats.radii_reused,
+            searched: stats.searched.into(),
+        }
+    }
+}
+
+/// One smallest circle, as published: the answer, the bracket that proved it, and what the arithmetic
+/// beneath it can and cannot separate.
+///
+/// The radius leads because it is the answer — every other field is what the answer rests on.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SmallestReport {
+    radius_km: u32,
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    population: f64,
+    target: TargetReport,
+    share_achieved: f64,
+    /// Absent, rather than null, when the answer is 0 km and there is no radius below it to have proved
+    /// short — [`TableQueryReport::window`]'s convention.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    short_below: Option<ShortBelowReport>,
+    covers_whole_grid: bool,
+    predicate_slack_persons: f64,
+    tolerance_persons: f64,
+    stats: SmallestStatsReport,
+}
+
+impl SmallestReport {
+    #[must_use]
+    pub fn new(found: &Smallest, grid: &Grid) -> Self {
+        let centre = found.centre;
+        Self {
+            radius_km: found.radius_km,
+            centre: grid.centre_of(centre.row, centre.col).into(),
+            row: centre.row.get(),
+            col: centre.col.get(),
+            population: centre.population,
+            target: found.target.into(),
+            share_achieved: found.share_achieved,
+            short_below: found
+                .short_below
+                .map(|(radius_km, population)| ShortBelowReport {
+                    radius_km,
+                    population,
+                }),
+            covers_whole_grid: found.covers_whole_grid,
+            predicate_slack_persons: found.predicate_slack_persons,
+            tolerance_persons: found.tolerance_persons,
+            stats: found.stats.into(),
+        }
+    }
+}
+
+/// The record of what every radius a run probed held, and where it sits.
+///
+/// A document-level block rather than a field of [`SmallestReport`], because one run opens one of these
+/// and what it holds is a property of the table rather than of any share: a sweep of ninety shares
+/// shares one, and putting its path in each circle would write the same path ninety times.
+#[derive(Debug, Clone, Serialize)]
+pub struct LedgerReport {
+    path: String,
+    /// How many radii the file holds, which is the only figure that says whether resumption is working.
+    radii: usize,
+}
+
+impl LedgerReport {
+    /// `CacheFiles::new`'s treatment of a path, and for its reason.
+    #[must_use]
+    pub fn new(path: &Path, radii: usize) -> Self {
+        Self {
+            path: path.to_string_lossy().into_owned(),
+            radii,
+        }
+    }
+}
+
+/// What one command asking for one smallest circle publishes.
+///
+/// A document of its own rather than a bare [`SmallestReport`], because the ledger belongs at this level
+/// and not inside the circle. And a document of its own rather than one shared with [`SweepDocument`]: the
+/// two differ in how many circles they carry, so a single payload meaning either "a circle" or "some
+/// circles" would leave a consumer branching on which it got.
+#[derive(Debug, Clone, Serialize)]
+pub struct SmallestDocument {
+    ledger: LedgerReport,
+    circle: SmallestReport,
+}
+
+impl SmallestDocument {
+    #[must_use]
+    pub const fn new(ledger: LedgerReport, circle: SmallestReport) -> Self {
+        Self { ledger, circle }
+    }
+}
+
+/// The shares a sweep walked, in whole percent, which is the unit the flags take.
+///
+/// Whole percent rather than the fractions the records carry: a step of a tenth accumulated in f64 makes
+/// the third share `0.30000000000000004`, and this block is what a consumer reads to know the walk was
+/// over integers.
+// The shared suffix is the unit, and these are published field names: `from`, `to` and `step` beside a
+// `target.share` that is a fraction is exactly the ambiguity this block exists to remove.
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SweepShares {
+    from_percent: u32,
+    to_percent: u32,
+    step_percent: u32,
+}
+
+impl SweepShares {
+    #[must_use]
+    pub const fn new(from_percent: u32, to_percent: u32, step_percent: u32) -> Self {
+        Self {
+            from_percent,
+            to_percent,
+            step_percent,
+        }
+    }
+}
+
+/// What one command sweeping a range of shares publishes.
+///
+/// One `ledger` block for the whole document, because one run opens one: what a ledger records is the
+/// maximum at a radius, a property of the table alone, so every share in the sweep reuses what the
+/// others paid for.
+///
+/// **`records` ascends by `target.share`**, and that is part of the contract rather than an accident of
+/// how a caller iterated — [`Self::new`] orders them, so a renderer plotting share against radius may
+/// read them in the order it gets them.
+#[derive(Debug, Clone, Serialize)]
+pub struct SweepDocument {
+    ledger: LedgerReport,
+    shares: SweepShares,
+    records: Vec<SmallestReport>,
+}
+
+impl SweepDocument {
+    /// Ordering here rather than asking a caller for it, so the contract above holds by construction.
+    /// `total_cmp` because a share is an ordinary finite proportion and a total order needs no case for
+    /// the `NaN` [`Share`](crate::smallest::Share) refuses.
+    #[must_use]
+    pub fn new(
+        ledger: LedgerReport,
+        shares: SweepShares,
+        mut records: Vec<SmallestReport>,
+    ) -> Self {
+        records.sort_by(|a, b| a.target.share.total_cmp(&b.target.share));
+        Self {
+            ledger,
+            shares,
+            records,
+        }
+    }
+}
+
 /// The one spelling of a digest, so the string a build publishes is the string a query accepts.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
 }
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
-// narrow exemption; docs/ai/code.md allows both in tests.
+// narrow exemption; docs/ai/code.md allows both in tests. float_cmp is the point rather than a
+// concession: the fixture's cells are small distinct integers, so every figure a document below carries
+// is an exact f64 and a tolerance would let a dropped row pass. cast_precision_loss likewise — the
+// largest cell is 648, which u32 -> f32 holds exactly.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp,
+    clippy::cast_precision_loss
+)]
 mod tests {
+    use std::collections::BTreeMap;
+    use std::convert::Infallible;
+    use std::num::NonZeroU32;
+
     use super::*;
+    use crate::circle;
     use crate::geodesy::great_circle_km;
-    use crate::table::Decimation;
+    use crate::kernel::Kernel;
+    use crate::raster::Synthetic;
+    use crate::search::{self, Candidate};
+    use crate::smallest::{self, RadiusLedger, Share};
+    use crate::table::{Decimation, Table, build};
 
     #[test]
     fn the_envelope_leads_with_its_schema_version() {
@@ -266,6 +692,35 @@ mod tests {
         // to understand anything else.
         let json = serde_json::to_string(&Envelope::new(())).unwrap();
         assert!(json.starts_with(r#"{"schema_version":1,"#), "{json}");
+    }
+
+    /// The provenance of a table over [`degree_grid`], for the two tests that want one and vary nothing
+    /// about it.
+    fn provenance() -> Provenance {
+        Provenance::new(
+            &Identity {
+                digest: 0x3a5d_5e3b_082f_2fb7,
+                decimation: Decimation::none(degree_grid()),
+            },
+            Path::new("out/table.header.json"),
+            Path::new("out/table.payload.bin"),
+        )
+    }
+
+    #[test]
+    fn an_envelope_without_provenance_carries_no_key_for_it() {
+        // The absent case as a substring rather than as a parsed value: what the skip promises is that
+        // the key is not there at all, and a consumer distinguishing absent from null reads the text.
+        let json = serde_json::to_string(&Envelope::new(())).unwrap();
+        assert!(!json.contains("provenance"), "{json}");
+    }
+
+    #[test]
+    fn provenance_is_published_before_the_result_it_produced() {
+        let json = serde_json::to_string(&Envelope::with_provenance((), provenance())).unwrap();
+        let at = json.find(r#""provenance":"#).expect("the key is emitted");
+        let result = json.find(r#""result":"#).expect("the payload is emitted");
+        assert!(at < result, "{json}");
     }
 
     #[test]
@@ -359,6 +814,293 @@ mod tests {
             ColSpan::FullTurn,
             7_757_982_599.32,
         )));
+    }
+
+    const FIXTURE_WIDTH: u32 = 36;
+    const FIXTURE_HEIGHT: u32 = 18;
+
+    /// The registry raster's sentinel, so a fixture reaches the table by the path a real raster takes.
+    const NODATA: f32 = -3.402_823e38;
+
+    /// The fixture every search document below is built over: ten degrees a side, closing in longitude
+    /// because [`Kernel::new`] refuses a grid that does not, and small enough that a whole search over it
+    /// is a fraction of a second. It is `circle.rs`'s and `search.rs`'s shape, so a figure a document
+    /// here carries can be read against the tests that pinned the computation.
+    fn fixture_grid() -> Grid {
+        Grid::new(
+            FIXTURE_WIDTH,
+            FIXTURE_HEIGHT,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            10.0,
+            -10.0,
+        )
+        .expect("a 36 x 18 whole-globe grid is valid")
+    }
+
+    /// Distinct at every position and no larger than 648, so every partial sum is exact in f64: a cell
+    /// counted twice or dropped moves a published figure rather than hiding in a rounding.
+    fn fixture_cell(row: u32, col: u32) -> f32 {
+        (row * FIXTURE_WIDTH + col + 1) as f32
+    }
+
+    /// The padded payload a real build emits over `cell`, rather than one written out by hand: the
+    /// fixture is then the path the search takes and not a second construction of it.
+    fn payload_over(grid: &Grid, cell: impl Fn(u32, u32) -> f32) -> Vec<f64> {
+        let rows: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| (0..grid.width()).map(|col| cell(row, col)).collect())
+            .collect();
+        let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        build(source, Decimation::none(*grid), &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        payload
+    }
+
+    fn fixture_payload() -> Vec<f64> {
+        payload_over(&fixture_grid(), fixture_cell)
+    }
+
+    /// The population inside a circle of `radius_km` about the cell holding `at`, with the cell.
+    ///
+    /// The path `population-at` takes: snap the coordinate, build the cap, fold it. So the document below
+    /// is over the computation the command performs rather than over an assembled figure.
+    fn circle_at(
+        table: &Table<'_>,
+        at: LatLon,
+        radius_km: f64,
+    ) -> ((Row, Col), RadiusKm, f64, f64) {
+        let grid = *table.grid();
+        let cell = grid
+            .cell_containing(at)
+            .expect("the fixture spans the globe");
+        let radius = RadiusKm::new(radius_km).expect("a fixture radius is a length");
+        let kernel = Kernel::new(grid, cell.0, radius).expect("a whole-globe grid");
+        let (rows, cols) = table.whole();
+        (
+            cell,
+            radius,
+            circle::population(table, &kernel, cell.1),
+            table.population(rows, cols),
+        )
+    }
+
+    #[test]
+    fn the_circle_document_holds_its_shape() {
+        // A request that lands nowhere near a cell centre, which is the case the two coordinates exist
+        // to separate: (48 N, 11 E) falls in the cell centred on (45 N, 15 E), three degrees away in one
+        // extent and four in the other. A request already on a centre would pass with the fields swapped.
+        //
+        // 1200 km about that centre is 10.79 degrees of arc, and on this grid it admits five cells — the
+        // centre and its four neighbours, the diagonals being 14.1 degrees away and out:
+        //
+        //   (3, 19) = 128, (4, 18) = 163, (4, 19) = 164, (4, 20) = 165, (5, 19) = 200
+        //
+        // which sum to 820 of the fixture's 210 276 people.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let requested = LatLon {
+            lat: 48.0,
+            lon: 11.0,
+        };
+        let (cell, radius, population, total) = circle_at(&table, requested, 1200.0);
+
+        assert_eq!((cell.0.get(), cell.1.get()), (4, 19));
+        assert_eq!(population, 820.0);
+        assert_eq!(total, 210_276.0);
+
+        insta::assert_json_snapshot!(Envelope::new(CircleReport::new(
+            requested, cell, &grid, radius, population, total,
+        )));
+    }
+
+    fn spacing(cells: u32) -> NonZeroU32 {
+        NonZeroU32::new(cells).expect("a fixture spacing is not zero")
+    }
+
+    #[test]
+    fn the_most_populous_document_holds_its_shape() {
+        // Over a search rather than an assembled result, so the document is the shape one really takes —
+        // and over a search whose bound bit, which `blocks_pruned` is the witness to: a scan wearing the
+        // name would publish zero there and pass a snapshot taken of it.
+        //
+        // The centre is in the south-east, because the fixture's cells grow with row and column. That it
+        // is not (0, 0) is the assertion that matters: a fixture whose maximum sat on the north-west cell
+        // would pass with `Candidate::better`'s tie-break wired backwards.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let (rows, cols) = table.whole();
+        let total = table.population(rows, cols);
+
+        let found = search::most_populous(&table, RadiusKm::from(3000u32), spacing(4), &mut ())
+            .expect("a whole-globe fixture has kernels");
+        assert!(found.stats.blocks_pruned > 0, "{:?}", found.stats);
+        assert_ne!((found.centre.row.get(), found.centre.col.get()), (0, 0));
+
+        insta::assert_json_snapshot!(Envelope::new(MostPopulousReport::new(&found, &grid, total)));
+    }
+
+    fn share(value: f64) -> Share {
+        Share::new(value).expect("a fixture share is a proportion")
+    }
+
+    #[test]
+    fn the_smallest_document_holds_its_shape() {
+        // Over the real search over radius, with no ledger, so the bracket in the document is one a
+        // search proved rather than a pair someone wrote down.
+        //
+        // The two populations are what make it a bracket: the answer's reaches the target and
+        // `short_below`'s does not. An off-by-one in the bisection's reporting — publishing the radius
+        // two below, or the one above — fails here rather than in a renderer.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let found = smallest::smallest(&table, share(0.25), spacing(4), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+        let below = found.short_below.expect("the answer is not 0 km");
+        assert!(below.1 < found.target.persons, "{found:?}");
+        assert!(found.centre.population >= found.target.persons, "{found:?}");
+        assert_eq!(below.0, found.radius_km - 1);
+
+        insta::assert_json_snapshot!(Envelope::new(SmallestReport::new(&found, &grid)));
+    }
+
+    /// A ledger in a map, so the `radii` a document publishes is a real count and not a figure written
+    /// down beside one. `smallest.rs` drives its own tests through the same seam.
+    #[derive(Debug, Default)]
+    struct Recorded {
+        entries: BTreeMap<u32, Candidate>,
+    }
+
+    impl RadiusLedger for Recorded {
+        type Error = Infallible;
+
+        fn get(&self, km: u32) -> Option<Candidate> {
+            self.entries.get(&km).copied()
+        }
+
+        fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            self.entries.insert(km, found);
+            Ok(())
+        }
+    }
+
+    /// Where a run would put its ledger, which is `smallest-for-share`'s default. Fabricated because a
+    /// map has no path, and it is the shape of the block that a snapshot pins rather than the location.
+    fn ledger_path() -> &'static Path {
+        Path::new("out/radii.json")
+    }
+
+    #[test]
+    fn the_smallest_circle_document_holds_its_shape() {
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let found = smallest::smallest(&table, share(0.25), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+        // The count is the run's own, which is what makes the block worth publishing at all.
+        assert_eq!(ledger.entries.len() as u64, found.stats.radii_evaluated);
+
+        insta::assert_json_snapshot!(Envelope::new(SmallestDocument::new(
+            LedgerReport::new(ledger_path(), ledger.entries.len()),
+            SmallestReport::new(&found, &grid),
+        )));
+    }
+
+    #[test]
+    fn the_sweep_document_holds_its_shape_and_ascends_by_share() {
+        // Ten, twenty and thirty percent through `Share::new` on the exact fractions a percent walk
+        // produces, so the published shares are `0.1`, `0.2` and `0.3` and not the residue accumulating a
+        // step of a tenth would leave. That is the whole reason the flags are percent.
+        //
+        // Handed to the constructor in descending order, because what is being pinned is that the type
+        // orders them: passing them already sorted would let a constructor that does nothing pass.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let mut records: Vec<SmallestReport> = [0.3, 0.2, 0.1]
+            .into_iter()
+            .map(|value| {
+                let found =
+                    smallest::smallest(&table, share(value), spacing(4), &mut ledger, &mut ())
+                        .expect("a whole-globe fixture and a map cannot fail");
+                SmallestReport::new(&found, &grid)
+            })
+            .collect();
+        assert_eq!(records.len(), 3);
+
+        let document = SweepDocument::new(
+            LedgerReport::new(ledger_path(), ledger.entries.len()),
+            SweepShares::new(10, 30, 10),
+            std::mem::take(&mut records),
+        );
+        let shares: Vec<f64> = document
+            .records
+            .iter()
+            .map(|record| record.target.share)
+            .collect();
+        assert_eq!(shares, vec![0.1, 0.2, 0.3]);
+
+        insta::assert_json_snapshot!(Envelope::new(document));
+    }
+
+    #[test]
+    fn a_document_wrapping_a_circle_carries_exactly_one_ledger_block() {
+        // One run opens one, so a ledger block per record would write the same path once per share. The
+        // count is over the serialised text, which is where a field moved into `SmallestReport` would
+        // show up as three keys in a sweep of three.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let found = smallest::smallest(&table, share(0.2), spacing(4), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+        let record = SmallestReport::new(&found, &grid);
+        let block = || LedgerReport::new(ledger_path(), 0);
+
+        let one =
+            serde_json::to_string(&Envelope::new(SmallestDocument::new(block(), record))).unwrap();
+        let swept = serde_json::to_string(&Envelope::new(SweepDocument::new(
+            block(),
+            SweepShares::new(20, 20, 10),
+            vec![record, record, record],
+        )))
+        .unwrap();
+
+        assert_eq!(one.matches(r#""ledger":"#).count(), 1, "{one}");
+        assert_eq!(swept.matches(r#""ledger":"#).count(), 1, "{swept}");
+    }
+
+    #[test]
+    fn a_circle_over_a_table_holding_nobody_publishes_a_share_of_zero() {
+        // Every cell the sentinel, so the build sanitises the lot to zero and the total is nothing. The
+        // quotient would be a `NaN`, which serialises as `null` and reaches a renderer as a chart labelled
+        // with it — so the text is asserted rather than the value.
+        let grid = fixture_grid();
+        let payload = payload_over(&grid, |_, _| NODATA);
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let requested = LatLon {
+            lat: 48.0,
+            lon: 11.0,
+        };
+        let (cell, radius, population, total) = circle_at(&table, requested, 1200.0);
+        assert_eq!((population, total), (0.0, 0.0));
+
+        let report = CircleReport::new(requested, cell, &grid, radius, population, total);
+        assert_eq!(report.share_of_total, 0.0);
+        let json = serde_json::to_string(&Envelope::new(report)).unwrap();
+        assert!(!json.contains("null") && !json.contains("NaN"), "{json}");
     }
 
     #[test]

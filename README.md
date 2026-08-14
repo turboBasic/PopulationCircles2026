@@ -94,6 +94,79 @@ circle, as a country is the spec error
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
 Building needs the raster, so `mise run data:pull` first.
 
+### Circles
+
+The four search commands read the same table, so they take the same flags — collected into a shell
+function again, and the outputs below are from one run against the 5 arcmin table above:
+
+```sh
+$ search() { local command="$1"; shift; mise run cli -- "$command" --width 43200 --height 21600 \
+    --origin-lat 90 --origin-lon -180 --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
+```
+
+The population inside a circle you name. A thousand kilometres around Dhaka is a tenth of everyone:
+
+```sh
+$ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
+{…,"result":{"requested":{"lat":23.8103,…},"centre":{"lat":23.791666666666927,"lon":90.37499999999898},
+ "radius_km":1000.0,"population":769799773.1688497,"share_of_total":0.0992267981157833}}
+```
+
+The centre is not the coordinate asked for: it is the centre of the cell containing it, and both are
+published because they are different questions.
+
+The most populous circle of that radius, found by branch and bound over every cell centre — a good deal
+further west, and holding 16% of the world rather than 10%:
+
+```sh
+$ search most-populous --radius-km 1000 --spacing 32
+{…,"result":{"centre":{"lat":25.125000000000256,"lon":79.70833333333235},"radius_km":1000.0,
+ "population":1254363867.9300776,"share_of_total":0.1616868627727305,"tolerance_persons":0.0,
+ "stats":{"levels":6,"blocks_examined":13908,"blocks_pruned":12725,…}}}
+```
+
+`--spacing` is required and has no default: it changes how long the search takes and not what it answers,
+and the useful value is a property of the raster and the radius that nothing here has measured.
+`blocks_pruned` against `blocks_examined` is how you tell the bound is biting — 12 725 of 13 908 here.
+
+And the question the program is named for. The smallest circle holding half the world's population:
+
+```sh
+$ search smallest-for-share --share 50 --spacing 32 --ledger out/radii.json
+{…,"result":{"ledger":{"path":"out/radii.json","radii":24},"circle":{"radius_km":3360,
+ "centre":{"lat":28.791666666666906,"lon":100.625},"population":3879165388.019252,
+ "target":{"share":0.5,"persons":3878991299.6618357,"total":7757982599.323671},
+ "short_below":{"radius_km":3359,"population":3878869485.4163485},"covers_whole_grid":false,
+ "predicate_slack_persons":0.01196060136531932,…}}}
+```
+
+3360 km, centred in western China. `short_below` is the other end of the bracket the search proved: that
+radius was measured too and falls short of the target, so minimality is readable off the document rather
+than taken on trust. The share is given in **whole percent**, because a fraction stepped in f64 publishes
+`0.30000000000000004` as a third share and a renderer then labels a chart with it.
+
+Every radius tried goes in the ledger, so a sweep of several shares pays for each radius once. Here the
+50% record costs no search at all, because the run above already settled its radii:
+
+```sh
+$ search sweep --from 10 --to 50 --step 20 --spacing 32 --ledger out/radii.json
+{…,"result":{"ledger":{"path":"out/radii.json","radii":43},"shares":{"from_percent":10,"to_percent":50,
+ "step_percent":20},"records":[
+  {"radius_km":702,…,"target":{"share":0.1,…},"stats":{"radii_evaluated":9,"radii_reused":11,…}},
+  {"radius_km":2129,…,"target":{"share":0.3,…},"stats":{"radii_evaluated":10,"radii_reused":14,…}},
+  {"radius_km":3360,…,"target":{"share":0.5,…},"stats":{"radii_evaluated":0,"radii_reused":24,…}}]}}
+```
+
+`records` ascend by requested share, which is part of the format rather than an accident of iteration.
+A ledger describing another table is refused rather than resumed from, which is why there is no way to
+turn it off.
+
+**These figures are a decimated table's, not the answer.** The 5 arcmin grid is a tenth of the raster's
+resolution in each direction, so a radius here is good to about the width of one of its cells. Comparing
+against the published 3300 km result is a later step's job, and this section is a demonstration that the
+commands run rather than a claim that they are right.
+
 `mise run cli -- --help` has the full command and flag reference.
 
 ## Data

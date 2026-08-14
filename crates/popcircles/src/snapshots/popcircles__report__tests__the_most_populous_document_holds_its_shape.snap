@@ -1,0 +1,29 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(MostPopulousReport::new(&found, &grid, total))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "centre": {
+      "lat": -85.0,
+      "lon": 75.0
+    },
+    "row": 17,
+    "col": 25,
+    "radius_km": 3000.0,
+    "population": 55986.0,
+    "total_population": 210276.0,
+    "share_of_total": 0.2662500713348171,
+    "tolerance_persons": 0.0,
+    "stats": {
+      "levels": 3,
+      "blocks_examined": 369,
+      "blocks_pruned": 269,
+      "circles_evaluated": 100,
+      "kernels_built": 29
+    }
+  }
+}
