@@ -4,6 +4,10 @@ resolver = "3"
 
 [workspace.dependencies]
 anyhow = "1"
+# The `must_cast` feature is what makes the f64-to-bytes direction a compile-time guarantee rather
+# than a runtime panic path: the sizes divide and the alignment falls, and `must_cast_slice` refuses
+# to compile where that is not so.
+bytemuck = { version = "1", features = ["must_cast"] }
 clap = { version = "4", default-features = false, features = [
   "std",
   "derive",

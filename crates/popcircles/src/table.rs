@@ -1,6 +1,9 @@
 // The computing half of the summation table. ADR 0003 decision 1 keeps the file, the header and
 // everything that serialises in `table/cache.rs`, so nothing here can be reached without a grid and a
 // slice.
+
+pub mod cache;
+
 use crate::grid::{Col, Grid, GridError, Row};
 use crate::progress::Progress;
 use crate::raster::{CellTallies, RasterError, RasterSource};

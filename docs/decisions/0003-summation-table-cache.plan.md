@@ -122,7 +122,7 @@ in this phase touches a file or adds a crate.
 tests against a shape ADR 0003 fixed. 2.2 is the `unsafe`, the lint demotion and the gate that bounds
 it, where the `// SAFETY:` argument is the part worth an expensive reading.
 
-- [ ] **2.1 The cache writes and reads, without mmap.** `crates/popcircles/src/table/cache.rs`,
+- [x] **2.1 The cache writes and reads, without mmap.** `crates/popcircles/src/table/cache.rs`,
       declared as a submodule of `table`: a `serde`-derived header carrying a format version constant,
       the digest, the dimensions, the decimation factor and the byte order — the **host's**, per decision
       4, so `open` rejects a payload written by a host of the other order rather than reinterpreting it;
