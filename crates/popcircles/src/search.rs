@@ -8,6 +8,7 @@
 
 use std::num::NonZeroU32;
 
+use crate::bracket::Bracket;
 use crate::circle;
 use crate::geodesy::{RadiusKm, arc_km};
 use crate::grid::{Col, Grid, Row};
@@ -393,6 +394,16 @@ pub fn most_populous<P: Progress>(
         });
         stats.levels += 1;
 
+        // Box 7's second granularity. Kernel placement gets no pair of its own: there is no discrete
+        // placement step to open one around — `HeldKernel::get` builds lazily inside the block loop below,
+        // 15 891 times in the measured run — so what that entry wanted rides on this pair's end record as
+        // the delta over the level.
+        let mut bracket = Bracket::open(module_path!(), format!("level {}", stats.levels));
+        // Read from the two counters and not from `stats.kernels_built`, which is assigned once after this
+        // loop exits and so is zero at every level. They stand at 2 before the first level opens, one seed
+        // kernel each, which is what a delta keeps the first level from claiming.
+        let kernels_before = exact.built + widest.built;
+
         // Saturating rather than casting, so a host where a Vec's length does not fit a u64 reports a
         // capped total instead of a wrapped one.
         let total = u64::try_from(level.len()).unwrap_or(u64::MAX);
@@ -430,6 +441,8 @@ pub fn most_populous<P: Progress>(
             done += 1;
             progress.advance(done, total);
         }
+
+        bracket.figure("kernels", exact.built + widest.built - kernels_before);
 
         level = survivors
             .into_iter()

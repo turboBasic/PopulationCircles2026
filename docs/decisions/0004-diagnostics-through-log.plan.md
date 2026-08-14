@@ -218,7 +218,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       doing the work, and hand-written end lines are what it rules out. A unit test on the guard covers the
       target: a bracket constructed in one module reports that module on both records.
 
-- [ ] **2.5 Each search level is bracketed, and its end record carries the kernels built.** Box 7's second
+- [x] **2.5 Each search level is bracketed, and its end record carries the kernels built.** Box 7's second
       granularity. **Kernel placement is not a bracket of its own**, because there is no discrete placement
       step to open one around — kernels are built lazily inside the per-block loop, through
       `HeldKernel::get`, 15 891 times in the measured run, which is precisely the "line per kernel" the Out
