@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use log::{LevelFilter, Metadata, Record};
+use popcircles::bracket::Bracket;
 use popcircles::circle;
 use popcircles::geodesy::{LatLon, RadiusKm, great_circle_km};
 use popcircles::grid::{Col, Grid, GridError, Row};
@@ -554,6 +555,10 @@ impl CachedTable {
     /// The one place a command reads a cache, so a command asks for a table rather than assembling the
     /// path, the identity and the provenance of one for itself.
     fn open(args: &CachedTableArgs) -> Result<Self, Failure> {
+        // Box 7's other half of "table build or load". The three `?`s below are exactly why the closing
+        // record is `Drop`'s: a cache that is absent still says how long finding that out took.
+        let _bracket = Bracket::open(module_path!(), "table load");
+
         let source = args.grid.grid().map_err(|error| Failure::grid(&error))?;
         let decimation =
             Decimation::new(source, args.table.decimate).map_err(|error| Failure::table(&error))?;

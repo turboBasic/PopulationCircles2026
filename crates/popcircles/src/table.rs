@@ -4,6 +4,7 @@
 
 pub mod cache;
 
+use crate::bracket::Bracket;
 use crate::geodesy::LatLon;
 use crate::grid::{BOUNDARY_TOLERANCE_DEG, Col, Grid, GridError, Row};
 use crate::progress::Progress;
@@ -395,6 +396,8 @@ where
         decimation.grid().width(),
         decimation.grid().height()
     );
+    // Box 7's first granularity. Bound rather than discarded, and it outlives both `?`s below.
+    let _bracket = Bracket::open(module_path!(), "table build");
 
     // The zero row, which is the padding itself: emitting it here is what lets a rectangle touching
     // the north edge subtract four corners like any other.

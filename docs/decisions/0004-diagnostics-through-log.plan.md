@@ -196,7 +196,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
 Box 7's three remaining granularities are 2.4 to 2.6, one task each. They are separate commits because they
 are separate call sites in two crates, and because the warm-ledger verify belongs to the radius trial alone.
 
-- [ ] **2.4 A `Bracket` guard, and the table build or load wears the first pair.** Box 7's first
+- [x] **2.4 A `Bracket` guard, and the table build or load wears the first pair.** Box 7's first
       granularity, and the task that settles how every pair closes. **The end record is written by `Drop`,
       not by hand.** Every region box 7 asks to bracket is threaded with `?` — `search.rs:382`, `405` and
       `416`, `smallest.rs:317`, `320`, `426` and `447`, and `build`'s row callback — so a hand-written end
