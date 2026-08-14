@@ -5,7 +5,7 @@ created: 2026-08-14
 
 # Implementation plan — ADR 0004, diagnostics through `log`
 
-**Status: in progress (2026-08-14).** Carries [ADR 0004](0004-diagnostics-through-log.md) into the tree,
+**Status: complete (2026-08-14).** Carries [ADR 0004](0004-diagnostics-through-log.md) into the tree,
 which is issue #8's last four boxes: `--log-level`, the `info` narration, the `debug` bracketing, and the
 box saying a record picks the facade. Those four are the whole of what keeps #8 open after #38, so the
 last task ticks them and roadmap #11's sixth step, and the PR carrying this plan closes the issue.
@@ -275,7 +275,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       empty — the second was run on this tree while the plan was drafted and matches nothing, where the
       word-based sweep it replaces matches once.
 
-- [ ] **3.3 The issue's last four boxes are ticked, the roadmap's step is ticked, and the plan is
+- [x] **3.3 The issue's last four boxes are ticked, the roadmap's step is ticked, and the plan is
       closed.** Tick boxes 5 to 8 of issue #8 — the three logging boxes and the box saying a record picks
       the facade, which ADR 0004 is — leaving all eight ticked. Tick roadmap #11's `#8` box, which this
       plan is what makes true. **The issue is not closed by hand**: the PR carrying this plan is what
@@ -287,5 +287,4 @@ are separate call sites in two crates, and because the warm-ledger verify belong
 
 ## Follow-ups
 
-- [FU-04](../follow-ups.md#fu-04---diagnostics-have-no-facade) — `closed` by 3.2; ADR 0004 is the record
-  its Fix required.
+`FU-04` in [`../follow-ups.md`](../follow-ups.md).
