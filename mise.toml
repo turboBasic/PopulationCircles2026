@@ -134,10 +134,20 @@ run = "cargo test --all-features"
 
 # Never in `lint` or `ci`, and not on a condition that could later be satisfied: CI clones with
 # GIT_LFS_SKIP_SMUDGE=1, so data/ there holds pointers and this test would have nothing to read.
-# --release because the pass is 933 120 000 cells and a debug build spends minutes on it.
+# --release because the pass is 933 120 000 cells and a debug build spends minutes on it. The
+# deselected set is no longer only about data: it also holds `test:slow`'s test, which needs time and
+# no raster, so this task runs that one too while `test:slow` runs it alone.
 [tasks."test:raster"]
 description = "Read the real population raster end to end (needs mise run data:pull)"
 run = "cargo test --release --all-features -- --ignored"
+
+# Not in `test` or `ci` for a reason `test:raster`'s data cannot be given: the shape is 933 120 000
+# cells and the pass takes twenty seconds in release, minutes in a debug build, and a suite that slow
+# stops being run. Selected by target rather than by name so adding a second slow test to the file
+# needs no change here.
+[tasks."test:slow"]
+description = "Check the full-resolution summation table against an exact reference"
+run = "cargo test --release --all-features --test full_resolution_table -- --ignored"
 
 [tasks."test:python"]
 description = "Run the Python test suite"

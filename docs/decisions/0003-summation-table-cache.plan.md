@@ -81,7 +81,7 @@ in this phase touches a file or adds a crate.
       rejected at construction; `rg -n 'std::fs|Path|serde|unsafe' crates/popcircles/src/table.rs`
       returns nothing.
 
-- [ ] **1.3 The builder streams a raster into table rows, compensated.** In `table.rs`: it consumes an
+- [x] **1.3 The builder streams a raster into table rows, compensated.** In `table.rs`: it consumes an
       `impl RasterSource` and a `&mut impl Progress`, emits each completed padded row to a sink the
       caller supplies, and returns the digest, the `CellTallies` the source finishes with, and the
       compensated total. The digest is decision 3's exactly: FNV-1a 64-bit, standard offset basis and

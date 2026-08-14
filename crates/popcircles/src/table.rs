@@ -2,11 +2,24 @@
 // everything that serialises in `table/cache.rs`, so nothing here can be reached without a grid and a
 // slice.
 use crate::grid::{Col, Grid, Row};
+use crate::progress::Progress;
+use crate::raster::{CellTallies, RasterError, RasterSource};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TableError {
     #[error("a padded table over this grid holds {expected} cells; the payload holds {found}")]
     PayloadLength { expected: usize, found: usize },
+}
+
+/// Why a build stopped. The sink's own failure stays its own type, so this module needs no vocabulary
+/// for whatever a caller is emitting rows into.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError<E> {
+    #[error("the raster could not be read")]
+    Raster(#[from] RasterError),
+
+    #[error("a completed table row could not be taken")]
+    Sink(#[source] E),
 }
 
 /// A band of rows, inclusive at both ends.
@@ -151,17 +164,124 @@ fn padded_len(grid: &Grid) -> usize {
     usize::try_from(cells).unwrap_or(usize::MAX)
 }
 
+/// What a build produced beside the rows it emitted, and everything a cache header needs of them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BuiltTable {
+    /// The identity of the cells this table was built from — ADR 0003 decision 3, and the only thing
+    /// that says two tables are the same table.
+    pub digest: u64,
+    pub tallies: CellTallies,
+    /// The whole raster's population: the table's last cell, so it carries the compensation the rest
+    /// of the table carries rather than being summed a second way.
+    pub total: f64,
+}
+
+// Decision 3's digest in full, because a digest whose word width or order is left to the
+// implementation is a number that happens to match today rather than an identity: FNV-1a, 64-bit,
+// standard offset basis and prime, over each sanitised cell's `f32` bits widened to `u64`, in
+// row-major order.
+const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// Streams a raster into the padded rows of a summation table, handing each row to `emit` as it is
+/// completed.
+///
+/// What stays resident is one accumulator row, one correction row and the row the source lends — 864 KB
+/// at the registry raster's width, for a table of 7.5 GB — so the build's memory is the grid's width
+/// rather than its area. The accumulator holds the correctly rounded column sum and the correction
+/// holds exactly what f64 could not, renormalised after every row; that is why the accumulator can be
+/// emitted as it stands, where Neumaier's deferred correction would need a third row resident to add
+/// the two together into.
+///
+/// # Errors
+/// [`BuildError::Raster`] when the source fails mid-stream, [`BuildError::Sink`] when `emit` does.
+pub fn build<S, P, F, E>(
+    mut source: S,
+    progress: &mut P,
+    mut emit: F,
+) -> Result<BuiltTable, BuildError<E>>
+where
+    S: RasterSource,
+    P: Progress,
+    F: FnMut(&[f64]) -> Result<(), E>,
+{
+    let grid = source.grid();
+    let width = grid.width() as usize;
+    let rows = u64::from(grid.height());
+
+    let mut acc = vec![0.0f64; width + 1];
+    let mut corr = vec![0.0f64; width + 1];
+    let mut digest = FNV_OFFSET_BASIS;
+
+    // The zero row, which is the padding itself: emitting it here is what lets a rectangle touching
+    // the north edge subtract four corners like any other.
+    emit(&acc).map_err(BuildError::Sink)?;
+    progress.advance(0, rows);
+
+    let mut done = 0u64;
+    while let Some(row) = source.next_row() {
+        let values = row?.values;
+
+        // The row prefix lives in two scalars rather than a row of its own: each prefix is consumed by
+        // the column it belongs to in the same step, so nothing here ever needs a whole prefix row.
+        let mut prefix = 0.0f64;
+        let mut prefix_corr = 0.0f64;
+        for (index, &cell) in values.iter().enumerate() {
+            digest = (digest ^ u64::from(cell.to_bits())).wrapping_mul(FNV_PRIME);
+
+            // The one widening in the build, and the ground rule behind it: f32 -> f64 is exact, and
+            // no accumulator below is ever anything but f64.
+            let (sum, dropped) = two_sum(prefix, f64::from(cell));
+            (prefix, prefix_corr) = two_sum(sum, prefix_corr + dropped);
+
+            let column = index + 1;
+            let (sum, dropped) = two_sum(acc[column], prefix);
+            (acc[column], corr[column]) = two_sum(sum, corr[column] + dropped);
+        }
+
+        emit(&acc).map_err(BuildError::Sink)?;
+        done += 1;
+        progress.advance(done, rows);
+    }
+
+    Ok(BuiltTable {
+        digest,
+        tallies: source.finish(),
+        total: acc[width],
+    })
+}
+
+/// Knuth's two-sum: the rounded sum, and exactly what the rounding dropped, for any two magnitudes.
+///
+/// The unconditional form rather than Neumaier's comparison of magnitudes — the same arithmetic, and
+/// the error term is what both are for, but this one costs no branch per cell over 933 120 000 of them.
+fn two_sum(a: f64, b: f64) -> (f64, f64) {
+    let sum = a + b;
+    let b_rounded = sum - a;
+    (sum, (a - (sum - b_rounded)) + (b - b_rounded))
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
 // narrow exemption; docs/ai/code.md allows both in tests. float_cmp joins them because every value
 // below is a small integer, exact in f64: what these assertions pin is the indexing and the wrapping,
-// so a tolerance would let an off-by-one in the padding pass.
+// so a tolerance would let an off-by-one in the padding pass. cast_precision_loss likewise — the
+// generated cells are integers below 2^20, where u32 -> f32 is exact.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp,
+    clippy::cast_precision_loss
+)]
 mod tests {
+    use std::convert::Infallible;
     use std::ops::RangeInclusive;
+
+    use proptest::prelude::*;
 
     use super::*;
     use crate::geodesy::LatLon;
+    use crate::raster::Synthetic;
 
     // The cells and the padded table over them are both written out, rather than one derived from the
     // other: the code that derives one is 1.3's builder, and a fixture it computed would assert
@@ -278,5 +398,125 @@ mod tests {
                 found: 21
             }
         );
+    }
+
+    /// The registry raster's sentinel, so the sanitising the digest depends on is the sanitising the
+    /// real reader does.
+    const NODATA: f32 = -3.402_823e38;
+
+    fn built(grid: Grid, rows: Vec<Vec<f32>>) -> (Vec<f64>, BuiltTable) {
+        let source = Synthetic::new(grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        let built = build(source, &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        (payload, built)
+    }
+
+    #[test]
+    fn the_digest_is_fnv_1a_over_the_sanitised_cells() {
+        // Computed outside this crate, from the three cells the sanitised row holds: 1.0 is
+        // 0x3f80_0000, the sentinel becomes 0.0 and so contributes 0x0000_0000, and 2.5 is
+        // 0x4020_0000. Folding those three words into the offset basis with the FNV prime gives the
+        // value below. A digest checked against whatever this build produces would pin nothing, which
+        // is the whole reason decision 3 spells the definition out.
+        let grid = Grid::new(
+            3,
+            1,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            120.0,
+            -180.0,
+        )
+        .expect("a 3 x 1 whole-globe grid is valid");
+        let (_, built) = built(grid, vec![vec![1.0, NODATA, 2.5]]);
+
+        assert_eq!(built.digest, 0x3a5d_5e3b_082f_2fb7);
+        assert_eq!(built.total, 3.5);
+        assert_eq!(built.tallies.nodata, 1);
+        assert_eq!(built.tallies.populated, 2);
+    }
+
+    proptest! {
+        /// Exactly, not within a tolerance: the cells are integers below 2^20, so every partial sum of
+        /// them is exact in f64 and any difference here is the traversal — an index, the padding
+        /// offset, or a seam — rather than arithmetic. Decision 2's ulp budget is the other claim and
+        /// is tested at full magnitude, where no direct sum exists to compare against.
+        #[test]
+        fn every_rectangle_matches_a_direct_sum(
+            (width, height, cells) in (1u32..=5, 1u32..=4).prop_flat_map(|(width, height)| {
+                (
+                    Just(width),
+                    Just(height),
+                    prop::collection::vec(
+                        prop::collection::vec(0u32..(1 << 20), width as usize),
+                        height as usize,
+                    ),
+                )
+            })
+        ) {
+            let grid = Grid::new(
+                width,
+                height,
+                LatLon { lat: 90.0, lon: -180.0 },
+                360.0 / f64::from(width),
+                -180.0 / f64::from(height),
+            )
+            .expect("a whole-globe grid of any shape is valid");
+
+            let values: Vec<Vec<f32>> = cells
+                .iter()
+                .map(|row| row.iter().map(|cell| *cell as f32).collect())
+                .collect();
+            let (payload, built) = built(grid, values.clone());
+            let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+            let direct = |rows: &[u32], cols: &[u32]| -> f64 {
+                let mut total = 0.0;
+                for row in rows {
+                    for col in cols {
+                        total += f64::from(values[*row as usize][*col as usize]);
+                    }
+                }
+                total
+            };
+
+            let every_row: Vec<u32> = (0..height).collect();
+            let every_col: Vec<u32> = (0..width).collect();
+            prop_assert_eq!(built.total, direct(&every_row, &every_col));
+
+            for north in 0..height {
+                for south in north..height {
+                    let rows: Vec<u32> = (north..=south).collect();
+                    let band = RowBand::new(grid.row(north).unwrap(), grid.row(south).unwrap());
+                    prop_assert_eq!(
+                        table.population(band, ColSpan::FullTurn),
+                        direct(&rows, &every_col)
+                    );
+
+                    for west in 0..width {
+                        for east in 0..width {
+                            // west > east is the wrapped case, and on a grid one column wide it is
+                            // also the full width: both are ordinary spans here rather than cases a
+                            // caller has to spot.
+                            let cols: Vec<u32> = if west <= east {
+                                (west..=east).collect()
+                            } else {
+                                (west..width).chain(0..=east).collect()
+                            };
+                            let span = ColSpan::Through {
+                                west: grid.col(west).unwrap(),
+                                east: grid.col(east).unwrap(),
+                            };
+                            prop_assert_eq!(table.population(band, span), direct(&rows, &cols));
+                        }
+                    }
+                }
+            }
+        }
     }
 }

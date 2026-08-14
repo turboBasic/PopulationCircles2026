@@ -36,6 +36,7 @@ Quah
 raster
 rasters
 reprojection
+significand
 Sinnott
 tiepoint
 ulps
