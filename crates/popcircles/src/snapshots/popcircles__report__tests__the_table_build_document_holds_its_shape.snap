@@ -1,0 +1,37 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(TableBuildReport::new(&built,\nPath::new(\"out/table.header.json\"), Path::new(\"out/table.payload.bin\"),))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "digest": "0x3a5d5e3b082f2fb7",
+    "decimation": 1,
+    "grid": {
+      "width": 360,
+      "height": 180,
+      "origin": {
+        "lat": 90.0,
+        "lon": -180.0
+      },
+      "lon_step": 1.0,
+      "lat_step": -1.0,
+      "spans_full_turn": true,
+      "middle_row_cell_area_km2": 12363.718145180046
+    },
+    "total_population": 7757982599.32,
+    "cells": {
+      "nodata": 40000,
+      "unexpected_negative": 0,
+      "zero": 8000,
+      "populated": 16800,
+      "total": 64800
+    },
+    "cache": {
+      "header": "out/table.header.json",
+      "payload": "out/table.payload.bin"
+    }
+  }
+}
