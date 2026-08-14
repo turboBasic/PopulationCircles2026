@@ -47,9 +47,10 @@ quiet workaround.
 
 ## Approach
 
-Steps 3 to 5 are targets rather than existing code. Steps 1 and 2 and the ground they stand on are one
+Steps 4 and 5 are targets rather than existing code. Steps 1 to 3 and the ground they stand on are one
 library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping,
-great-circle distance and the angle an arc subtends, `grid` holding the raster's geometry — the checked
+great-circle distance, the angle an arc subtends and the checked radius a circle is asked for,
+`grid` holding the raster's geometry — the checked
 `Grid`, pixel centres and their inverse, a row's own latitude, cell edges, cell area, and a column
 stepped along the seam — `raster` holding the boundary a raster crosses: the
 `RasterSource` trait that hands out one row at a time with nodata already turned into zero, the
@@ -59,10 +60,12 @@ step reports through; `table` holding the summation table — the padded prefix-
 compensated build that streams a raster into it, the rectangle query over a borrowed payload, and the
 factor a coarser table folds at; `kernel` holding the spherical cap — the membership rule a span
 means, the per-row half width as an offset from a centre column, and the placement that turns one into
-the columns a query takes; and `circle` holding the fold between the last two — one rectangle per row a
-placed kernel names, added in the order it yields them. The build is the `RasterSource` trait's first
-caller and the circle is `place`'s.
-circle, geodesy, grid, kernel, progress, `raster` itself and `table` itself are pure computation with no I/O;
+the columns a query takes; `circle` holding the fold between the last two — one rectangle per row a
+placed kernel names, added in the order it yields them; and `search` holding the branch and bound over
+candidate centres — the rectangle of centres a bound speaks for, the two-hop slack that bounds the ground
+distance across one, and the level loop that prunes a rectangle or halves it. The build is the
+`RasterSource` trait's first caller, the circle is `place`'s, and the search is the circle's.
+circle, geodesy, grid, kernel, progress, search, `raster` itself and `table` itself are pure computation with no I/O;
 the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
 the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, and nothing above
 either module names what is inside it.
@@ -76,8 +79,11 @@ either module names what is inside it.
    latitude, so decompose it into per-row rectangles — a kernel — reusable for every longitude at
    that latitude. Building kernels is the only step that computes geodesic distance.
 3. **Most populous circle of a given radius.** Scan the globe at a coarse step, then refine around
-   the best candidates. This is the step that can be wrong on adversarial input; its tolerance is a
-   deliberate, documented choice, not an accident.
+   the best candidates, pruning a rectangle of candidate centres by the population of a circle wide
+   enough to cover every one of them. The answer is the maximum over the grid's cell centres exactly:
+   refinement runs to single cells, the bound is rounded outward and pruning discards no tie, so the
+   reported tolerance is zero and what separates it from the truth is step 1's own 4 ulp per query.
+   Adversarial input costs time here, not accuracy.
 4. **Smallest circle for a given population.** Binary search over integer radius in km, driving
    step 3. Cache every radius tried so a rerun resumes instead of repeating work.
 5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
