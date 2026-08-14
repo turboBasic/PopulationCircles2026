@@ -145,6 +145,79 @@ mod tests {
         }
     }
 
+    /// The fixture's rows with the value at column c moved to `col_along(c, k)` — the same direction and
+    /// the same k a centre column is moved by below, which is the whole content of the claim.
+    fn shifted_cells(k: i64) -> Vec<Vec<f32>> {
+        let grid = grid();
+        (0..HEIGHT)
+            .map(|row| {
+                (0..WIDTH)
+                    .map(|col| {
+                        let source =
+                            grid.col_along(grid.col(col).expect("a column of the fixture"), -k);
+                        cell(row, source.get())
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn shifting_the_raster_and_the_centre_together_leaves_the_population_alone() {
+        // Exactly, and only because of the fixture: cells no larger than 648 make every partial sum in the
+        // table exact in f64, so the shifted table's corners are the unshifted ones rearranged rather than
+        // rounded. At full-resolution magnitudes the same shift moves the answer by up to 2 ulp, about
+        // 1.9e-6 persons, because rotating a row rotates the sequence its prefix accumulates and the
+        // four-corner difference inherits the last bits of that. It is inside ADR 0003's 4 ulp per
+        // rectangle query, and it is the table's arithmetic rather than a fault in the wrapping — not
+        // something to chase by changing how the table is built.
+        let grid = grid();
+        let payload = payload_over(cells());
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        for radius_km in [1500.0, 4000.0] {
+            for centre_row in [0u32, 9] {
+                let row = grid.row(centre_row).expect("a row of the fixture");
+                // One kernel for both tables: a shift in longitude is exactly what it is invariant to.
+                let kernel = Kernel::new(grid, row, radius_km)
+                    .expect("a whole-globe grid and a radius that is a length");
+
+                for k in [1i64, 17, 35] {
+                    let shifted_payload = payload_over(shifted_cells(k));
+                    let shifted = Table::new(grid, &shifted_payload)
+                        .expect("the build emits the padded product");
+
+                    for centre_col in [0u32, 1, 35] {
+                        let centre = grid.col(centre_col).expect("a column of the fixture");
+                        assert_eq!(
+                            population(&shifted, &kernel, grid.col_along(centre, k)),
+                            population(&table, &kernel, centre),
+                            "row {centre_row}, column {centre_col}, radius {radius_km} km, shift {k}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn evaluating_the_same_circle_twice_gives_the_same_bits() {
+        // Compared as bits rather than as values, which is what box 3 asks for: the fold adds one
+        // rectangle per row in the order `place` yields them, and nothing in this crate is parallel, so
+        // there is no thread for a summation order to depend on.
+        let grid = grid();
+        let payload = payload_over(cells());
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let kernel = Kernel::new(grid, grid.middle_row(), 4000.0)
+            .expect("a whole-globe grid and a radius that is a length");
+        let centre = grid.col(7).expect("a column of the fixture");
+
+        assert_eq!(
+            population(&table, &kernel, centre).to_bits(),
+            population(&table, &kernel, centre).to_bits()
+        );
+    }
+
     #[test]
     #[should_panic(expected = "built over a different grid")]
     fn a_kernel_from_another_grid_is_no_circle_here() {
