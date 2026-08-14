@@ -91,9 +91,20 @@ impl Fixture {
         self.directory.path().join(name)
     }
 
-    /// The nine flags every command reading this cache takes, with `digest` so a case can pass one that
+    /// The ten flags every command reading this cache takes, with `digest` so a case can pass one that
     /// names another table.
+    ///
+    /// `--log-level error` because `info` is the default and narrates: it is what keeps the success cases
+    /// silent, and with it `one_document_naming_the_fixture`'s emptiness assertion is strictly stronger
+    /// than dropping the assertion would be. `narration_follows_the_level_and_stdout_does_not` is where
+    /// the narration itself is checked.
     fn flags(&self, digest: &str) -> Vec<String> {
+        self.flags_at(digest, "error")
+    }
+
+    /// The same at a level the caller names. Substituted rather than appended, because a global argument is
+    /// refused a second occurrence and no case wants two.
+    fn flags_at(&self, digest: &str, level: &str) -> Vec<String> {
         [
             "--width",
             "36",
@@ -115,6 +126,8 @@ impl Fixture {
             self.cache_base().to_string_lossy().into_owned(),
             "--digest".to_string(),
             digest.to_string(),
+            "--log-level".to_string(),
+            level.to_string(),
         ])
         .collect()
     }
@@ -126,6 +139,12 @@ impl Fixture {
     /// The command with this fixture's own digest, which is the case every success below is.
     fn run_ok(&self, command: &str, rest: &[&str]) -> Output {
         self.run(command, &hexadecimal(self.digest), rest)
+    }
+
+    /// The command with this fixture's own digest, at a level of the caller's choosing.
+    fn run_at_level(&self, level: &str, command: &str, rest: &[&str]) -> Output {
+        let flags = self.flags_at(&hexadecimal(self.digest), level);
+        run_with(&flags, command, rest)
     }
 }
 
@@ -141,6 +160,9 @@ fn run_with(flags: &[String], command: &str, rest: &[&str]) -> Output {
 /// What every success case asserts, and it is the whole of what running the binary adds over a unit test:
 /// stdout is exactly one JSON document, stderr is empty so stdout stays machine-readable, the exit code is
 /// zero, and `provenance.digest` names the table the fixture built.
+///
+/// The emptiness now holds because [`Fixture::flags`] asks for `error`, where it used to hold because
+/// nothing emitted. What moved is the reason, not the claim.
 fn one_document_naming_the_fixture(fixture: &Fixture, output: &Output) -> serde_json::Value {
     assert!(
         output.stderr.is_empty(),
@@ -238,6 +260,34 @@ fn sweep_answers_every_share_over_one_ledger() {
         .map(|record| record["target"]["share"].as_f64().unwrap())
         .collect();
     assert_eq!(shares, vec![0.1, 0.2, 0.3]);
+}
+
+/// One invocation at two levels, which is what makes the flag rather than the code path the thing being
+/// checked.
+#[test]
+fn narration_follows_the_level_and_stdout_does_not() {
+    let fixture = Fixture::build();
+    let circle = ["--lat", "48", "--lon", "11", "--radius-km", "1200"];
+
+    let narrated = fixture.run_at_level("info", "population-at", &circle);
+    assert_eq!(narrated.status.code(), Some(0), "{narrated:?}");
+    let narration = String::from_utf8_lossy(&narrated.stderr);
+    // Box 6's two ends and nothing between them: the table that answered, then the answer.
+    assert_eq!(narration.lines().count(), 2, "{narration}");
+    assert!(narration.contains("opened from"), "{narration}");
+    assert!(narration.contains("holds 820"), "{narration}");
+
+    let silent = fixture.run_at_level("warn", "population-at", &circle);
+    assert_eq!(silent.status.code(), Some(0), "{silent:?}");
+    assert!(
+        silent.stderr.is_empty(),
+        "stderr: {}",
+        String::from_utf8_lossy(&silent.stderr)
+    );
+
+    // Byte for byte, which is the property box 6 exists to protect: the level governs stderr and reaches
+    // the document not at all.
+    assert_eq!(narrated.stdout, silent.stdout);
 }
 
 #[test]

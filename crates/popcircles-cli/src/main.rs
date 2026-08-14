@@ -551,8 +551,22 @@ impl CachedTable {
         let mapped = cache
             .open(&identity)
             .map_err(|error| Failure::cache(&error))?;
+
+        // Box 6's resolved input, here because this is already the one place a cache is opened. It names
+        // what a reader would otherwise reconstruct from four flags: which table, from where, and at what
+        // shape after the fold.
+        let grid = decimation.grid();
+        log::info!(
+            "table {:#018x} opened from {}: {} x {} cells, decimated by {}",
+            identity.digest,
+            args.table.cache.display(),
+            grid.width(),
+            grid.height(),
+            decimation.factor()
+        );
+
         Ok(Self {
-            grid: *decimation.grid(),
+            grid: *grid,
             identity,
             mapped,
             header: cache.header_path().to_path_buf(),
@@ -609,6 +623,14 @@ fn population_at(
     let (rows, cols) = view.whole();
     let total = view.population(rows, cols);
 
+    let centre = cached.grid.centre_of(cell.0, cell.1);
+    log::info!(
+        "a {} km circle centred (lat {:.4}, lon {:.4}) holds {population} of {total}",
+        radius.km(),
+        centre.lat,
+        centre.lon
+    );
+
     serialised(serde_json::to_string(&Envelope::with_provenance(
         CircleReport::new(requested, cell, &cached.grid, radius, population, total),
         cached.provenance(),
@@ -629,6 +651,15 @@ fn most_populous(
     let found = search::most_populous(&view, radius, search.spacing, &mut progress)
         .map_err(Failure::search)?;
     progress.finish();
+
+    let centre = cached.grid.centre_of(found.centre.row, found.centre.col);
+    log::info!(
+        "the most populous {} km circle is centred (lat {:.4}, lon {:.4}) and holds {} of {total}",
+        radius.km(),
+        centre.lat,
+        centre.lon,
+        found.centre.population
+    );
 
     serialised(serde_json::to_string(&Envelope::with_provenance(
         MostPopulousReport::new(&found, &cached.grid, total),
@@ -694,6 +725,13 @@ fn sweep(
     for share in walk {
         let found = smallest::smallest(&view, share, search.spacing, &mut ledger, &mut progress)
             .map_err(|error| Failure::smallest(&error))?;
+        // One per settled share rather than one at the end: a sweep's answer is the whole sequence, and a
+        // reader watching a long one wants each share as it lands.
+        log::info!(
+            "{:.0}% of the table is reached at {} km",
+            share.get() * 100.0,
+            found.radius_km
+        );
         records.push(SmallestReport::new(&found, &cached.grid));
     }
     progress.finish();
@@ -725,6 +763,12 @@ fn smallest_for_share(
     let found = smallest::smallest(&view, share, search.spacing, &mut ledger, &mut progress)
         .map_err(|error| Failure::smallest(&error))?;
     progress.finish();
+
+    log::info!(
+        "{:.0}% of the table is reached at {} km",
+        share.get() * 100.0,
+        found.radius_km
+    );
 
     serialised(serde_json::to_string(&Envelope::with_provenance(
         SmallestDocument::new(

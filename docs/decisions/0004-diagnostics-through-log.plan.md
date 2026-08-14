@@ -137,7 +137,7 @@ them separately verifiable: after 1.2 the flag exists, is honoured, and has noth
 The call sites. Read the actual output at the end of this phase rather than trusting the tests: what these
 tasks are for is a human watching a terminal, and no assertion checks that a line is worth reading.
 
-- [ ] **2.1 `info` narrates the resolved table and the answer, from the CLI.** Box 6's two ends for the
+- [x] **2.1 `info` narrates the resolved table and the answer, from the CLI.** Box 6's two ends for the
       four search commands, both known at the binary edge and neither of which the library should be asked
       for: one record after the table is resolved naming the cache path, the digest, the decimation and the
       grid's shape, and one at the end naming the answer — the radius for `smallest-for-share`, one record
