@@ -361,6 +361,25 @@ fn widen(span: Option<Ambiguity>, km: u32, margin: f64, slack: f64) -> Option<Am
     })
 }
 
+/// The one record that says an answer is weaker than it looks, emitted where the field is set so the two
+/// cannot disagree.
+///
+/// `warn` rather than `info`: everything else this library reports is what it did, and this is the only
+/// thing it says about what a caller should not conclude. One per answer, so a sweep says it per share.
+///
+/// The slack is rounded to three figures here and exact on the wire, because a person reading a line of
+/// stderr wants the order of magnitude and a program comparing margins wants the field.
+fn warn_unseparated(span: Option<Ambiguity>, answer_km: u32, slack: f64) {
+    if let Some(span) = span {
+        log::warn!(
+            "{answer_km} km is not separated: {} probed radii from {} to {} km hold the target to within {slack:.3e} persons, so it is one of them rather than demonstrably the least",
+            span.radii,
+            span.lowest_km,
+            span.highest_km
+        );
+    }
+}
+
 /// The maximum at `km`, from the ledger when it holds one and from a search when it does not, with the
 /// tally of which it was.
 ///
@@ -487,6 +506,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
             "nothing under the ceiling reaches it: {CEILING_KM} km, {} radii settled",
             stats.radii_settled()
         );
+        warn_unseparated(ambiguity, CEILING_KM, slack);
         return Ok(Smallest {
             radius_km: CEILING_KM,
             radius: ceiling_radius(),
@@ -532,6 +552,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         "reached at {high} km, {} radii settled",
         stats.radii_settled()
     );
+    warn_unseparated(ambiguity, high, slack);
     Ok(Smallest {
         radius_km: high,
         radius: RadiusKm::from(high),

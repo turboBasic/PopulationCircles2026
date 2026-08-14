@@ -58,14 +58,28 @@ impl Fixture {
     }
 
     fn build() -> Self {
+        Self::over(|row, col| (row * WIDTH + col + 1) as f32)
+    }
+
+    /// Everyone in a four-cell patch and the sentinel everywhere else, which is the shape whose answer the
+    /// arithmetic cannot separate: every circle holding the four holds the same 400 people, so every
+    /// reaching probe's margin against a target of everyone is zero.
+    ///
+    /// `NODATA` rather than a plain zero outside the patch, so the fixture reaches the ambiguous case
+    /// through the nodata-to-zero conversion a real raster takes rather than around it. The library's own
+    /// tests build this shape with a helper private to them; this is the same four cells, rebuilt.
+    fn clustered() -> Self {
+        Self::over(|row, col| {
+            let inside = (8..=9).contains(&row) && (15..=16).contains(&col);
+            if inside { 100.0 } else { NODATA }
+        })
+    }
+
+    fn over(cell: impl Fn(u32, u32) -> f32) -> Self {
         let directory = TempDir::new().expect("a temporary directory");
         let grid = Self::grid();
         let rows: Vec<Vec<f32>> = (0..HEIGHT)
-            .map(|row| {
-                (0..WIDTH)
-                    .map(|col| (row * WIDTH + col + 1) as f32)
-                    .collect()
-            })
+            .map(|row| (0..WIDTH).map(|col| cell(row, col)).collect())
             .collect();
         let source = Synthetic::new(grid, NODATA, rows).expect("the rows are the grid's shape");
 
@@ -288,6 +302,54 @@ fn narration_follows_the_level_and_stdout_does_not() {
     // Byte for byte, which is the property box 6 exists to protect: the level governs stderr and reaches
     // the document not at all.
     assert_eq!(narrated.stdout, silent.stdout);
+}
+
+/// The `warn` and its absence, one command at one level over two caches, so what differs is the answer
+/// rather than the flags.
+#[test]
+fn an_unseparated_answer_warns_on_stderr_and_a_separated_one_says_nothing() {
+    let clustered = Fixture::clustered();
+    let ledger = clustered.ledger("clustered-radii.json");
+    let warned = clustered.run_at_level(
+        "warn",
+        "smallest-for-share",
+        &[
+            "--share",
+            "100",
+            "--spacing",
+            "4",
+            "--ledger",
+            &ledger.to_string_lossy(),
+        ],
+    );
+    assert_eq!(warned.status.code(), Some(0), "{warned:?}");
+    let record = String::from_utf8_lossy(&warned.stderr);
+    // One record, not one per probe: the span is a property of the answer.
+    assert_eq!(record.lines().count(), 1, "{record}");
+    assert!(record.contains("1572"), "{record}");
+    assert!(record.contains("2048"), "{record}");
+    // And the document is still exactly one document, which is what keeps the record a second surface
+    // rather than a second answer.
+    let document: serde_json::Value =
+        serde_json::from_slice(&warned.stdout).expect("stdout is one JSON document");
+    assert_eq!(document["result"]["circle"]["radius_km"], 1572);
+
+    // The ordinary answer at the same level over the dense cache: 485 people clear of the target, so there
+    // is nothing to disclose and stderr stays empty.
+    let dense = Fixture::build();
+    let quiet = dense.run_at_level(
+        "warn",
+        "smallest-for-share",
+        &[
+            "--share",
+            "25",
+            "--spacing",
+            "4",
+            "--ledger",
+            &dense.ledger("dense-radii.json").to_string_lossy(),
+        ],
+    );
+    one_document_naming_the_fixture(&dense, &quiet);
 }
 
 #[test]

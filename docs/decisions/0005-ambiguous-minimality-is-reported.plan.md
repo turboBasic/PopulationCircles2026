@@ -171,7 +171,7 @@ fixture can check is a commit whose whole content is the check.
       here — this is the assertion that fails when it does. And a warm ledger and a cold one report the
       **same** `Ambiguity`, which is what decision 2 buys and what reading the ledger would have cost.
 
-- [ ] **1.3 An unseparated answer emits one `warn` naming the span.** ADR 0005 decision 6, in `smallest`
+- [x] **1.3 An unseparated answer emits one `warn` naming the span.** ADR 0005 decision 6, in `smallest`
       where the field is set, so the record and the field cannot disagree. Target is the module path, like
       every other library record. `warn` gets its first call site in the repository — the plan for ADR 0004
       noted it had none — and this is the level for it because it is the only thing this program says that
