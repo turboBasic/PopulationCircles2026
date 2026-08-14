@@ -53,6 +53,27 @@ repos:
           echo "  fix: git lfs track \"*.${f##*.}\" && git add .gitattributes && git add --renormalize \"$f\"";
           rc=1; done; exit $rc' --
 
+      # ADR 0003 decision 5 demoted `unsafe_code` from forbid to deny for one site, and `deny` is
+      # overridable by definition — so this is what replaces the property `forbid` bought. It fails on a
+      # second exception anywhere under crates/, and on the exception moving out of the file that record
+      # reviewed. Zero fails too, and deliberately: an exception disappearing means the mapping went with
+      # it, which is a decision to record rather than a tree to wave through. grep rather than rg
+      # because a CI runner is not promised one.
+      - id: single-unsafe-allow
+        name: "one unsafe exception, where ADR 0003 put it"
+        language: system
+        types: [rust]
+        pass_filenames: false
+        entry: >-
+          bash -c 'site=crates/popcircles/src/table/cache.rs;
+          count=$(grep -ro --include="*.rs" -F "allow(unsafe_code)" crates | wc -l | tr -d " ");
+          where=$(grep -rl --include="*.rs" -F "allow(unsafe_code)" crates | tr "\n" " ");
+          [ "$count" = 1 ] && [ "$where" = "$site " ] && exit 0;
+          echo "ADR 0003 decision 5 allows one #[allow(unsafe_code)], in $site.";
+          echo "  found: $count, in: $where";
+          echo "  fix: keep the exception where it was reviewed, or supersede ADR 0003.";
+          exit 1'
+
       # A file .gitattributes routes to LFS is exempt from the large-file hook, which is
       # right until the filter silently does not run — git lfs never installed, or the
       # extension added after the file was already committed raw. Then full-size bytes land

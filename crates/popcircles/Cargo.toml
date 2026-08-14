@@ -12,13 +12,17 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+bytemuck.workspace = true
+memmap2.workspace = true
 serde.workspace = true
+# A normal dependency from ADR 0003 decision 4 on: the cache header is JSON, so the library writes and
+# reads it rather than only serialising documents a caller prints.
+serde_json.workspace = true
 thiserror.workspace = true
 tiff.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 weezl.workspace = true

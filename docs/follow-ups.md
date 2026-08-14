@@ -130,3 +130,23 @@ Identifiers are flat, sequential and never reused.
   `lint:lfs` gives and is enough to stop the merge. Measured on the tree that added the taplo hook: all
   three come back clean, and `ruff check --show-files` names only `pyproject.toml`, so the Python half
   gates nothing yet but needs none of the deferral `typecheck:python` carries.
+
+### FU-06 - Nothing couples a cache header change to a format version bump
+
+- **Status** — `dormant`.
+- **Condition** — a commit changes the fields of `Header` in `crates/popcircles/src/table/cache.rs`
+  without changing `FORMAT_VERSION` in the same file. The sweep is
+  `git log --format=%H -- crates/popcircles/src/table/cache.rs`, and for each commit it names,
+  `git show <sha> -- crates/popcircles/src/table/cache.rs` carrying an added or removed field line inside
+  the `struct Header` block while no line of that diff names `FORMAT_VERSION`. An **added** field fires it
+  too, which is where this differs from `FU-03`: serde ignores keys it does not know, so a build reading a
+  header from a later one accepts the document and then maps a payload whose layout it has no reason to
+  doubt. The wire format may grow a field additively; a cache header cannot.
+- **Fix** — `FU-03`'s hook with a second pair, so one `repo: local` hook discharges both: a table of
+  trigger and constant — files under `crates/popcircles/src/snapshots/` with `SCHEMA_VERSION`, and the
+  `struct Header` block in `crates/popcircles/src/table/cache.rs` with `FORMAT_VERSION` — failing when
+  `git diff --cached` touches a trigger while carrying no line naming that trigger's constant. Run against
+  this tree on 2026-08-14: two commits touch `table/cache.rs`, the first adding the file with the constant
+  in the same diff and the second touching neither the block nor the constant, so the sweep is clean. Like
+  `FU-03` it cannot judge whether a change was breaking, which makes it a tripwire of the same kind as
+  `geo-data-lfs` rather than a lint of its own.

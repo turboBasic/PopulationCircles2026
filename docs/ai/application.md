@@ -47,15 +47,20 @@ quiet workaround.
 
 ## Approach
 
-Steps 1 to 5 are targets rather than existing code. What exists is the ground they stand on: one
-library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping and
+Steps 2 to 5 are targets rather than existing code. Step 1 and the ground it stands on are one library
+crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping and
 great-circle distance, `grid` holding the raster's geometry — the checked `Grid`, pixel centres and
-their inverse, cell edges, and cell area — and `raster` holding the boundary a raster crosses: the
+their inverse, cell edges, and cell area — `raster` holding the boundary a raster crosses: the
 `RasterSource` trait that hands out one row at a time with nodata already turned into zero, the
 tallies saying where every cell of a drained raster went, and an in-memory `Synthetic` a later step's
-tests can be written against instead of a file. geodesy, grid and `raster` itself are pure computation
-with no I/O; the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`,
-and nothing above it names either. Step 1 is the trait's first caller.
+tests are written against instead of a file; `progress` holding the one-method sink a long-running
+step reports through; and `table` holding the summation table — the padded prefix-sum layout, the
+compensated build that streams a raster into it, the rectangle query over a borrowed payload, and the
+factor a coarser table folds at. The build is the `RasterSource` trait's first caller. geodesy, grid,
+progress, `raster` itself and `table` itself are pure computation with no I/O; the file, the decoder
+and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header, the atomic
+publication and the mapping are `crates/popcircles/src/table/cache.rs`, and nothing above either
+module names what is inside it.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full
