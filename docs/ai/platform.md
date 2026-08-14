@@ -1,7 +1,8 @@
 # Platform
 
 Read this when changing tooling, dependencies, input data, quality gates, git conventions or CI, when
-authoring a record under `docs/decisions/` or its sibling plan, or when the structure tree moves.
+working a GitHub issue, when authoring a record under `docs/decisions/` or its sibling plan, or when
+the structure tree moves.
 
 Committed configuration is authoritative for what it declares — read `mise.toml`, `Cargo.toml`,
 `pyproject.toml`, `.pre-commit-config.yaml` and `.lfsconfig` rather than assuming. Extend those
@@ -145,6 +146,24 @@ moment. The failure to avoid is not a wrong answer but a quiet third convention.
   entries in [`../follow-ups.md`](../follow-ups.md), which owns their format, statuses and the bar
   their conditions must meet. The section here names those identifiers and sends the reader there,
   and is frozen with the rest of the plan once written.
+
+## Issues
+
+An issue is worked from its whole thread, never its body alone. The body is the opening position; the
+comments are where scope was cut, a figure settled or a step reordered, and none of that gets folded
+back up into the body. Read them, and the roadmap issue this one hangs from, before starting — else the
+requirement implemented may be one withdrawn three comments in.
+
+**Proposing a change of scope or requirements is always in bounds** — for the issue in hand and for any
+other open issue a discovery affects. Executing a step is what exposes that a later one is unnecessary,
+misordered or resting on something untrue, and whoever hits that is the only one positioned to say so.
+Raising it needs no permission asked for first and is never overstepping. Sitting on it costs the
+discovery, which is then re-found later without the context that made it visible.
+
+The licence covers the proposal, not the change. It lands as a comment on the issue whose scope would
+move — for a downstream discovery that is that issue, not the one in hand — and the scope moves once the
+proposal is agreed. Quietly building something other than what the issue asks for is the failure this
+permission exists to make unnecessary, not the one it grants.
 
 ## Git
 

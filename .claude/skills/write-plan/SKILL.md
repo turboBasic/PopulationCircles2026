@@ -43,7 +43,8 @@ executor act on this without asking the author what was meant?
    records; the same 1 test runs before and after.
 6. **Phase only where the grouping carries information** — a shared prerequisite, a change of
    subject, a `Model:` the phase expects. Phases exist so a reader can see the shape of the work;
-   numbering that only counts is noise.
+   numbering that only counts is noise. A boundary also costs something now that `run-plan` stops at
+   one: it is where the author hands the plan back for a look, so put it where a look is worth taking.
 7. **Make every Ground rule and every Out of scope entry rule something out.** A ground rule earns
    its place by naming a mistake available in *this* work, not by restating a convention the
    instruction layer already binds. An Out of scope entry carries the reason it lost, so a later
