@@ -57,13 +57,15 @@ tallies saying where every cell of a drained raster went, and an in-memory `Synt
 tests are written against instead of a file; `progress` holding the one-method sink a long-running
 step reports through; `table` holding the summation table — the padded prefix-sum layout, the
 compensated build that streams a raster into it, the rectangle query over a borrowed payload, and the
-factor a coarser table folds at; and `kernel` holding the spherical cap — the membership rule a span
+factor a coarser table folds at; `kernel` holding the spherical cap — the membership rule a span
 means, the per-row half width as an offset from a centre column, and the placement that turns one into
-the columns a query takes. The build is the `RasterSource` trait's first caller. geodesy, grid, kernel,
-progress, `raster` itself and `table` itself are pure computation with no I/O; the file, the decoder
-and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header, the atomic
-publication and the mapping are `crates/popcircles/src/table/cache.rs`, and nothing above either
-module names what is inside it.
+the columns a query takes; and `circle` holding the fold between the last two — one rectangle per row a
+placed kernel names, added in the order it yields them. The build is the `RasterSource` trait's first
+caller and the circle is `place`'s.
+circle, geodesy, grid, kernel, progress, `raster` itself and `table` itself are pure computation with no I/O;
+the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
+the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, and nothing above
+either module names what is inside it.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full

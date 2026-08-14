@@ -7,8 +7,8 @@ Finds the smallest circle on Earth containing a given share of the world's popul
 is what makes the answer differ from the familiar viral versions. Also renders the results as maps.
 
 **Status: early.** Grid geometry, spherical geodesy, raster ingest, the summation table with its
-on-disk cache, and the circular kernels a circle is measured through are implemented and tested; the
-search itself is not.
+on-disk cache, the circular kernels a circle is measured through, and the population inside one such
+circle are implemented and tested; the search over circles is not.
 
 ## Getting started
 
