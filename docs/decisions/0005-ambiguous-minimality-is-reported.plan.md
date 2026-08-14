@@ -5,7 +5,7 @@ created: 2026-08-14
 
 # Implementation plan — ADR 0005, the span an ambiguous comparison cannot separate
 
-**Status: in progress (2026-08-14).** Carries [ADR 0005](0005-ambiguous-minimality-is-reported.md) into the
+**Status: complete (2026-08-14).** Carries [ADR 0005](0005-ambiguous-minimality-is-reported.md) into the
 tree, which discharges [`FU-09`](../follow-ups.md#fu-09---the-predicate-slack-is-reported-and-nothing-acts-on-it).
 The last task closes that entry, and the PR carrying this plan is what lands it. It has an ordering
 constraint the entry itself records: it changes every document publishing `predicate_slack_persons`, so it
@@ -217,7 +217,7 @@ fixture can check is a commit whose whole content is the check.
       `rg -n 'minimality holds for a target further' docs/` returns nothing — the old clause is gone rather
       than sitting beside its replacement.
 
-- [ ] **3.2 `FU-09` is closed, the register says what closed it, and this plan is closed.**
+- [x] **3.2 `FU-09` is closed, the register says what closed it, and this plan is closed.**
       Status to `closed` with the date, naming ADR 0005 as the record and this plan as the implementation,
       and stating the one way what landed departs from the Fix as written: the Fix names `[short, reaching]`
       as the honest bracket, and that pair is 2 km wide where the run measured 1425 km it cannot separate,
@@ -236,5 +236,5 @@ fixture can check is a commit whose whole content is the check.
 
 ## Follow-ups
 
-None yet. The last task replaces this section with the identifiers it produced, or with this sentence if it
-produced none.
+None. This plan closed [`FU-09`](../follow-ups.md#fu-09---the-predicate-slack-is-reported-and-nothing-acts-on-it)
+and produced no new entry.
