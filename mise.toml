@@ -162,6 +162,14 @@ run = "cargo test --release --all-features -- --ignored"
 description = "Check the full-resolution summation table against an exact reference"
 run = "cargo test --release --all-features --test full_resolution_table -- --ignored"
 
+# Not in `test` or `ci` for `test:slow`'s reason and at a smaller scale: 74.7 MB of payload and a search
+# over a whole globe. What it pins that the unit tests cannot is that the bound prunes at a size where
+# pruning is the difference between seconds and hours, which is a claim about the algorithm rather than a
+# wall clock — so it belongs in a task and not in a benchmark.
+[tasks."test:search"]
+description = "Search the decimated grid's shape and check the bound prunes most of the globe"
+run = "cargo test --release --all-features --test decimated_search -- --ignored"
+
 [tasks."test:python"]
 description = "Run the Python test suite"
 run = "uv run pytest"
