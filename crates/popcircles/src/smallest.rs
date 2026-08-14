@@ -452,6 +452,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::convert::Infallible;
 
+    use proptest::prelude::*;
+
     use super::*;
     use crate::circle;
     use crate::geodesy::LatLon;
@@ -1037,5 +1039,83 @@ mod tests {
                 .all(|pair| pair[1] <= pair[0]),
             "the total rose again after the bracket closed: {totals:?}"
         );
+    }
+
+    /// A fixture whose cells are large enough that the partial sums round, which is where monotonicity is
+    /// the arithmetic's rather than the search's. 2^40 is past the point where adding a cell of the same
+    /// size is exact in the running total, so the fold at two nearby radii can invert by ulps — the reason
+    /// the property below is asserted to `predicate_slack_persons` here and exactly on `distinct`.
+    fn scaled(grid: &Grid) -> impl Fn(u32, u32) -> f32 + use<> {
+        let width = grid.width();
+        move |row, col| ((row * width + col + 1) as f32) * 1.1e12
+    }
+
+    // 64 cases rather than the default 256, and the reason is what a case costs here: the second property
+    // runs a whole search over radius, which is two dozen searches over the globe, so the default would put
+    // this module past ten seconds on its own. 64 draws still cover the range densely at this fixture's
+    // scale — the answers for shares between 1% and 100% span some twenty distinct radii.
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        /// The property bisection rests on, over drawn radii rather than chosen ones: widening a circle
+        /// cannot lose people, so the maximum over centres cannot fall as the radius grows.
+        ///
+        /// Two fixtures and two strictnesses, because they are different claims. On `distinct` every
+        /// partial sum is representable, so any inversion at all is a defect and the assertion is exact.
+        /// On `scaled` the sums round, so the honest claim is the derived slack — issue #7's comment is
+        /// right that this can invert and wrong about the magnitude, which is `predicate_slack_persons`.
+        #[test]
+        fn the_maximum_never_falls_as_the_radius_grows(
+            rounding in proptest::bool::ANY,
+            from in 0u32..8000,
+            step in 1u32..4000,
+        ) {
+            let grid = grid();
+            let payload = if rounding {
+                payload_over(&grid, scaled(&grid))
+            } else {
+                payload_over(&grid, distinct(&grid))
+            };
+            let table = Table::new(grid, &payload).expect("the build emits the padded product");
+            let (rows, cols) = table.whole();
+            let slack = if rounding {
+                predicate_slack_persons(&grid, table.population(rows, cols))
+            } else {
+                0.0
+            };
+
+            let near = maximum_at(&table, from, 6).population;
+            let far = maximum_at(&table, from + step, 6).population;
+            prop_assert!(
+                far >= near - slack,
+                "{} km holds {near} and {} km holds {far}, a fall of {} past a slack of {slack}",
+                from,
+                from + step,
+                near - far
+            );
+        }
+
+        /// The bracket, over drawn shares: the answer reaches the target and the kilometre below it does
+        /// not. This is the claim the result publishes — minimality itself rests on the property above,
+        /// which is why the two are tested together and stated apart.
+        #[test]
+        fn the_answer_reaches_and_the_radius_below_it_falls_short(share_of in 0.01f64..1.0) {
+            let grid = grid();
+            let payload = payload_over(&grid, distinct(&grid));
+            let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+            let answer = found(&table, share_of, 6);
+            prop_assert!(answer.centre.population >= answer.target.persons);
+
+            if let Some((km, population)) = answer.short_below {
+                prop_assert_eq!(km, answer.radius_km - 1);
+                prop_assert!(population < answer.target.persons);
+                // The witness is a probe, not a claim: the same radius searched again is short too.
+                prop_assert!(maximum_at(&table, km, 6).population < answer.target.persons);
+            } else {
+                // Nothing below zero to have proved short, which is the only way the witness is absent.
+                prop_assert_eq!(answer.radius_km, 0);
+            }
+        }
     }
 }
