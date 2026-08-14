@@ -8,8 +8,18 @@
 
 use std::num::NonZeroU32;
 
+use crate::geodesy::arc_km;
 use crate::grid::{Col, Grid, Row};
 use crate::table::RowBand;
+
+/// The relative amount [`slack_km`] inflates its answer by, so that the figure it returns dominates the
+/// mathematical bound rather than approximating it.
+///
+/// 32 ε is 7.1e-15, which at a 20 000 km bound is 0.14 µm of ground. That is enormous next to the handful
+/// of rounding steps in the expression it corrects — two `to_radians`, a `cos`, a multiply and an add — and
+/// negligible next to a 30 arc-second cell's ~900 m, so the only cell the inflation can newly admit is one
+/// whose distance sits within 0.14 µm of the boundary. Which is the cell it exists to admit.
+const SLACK_MARGIN: f64 = 32.0 * f64::EPSILON;
 
 /// The row `index` names.
 ///
@@ -166,15 +176,65 @@ impl Block {
     }
 }
 
+/// An upper bound on the ground distance from `block`'s probe to any cell centre in it.
+///
+/// Two hops and the triangle inequality on the sphere. Take the probe at `(φ₀, λ₀)` and a target cell
+/// centre at `(φ, λ)`: go along the probe's own parallel to `(φ₀, λ)`, then along that meridian to
+/// `(φ, λ)`. The first leg is a path of length `R · Δλ · cos φ₀` — the parallel is not a great circle away
+/// from the equator, so the geodesic between its ends is no longer than the arc along it — and the second
+/// leg is exactly `R · Δφ`. A geodesic between the ends is no longer than any path joining them, so the
+/// sum bounds it.
+///
+/// The cosine is the **probe's** because the longitude leg stays at the probe's latitude. That is what
+/// makes the bound tighten toward the poles rather than needing the block's worst latitude, and it is why
+/// a block of the same index extent bounds a much shorter distance at 80° than at the equator.
+///
+/// Offsets are between **cell centres**, not out to the block's outer boundary: the candidates a bound
+/// speaks for are cell centres, so measuring to a cell edge would loosen it for nothing.
+///
+/// The answer is inflated by [`SLACK_MARGIN`], and the reason is that the inequality above is not strict
+/// in two configurations. A block one column wide has `Δλ = 0`, so the two-hop path *is* the meridian
+/// geodesic; a block one row tall on the equator has `Δφ = 0` and the parallel *is* a great circle. In
+/// both the mathematical margin is zero, so a figure computed one ulp light would exclude a cell that is
+/// genuinely within reach — and a block holding the maximum would be pruned.
+///
+/// Where the bound stops discriminating: once `radius + slack` reaches half the circumference the widened
+/// circle is the whole sphere, every bound equals the raster's total and no block is ever pruned. That is
+/// the ceiling on a useful initial spacing rather than a correctness limit.
+///
+/// # Panics
+/// If `grid` is not the grid `block`'s indices were minted by; [`row_of`] says why that is a stop.
+#[must_use]
+pub fn slack_km(grid: &Grid, block: Block) -> f64 {
+    let (probe_row, probe_col) = block.probe(grid);
+    let probe_lat = grid.centre_lat(probe_row);
+
+    let north = grid.centre_lat(block.rows().north());
+    let south = grid.centre_lat(block.rows().south());
+    let delta_lat_deg = (north - probe_lat).abs().max((south - probe_lat).abs());
+
+    // The probe is a cell of its own block, so neither difference underflows.
+    let west = probe_col.get() - block.first().get();
+    let east = block.last().get() - probe_col.get();
+    let delta_lon_deg = f64::from(west.max(east)) * grid.lon_step().abs();
+
+    let two_hop_rad =
+        delta_lat_deg.to_radians() + delta_lon_deg.to_radians() * probe_lat.to_radians().cos();
+    arc_km(two_hop_rad) * (1.0 + SLACK_MARGIN)
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
-// exemption; docs/ai/code.md allows both in tests.
+// exemption; docs/ai/code.md allows both in tests. float_cmp is for the exactly-zero and tightness
+// assertions, where the value being exactly what it is is the property.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
     use std::collections::BTreeSet;
 
+    use proptest::prelude::*;
+
     use super::*;
-    use crate::geodesy::LatLon;
+    use crate::geodesy::{LatLon, great_circle_km};
 
     const WIDTH: u32 = 36;
     const HEIGHT: u32 = 18;
@@ -327,6 +387,162 @@ mod tests {
                     (row.get(), col.get())
                 );
             }
+        }
+    }
+
+    /// A whole globe with a row centred on the equator, which needs an odd row count: centres sit at
+    /// `90 − (r + 0.5)·20`, so row 4 is at 0.0 exactly. That row is one of the two configurations where
+    /// the two-hop bound is not strict.
+    fn equatorial_grid() -> Grid {
+        Grid::new(
+            WIDTH,
+            9,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            10.0,
+            -20.0,
+        )
+        .expect("a 36 x 9 whole-globe grid is valid")
+    }
+
+    fn block_of(grid: &Grid, north: u32, south: u32, first: u32, last: u32) -> Block {
+        Block::new(
+            RowBand::new(row_of(grid, north), row_of(grid, south)),
+            col_of(grid, first),
+            col_of(grid, last),
+        )
+    }
+
+    /// The furthest cell of a block from its probe, by the distance test and nothing else.
+    fn furthest_km(grid: &Grid, block: Block) -> f64 {
+        let (probe_row, probe_col) = block.probe(grid);
+        let from = grid.centre_of(probe_row, probe_col);
+        cells_of(block)
+            .into_iter()
+            .map(|(row, col)| {
+                great_circle_km(from, grid.centre_of(row_of(grid, row), col_of(grid, col)))
+            })
+            .fold(0.0f64, f64::max)
+    }
+
+    #[test]
+    fn the_slack_dominates_every_cell_of_every_block() {
+        // Exhaustive over cells, which is the only form of this claim worth having: a bound checked at a
+        // corner is a bound checked where the author expected the maximum to be.
+        for grid in [grid(), equatorial_grid()] {
+            for cells in [4u32, 5, 18] {
+                for block in Block::tile(&grid, spacing(cells)) {
+                    let slack = slack_km(&grid, block);
+                    let (probe_row, probe_col) = block.probe(&grid);
+                    let from = grid.centre_of(probe_row, probe_col);
+
+                    for (row, col) in cells_of(block) {
+                        let to = grid.centre_of(row_of(&grid, row), col_of(&grid, col));
+                        let actual = great_circle_km(from, to);
+                        assert!(
+                            slack >= actual,
+                            "spacing {cells}, block {block:?}, cell {:?}: slack {slack} is under \
+                             {actual}",
+                            (row, col)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_single_cell_block_has_no_slack() {
+        // Exactly zero rather than nearly: both offsets are zero, so the margin has nothing to inflate
+        // and the widened radius a search builds from it is the radius itself.
+        let grid = grid();
+        for block in Block::tile(&grid, spacing(1)) {
+            assert_eq!(slack_km(&grid, block), 0.0);
+        }
+    }
+
+    #[test]
+    fn a_one_column_block_is_the_meridian_arc_and_holds_only_by_the_margin() {
+        // The first zero-margin configuration: with no longitude offset the two-hop path *is* the
+        // meridian geodesic, so the bound is tight and the inequality survives on the inflation alone.
+        // Tightness is asserted as well as the inequality — that is what says this case still exercises
+        // the margin, rather than having drifted into a regime where slack to spare carries it.
+        let grid = grid();
+        for column in [0u32, 17, 35] {
+            for (north, south) in [(0u32, 5u32), (6, 11), (12, 17), (0, 17)] {
+                let block = block_of(&grid, north, south, column, column);
+                let slack = slack_km(&grid, block);
+                let furthest = furthest_km(&grid, block);
+
+                assert!(slack >= furthest, "{block:?}: {slack} under {furthest}");
+                assert!(
+                    (slack - furthest) / furthest < 1e-12,
+                    "{block:?}: the bound is no longer tight here, {slack} against {furthest}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_one_row_block_on_the_equator_is_the_parallel_and_holds_only_by_the_margin() {
+        // The second: on the equator the parallel is a great circle, so a longitude-only offset is again
+        // exactly the geodesic. Row 4 of the equatorial fixture is latitude 0.
+        let grid = equatorial_grid();
+        assert_eq!(grid.centre_lat(row_of(&grid, 4)), 0.0);
+
+        for (first, last) in [(0u32, 3u32), (10, 17), (0, 17)] {
+            let block = block_of(&grid, 4, 4, first, last);
+            let slack = slack_km(&grid, block);
+            let furthest = furthest_km(&grid, block);
+
+            assert!(slack >= furthest, "{block:?}: {slack} under {furthest}");
+            assert!(
+                (slack - furthest) / furthest < 1e-12,
+                "{block:?}: the bound is no longer tight here, {slack} against {furthest}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_slack_shrinks_toward_the_pole_for_the_same_index_extent() {
+        // What the probe's own cosine buys, and the reason the factor is not the block's worst latitude:
+        // the same rectangle of indices bounds a far shorter distance beside the pole than at the
+        // equator. Asserted as an ordering rather than a figure.
+        let grid = equatorial_grid();
+        let equator = slack_km(&grid, block_of(&grid, 4, 4, 0, 8));
+        let polar = slack_km(&grid, block_of(&grid, 0, 0, 0, 8));
+        assert!(polar < equator, "{polar} is not under {equator}");
+    }
+
+    proptest! {
+        /// The same claim as the exhaustive test over a domain nobody chose: any rectangle of either
+        /// fixture. Single-column and single-row blocks are inside it, so are blocks wider than half the
+        /// grid, and so are row 0 and the row beside the southern edge — the configurations where the
+        /// bound is tight or the geometry is worst are drawn rather than listed.
+        #[test]
+        fn the_slack_dominates_over_any_rectangle(
+            equatorial in proptest::bool::ANY,
+            north in 0u32..18,
+            height in 1u32..18,
+            first in 0u32..WIDTH,
+            width in 1u32..WIDTH,
+        ) {
+            let grid = if equatorial { equatorial_grid() } else { grid() };
+            let north = north.min(grid.height() - 1);
+            let south = (north + height - 1).min(grid.height() - 1);
+            let last = (first + width - 1).min(WIDTH - 1);
+
+            let block = block_of(&grid, north, south, first, last);
+            let slack = slack_km(&grid, block);
+            prop_assert!(
+                slack >= furthest_km(&grid, block),
+                "{:?}: slack {} under {}",
+                block,
+                slack,
+                furthest_km(&grid, block)
+            );
         }
     }
 
