@@ -174,3 +174,24 @@ Identifiers are flat, sequential and never reused.
   one trades one inconsistency for another — no scalar in this crate is wrapped, and `great_circle_km`,
   `cell_area_km2` and the CLI's `distance` all pass kilometres as `f64` — and with two callers the
   newtype is the cheaper side of that trade rather than merely the more principled one.
+
+### FU-08 - Nothing couples the search's initial spacing to a measured figure
+
+- **Status** — `dormant`.
+- **Condition** — a caller outside `search.rs` itself chooses the search's initial spacing. Two sweeps, both
+  empty on 2026-08-14: `rg -n 'most_populous\(' crates/popcircles-cli/src`, which fires when #8 wires a
+  search command, and `rg -n 'most_populous\(' crates/popcircles/src --glob '!search.rs'`, which fires when
+  #7 drives the search from a module of its own. Whichever lands first, that caller's literal becomes the
+  number every later one inherits without knowing it was a guess.
+
+  `crates/popcircles/tests/decimated_search.rs` is deliberately outside both sweeps. It picks 32, but a
+  deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
+  sweep to catch it would leave this entry permanently `due` with nothing to do about it.
+- **Fix** — a derivation of the initial spacing from the radius and the grid, in `search` beside the loop
+  that consumes it, bounded above by the ceiling `slack_km` already documents: once `radius + slack` reaches
+  half the circumference the widened circle is the whole sphere, every bound equals the raster's total and
+  the level prunes nothing, so a spacing past that point is strictly wasted work. The figure inside that
+  ceiling is #10's to measure — 32 on the k=10 shape prunes 86.9% of blocks at a 200 km radius, which is one
+  point and not a curve. The entry exists so the first caller does not silently become the default, and it
+  cannot be discharged by a benchmark alone: what it wants is a function of the two inputs, not a constant
+  that happened to measure well once.
