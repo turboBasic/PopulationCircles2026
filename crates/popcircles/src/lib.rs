@@ -6,4 +6,5 @@ pub mod progress;
 pub mod raster;
 pub mod report;
 pub mod search;
+pub mod smallest;
 pub mod table;

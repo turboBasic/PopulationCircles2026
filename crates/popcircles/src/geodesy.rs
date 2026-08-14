@@ -128,6 +128,16 @@ impl RadiusKm {
     }
 }
 
+/// An integer number of kilometres, which is always a length.
+///
+/// Total where [`RadiusKm::new`] is fallible, and that is what it is for: the search over radius steps in
+/// whole kilometres, so a fallible conversion there would hand every step an error arm no `u32` can reach.
+impl From<u32> for RadiusKm {
+    fn from(km: u32) -> Self {
+        Self(f64::from(km))
+    }
+}
+
 /// The band of latitude between two parallels: what a spherical zone stands on, and what a grid row
 /// occupies.
 ///
@@ -445,6 +455,18 @@ mod tests {
         // Half the circumference is 20 015.09 km, so this names the whole sphere. Admitting it is what
         // lets a caller ask for the world without a special case.
         assert_eq!(RadiusKm::new(20_016.0).unwrap().km(), 20_016.0);
+    }
+
+    #[test]
+    fn every_integer_kilometre_is_a_radius() {
+        // The conversion the search over radius steps through, at both ends of the type and at the
+        // ceiling in between: total, so no step of that loop carries an error arm.
+        for km in [0u32, 1, 20_016, u32::MAX] {
+            assert_eq!(
+                RadiusKm::from(km).km(),
+                RadiusKm::new(f64::from(km)).unwrap().km()
+            );
+        }
     }
 
     #[test]
