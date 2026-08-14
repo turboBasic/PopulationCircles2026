@@ -197,6 +197,14 @@ Identifiers are flat, sequential and never reused.
   went without firing this. #8 is where it fires, when a command surface has to put a number in a flag's
   default or in a help string.
 
+  **#8 came and went without firing it either** (2026-08-14). The three commands that drive a search take
+  `--spacing` as a **required** flag with no default, and its help string names no figure — checkable as
+  `cargo run -p popcircles-cli -- most-populous --help` carrying no digit on the `--spacing` line. A command
+  that takes a spacing and forwards it has made no choice, which is the distinction this Condition draws, so
+  the entry is recorded as still dormant rather than left to read as an oversight. The note is here for the
+  reason the #7 one is: silence in a register is ambiguous, and a later reader should be able to tell "the
+  surface arrived and did not choose" from "nobody looked".
+
   `crates/popcircles/tests/decimated_search.rs` is deliberately outside the sweep. It picks 32, but a
   deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
   sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
@@ -212,13 +220,16 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-09 - The predicate slack is reported and nothing acts on it
 
-- **Status** — `dormant`.
+- **Status** — `due` (2026-08-14): #8's `SmallestDocument` and `SweepDocument` both publish
+  `predicate_slack_persons`, so the condition is met by every smallest-circle document the CLI writes.
 - **Condition** — a surface publishes `predicate_slack_persons` while the search still answers an ambiguous
-  comparison with a single radius. The sweep is `rg -n 'predicate_slack_persons' crates/popcircles-cli/src
-  scripts`, empty on 2026-08-14 and firing when #8 puts the figure in a document or #9 puts it on a map. What
-  makes it a real obligation rather than a tidy-up is the two pieces of work that can land on a target inside
-  it: #10 validates against the published 3300 km result, where the interesting shares sit on a plateau of
-  ocean, and #18 sweeps every country, where a small country's own total is close to one.
+  comparison with a single radius. The sweep is `rg -n 'predicate_slack_persons'
+  crates/popcircles/src/report.rs crates/popcircles-cli/src scripts` — widened to `report.rs` because that
+  is where the field is published from, the CLI reaching it through `SmallestReport::new` rather than by
+  naming it. Empty on 2026-08-14 before #8 and matching after it. What makes it a real obligation rather
+  than a tidy-up is the two pieces of work that can land on a target inside it: #10 validates against the
+  published 3300 km result, where the interesting shares sit on a plateau of ocean, and #18 sweeps every
+  country, where a small country's own total is close to one.
 - **Fix** — report the two radii around an ambiguous comparison rather than one: where a probe's population is
   within the slack of the target, the honest answer is the bracket `[short, reaching]` and a statement that
   the arithmetic cannot separate them, which is a wider bracket and not a tolerance. `smallest` already
@@ -228,3 +239,47 @@ Identifiers are flat, sequential and never reused.
   on 2026-08-14, so the bound is conservative by orders of magnitude and tightening it would be a claim about
   cancellation rather than about the arithmetic. Nor by a compensated fold in `circle::population`: that
   changes the answer's bits, which `search`'s determinism tests pin, and is a record's call.
+
+  The two surfaces are the ones #8 added, and the figure has to be on them: #9 puts it on a map and #10
+  validates against a share sitting on an ocean plateau. So publishing it was right and the bracket is what
+  is owed — its own PR, because it changes `smallest`'s result shape and every document carrying it.
+
+### FU-10 - Nothing checks rustdoc
+
+- **Status** — `due` (2026-08-14): no task or job runs rustdoc, and #8 found a `///` line promising a variant
+  the enum no longer has, which every gate had passed over.
+- **Condition** — no quality gate runs rustdoc, so a doc comment naming an item that has gone survives the
+  whole of `mise run ci`. The sweep is `rg -n 'cargo doc' mise.toml .github/workflows/` coming back empty,
+  which is what makes this `due` the day it is written. The evidence that it bites rather than merely could:
+  on the tree before #8, `cargo doc -p popcircles --no-deps` emitted seven warnings while `mise run ci` was
+  green, and one of them was `search.rs`'s `# Errors` line promising a `SearchError::Radius` that went away
+  when `RadiusKm::widened_by` became total under `FU-07`. It was found by a human reading the classifier
+  beside it, not by a check. The other six were public docs linking to private items, and one redundant
+  explicit link target. #8 cleared all seven, so the sweep above is the condition rather than a warning
+  count — a clean tree with no gate is exactly the state that lets the next one through.
+- **Fix** — `cargo doc -p popcircles --no-deps` as a `lint:rustdoc` task with `lint` depending on it, the
+  shape `lint:rust` already uses. It needs `RUSTDOCFLAGS="-D warnings"` or an equivalent, because rustdoc
+  warns and exits 0: measured on the tree before #8, the command exited 0 with seven warnings, so a task
+  reading only the exit status would gate nothing. Measured again after #8: zero warnings, so the task comes
+  back clean the day it is added and gates from then on.
+
+### FU-11 - The cache binds no grid geometry
+
+- **Status** — `due` (2026-08-14): met by this tree, and met by `table query` before #8 touched anything.
+- **Condition** — `struct Header` in `crates/popcircles/src/table/cache.rs` carries no origin and no step
+  field while a command resolves a coordinate against a grid taken from flags. Two greps: `rg -n 'origin|step'
+  crates/popcircles/src/table/cache.rs` naming nothing inside the `struct Header` block, and
+  `rg -n 'origin_lat' crates/popcircles-cli/src/main.rs` matching. The header binds `format_version`,
+  `digest`, `width`, `height`, `decimation` and `byte_order`, and `Identity` is the digest and the
+  decimation — so the origin and the two steps are six numbers nothing checks against the table. Build over
+  the registry raster's grid, query the same digest with `--origin-lat 0`, and the cache opens cleanly while
+  every coordinate resolves to the wrong cell. The digest cannot catch it: it is over cells, and it is itself
+  a flag the caller copies across. #8's documents publish the **declared** grid beside the **attested**
+  digest and say which is which, which makes the gap visible rather than closed.
+- **Fix** — grid geometry in the header and in `Identity`, so opening a cache compares the whole geometry
+  rather than three of its numbers. It **takes a record**: ADR 0003 decision 3 ruled what sits in the header
+  as against inside the digest, and this reopens that ruling. It also bumps `FORMAT_VERSION` and invalidates
+  every existing cache, which is a cost the record has to weigh rather than something a fix decides in
+  passing — at full resolution a rebuild is the raster read again. The entry names the record it needs and
+  stops there deliberately: prescribing the change here would settle in a register what `docs/decisions/`
+  owns.

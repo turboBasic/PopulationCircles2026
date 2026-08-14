@@ -111,6 +111,7 @@ codegen
 fetchexclude
 lfsconfig
 nextest
+RUSTDOCFLAGS
 smudge
 testpaths
 typecheck
