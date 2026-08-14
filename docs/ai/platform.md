@@ -176,6 +176,19 @@ permission exists to make unnecessary, not the one it grants.
   refuse the accidental case, but `git merge --no-ff` overrides it — it is a guardrail, not a second
   gate, and describing it as one would promise something nobody is holding. Never resolve a divergence
   by merging `main` in.
+- **A red check blocks the merge, and there is no bypass.** The same ruleset requires three checks to
+  pass — `CI`, `commits / PR title` and `commits / Commit messages` — with no bypass actors, so a
+  failing gate cannot be merged past by anyone including the repository owner. Two consequences worth
+  stating because neither is visible from a green PR:
+  - **`main` takes no direct push.** Two of the three checks run on `pull_request` only, so on a commit
+    pushed straight to `main` they never report and the push is refused. That makes "branch first if on
+    the default branch" a gate rather than a convention, and it is the reason the list is those three
+    rather than `CI` alone.
+  - **A renamed job locks the branch.** A required check is matched by name, so if the shared
+    `turboBasic/github-actions` workflow renames a job, the old context never reports and every PR
+    blocks until the ruleset is updated. Bumping that dependency means checking the job names with it.
+    The branch is not up-to-date-enforced, deliberately: that would force a rebase every time `main`
+    moved under an open PR, for a staleness CI on the merge result already catches.
 - Never commit a secret, a generated artefact, or a raster.
 - An issue this work closes is closed by the PR that carries it — a `Closes #N` (or `Fixes`/
   `Resolves`) line in the PR body, merged into the default branch — not by a direct close run before
