@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
 use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
+use crate::search::{MostPopulous, SearchStats};
 use crate::smallest::share_of;
 use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
@@ -339,6 +340,66 @@ impl CircleReport {
     }
 }
 
+/// What a fixed-radius search did beside answering, as published.
+///
+/// All five counters, because the pair that matters is a ratio: `blocks_pruned` against
+/// `blocks_examined` is whether the bound bit at all, and a document carrying only the answer cannot say
+/// whether it came from a branch and bound or from a scan wearing its name.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SearchStatsReport {
+    levels: u32,
+    blocks_examined: u64,
+    blocks_pruned: u64,
+    circles_evaluated: u64,
+    kernels_built: u64,
+}
+
+impl From<SearchStats> for SearchStatsReport {
+    fn from(stats: SearchStats) -> Self {
+        Self {
+            levels: stats.levels,
+            blocks_examined: stats.blocks_examined,
+            blocks_pruned: stats.blocks_pruned,
+            circles_evaluated: stats.circles_evaluated,
+            kernels_built: stats.kernels_built,
+        }
+    }
+}
+
+/// The most populous circle of a fixed radius, as published.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MostPopulousReport {
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    radius_km: f64,
+    population: f64,
+    total_population: f64,
+    share_of_total: f64,
+    tolerance_persons: f64,
+    stats: SearchStatsReport,
+}
+
+impl MostPopulousReport {
+    /// `total` is the table's own whole extent, which is what makes `share_of_total` this table's answer
+    /// rather than a figure from somewhere else.
+    #[must_use]
+    pub fn new(found: &MostPopulous, grid: &Grid, total: f64) -> Self {
+        let centre = found.centre;
+        Self {
+            centre: grid.centre_of(centre.row, centre.col).into(),
+            row: centre.row.get(),
+            col: centre.col.get(),
+            radius_km: found.radius.km(),
+            population: centre.population,
+            total_population: total,
+            share_of_total: share_of(centre.population, total),
+            tolerance_persons: found.tolerance_persons,
+            stats: found.stats.into(),
+        }
+    }
+}
+
 /// The one spelling of a digest, so the string a build publishes is the string a query accepts.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
@@ -358,12 +419,14 @@ fn hexadecimal(digest: u64) -> String {
 )]
 mod tests {
     use std::convert::Infallible;
+    use std::num::NonZeroU32;
 
     use super::*;
     use crate::circle;
     use crate::geodesy::great_circle_km;
     use crate::kernel::Kernel;
     use crate::raster::Synthetic;
+    use crate::search;
     use crate::table::{Decimation, Table, build};
 
     #[test]
@@ -599,6 +662,33 @@ mod tests {
         insta::assert_json_snapshot!(Envelope::new(CircleReport::new(
             requested, cell, &grid, radius, population, total,
         )));
+    }
+
+    fn spacing(cells: u32) -> NonZeroU32 {
+        NonZeroU32::new(cells).expect("a fixture spacing is not zero")
+    }
+
+    #[test]
+    fn the_most_populous_document_holds_its_shape() {
+        // Over a search rather than an assembled result, so the document is the shape one really takes —
+        // and over a search whose bound bit, which `blocks_pruned` is the witness to: a scan wearing the
+        // name would publish zero there and pass a snapshot taken of it.
+        //
+        // The centre is in the south-east, because the fixture's cells grow with row and column. That it
+        // is not (0, 0) is the assertion that matters: a fixture whose maximum sat on the north-west cell
+        // would pass with `Candidate::better`'s tie-break wired backwards.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let (rows, cols) = table.whole();
+        let total = table.population(rows, cols);
+
+        let found = search::most_populous(&table, RadiusKm::from(3000u32), spacing(4), &mut ())
+            .expect("a whole-globe fixture has kernels");
+        assert!(found.stats.blocks_pruned > 0, "{:?}", found.stats);
+        assert_ne!((found.centre.row.get(), found.centre.col.get()), (0, 0));
+
+        insta::assert_json_snapshot!(Envelope::new(MostPopulousReport::new(&found, &grid, total)));
     }
 
     #[test]
