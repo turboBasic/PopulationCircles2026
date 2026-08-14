@@ -57,6 +57,7 @@ colortype
 flate
 indicatif
 insta
+keepends
 mangen
 miniz
 ndarray

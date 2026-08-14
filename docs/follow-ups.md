@@ -36,7 +36,8 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-02 - Nothing checks that a pointer resolves
 
-- **Status** — `due`.
+- **Status** — `closed` (2026-08-14): `scripts/lint_docs.py` implements the fix below, wired into
+  `mise run lint:docs` (in `lint`) and the `doc-pointers` prek hook.
 - **Condition** — any pointer in a live Markdown document fails to resolve, in any of its four forms:
   a relative Markdown link, a **backticked repository-relative path**, an `ADR NNNN` reference, or an
   `@` import line in `CLAUDE.md`; and for a pointer naming a section, the quoted heading does not

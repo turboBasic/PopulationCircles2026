@@ -201,4 +201,6 @@ docs/follow-ups.md               the register of pending obligations
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search
 data/                            input datasets in Git LFS; registry in data/README.md
+scripts/                         standalone Python tooling, run via `uv run python`
+tests/                           pytest suite for scripts/
 ```

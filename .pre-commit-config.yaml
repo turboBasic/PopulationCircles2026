@@ -120,3 +120,13 @@ repos:
         entry: markdownlint-cli2
         language: system
         types: [markdown]
+
+      # FU-02 (docs/follow-ups.md). always_run because the Structure-tree half of the check
+      # depends on the whole tree, not just Markdown — a new top-level file with no doc change
+      # is exactly the case it exists to catch.
+      - id: doc-pointers
+        name: doc pointers and Structure tree resolve
+        entry: uv run python scripts/lint_docs.py
+        language: system
+        always_run: true
+        pass_filenames: false

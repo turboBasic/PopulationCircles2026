@@ -54,8 +54,8 @@ their inverse, cell edges, and cell area — and `raster` holding the boundary a
 `RasterSource` trait that hands out one row at a time with nodata already turned into zero, the
 tallies saying where every cell of a drained raster went, and an in-memory `Synthetic` a later step's
 tests can be written against instead of a file. geodesy, grid and `raster` itself are pure computation
-with no I/O; the file, the decoder and the tag validation are `raster/geotiff.rs`, and nothing above it
-names either. Step 1 is the trait's first caller.
+with no I/O; the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`,
+and nothing above it names either. Step 1 is the trait's first caller.
 
 1. **Summation table.** Convert the raster into a 2D prefix-sum table so the population of any
    axis-aligned pixel rectangle is four lookups. Built once, cached to disk, never committed. At full
