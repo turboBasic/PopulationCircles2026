@@ -398,7 +398,10 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     // reaches, so the invariant holds at entry and the loop keeps it.
     while low < high {
         let settled = stats.radii_settled();
-        progress.advance(settled, settled + u64::from(halvings(high - low)));
+        // The candidates left are `high - low + 1`, not the difference: a bracket holding two radii still
+        // needs a probe to say which, and a bound that read zero there would let the meter reach its total
+        // and then pass it.
+        progress.advance(settled, settled + u64::from(halvings(high - low + 1)));
         let mid = low + (high - low) / 2;
         let found = probe(table, mid, spacing, ledger, &mut stats)?;
 
@@ -979,5 +982,60 @@ mod tests {
         assert_eq!(first.centre.row, second.centre.row);
         assert_eq!(first.centre.col, second.centre.col);
         assert_eq!(first.short_below, second.short_below);
+    }
+
+    #[derive(Debug, Default)]
+    struct Reported {
+        calls: Vec<(u64, u64)>,
+    }
+
+    impl Progress for Reported {
+        fn advance(&mut self, done: u64, total: u64) {
+            self.calls.push((done, total));
+        }
+    }
+
+    #[test]
+    fn the_sink_hears_one_call_per_settled_radius_and_a_total_that_lands_on_it() {
+        // The meter's contract, and the honest shape of a doubling search is inside it: the total *rises*
+        // while the climb is still discovering how far it has to go, because each doubling widens the
+        // bracket the bisection will have to halve. What may not happen is a total that rises once the
+        // bracket is closed, or one the done count passes.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut sink = Reported::default();
+        let answer = smallest(&table, share(0.25), spacing(4), &mut (), &mut sink)
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+
+        let settled = answer.stats.radii_settled();
+        // One call before each probe, and one at the end saying the work is done.
+        assert_eq!(sink.calls.len() as u64, settled + 1);
+        for (index, (done, total)) in sink.calls.iter().enumerate() {
+            assert_eq!(*done, index as u64, "the done count skipped a radius");
+            assert!(
+                total >= done,
+                "the meter passed its own total: {done} of {total}"
+            );
+        }
+        assert_eq!(
+            *sink.calls.last().expect("a call was made"),
+            (settled, settled)
+        );
+
+        // The climb hands over to the bisection, and that is where the bound collapses: without it the
+        // total would be a constant ceiling and this assertion is what fails if someone makes it one.
+        let totals: Vec<u64> = sink.calls.iter().map(|(_, total)| *total).collect();
+        let first_fall = totals
+            .windows(2)
+            .position(|pair| pair[1] < pair[0])
+            .expect("the bound has to collapse when the bracket closes");
+        assert!(
+            totals[first_fall + 1..]
+                .windows(2)
+                .all(|pair| pair[1] <= pair[0]),
+            "the total rose again after the bracket closed: {totals:?}"
+        );
     }
 }
