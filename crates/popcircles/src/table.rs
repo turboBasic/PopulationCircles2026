@@ -4,6 +4,7 @@
 
 pub mod cache;
 
+use crate::bracket::Bracket;
 use crate::geodesy::LatLon;
 use crate::grid::{BOUNDARY_TOLERANCE_DEG, Col, Grid, GridError, Row};
 use crate::progress::Progress;
@@ -385,6 +386,18 @@ where
         vec![0.0f64; decimation.grid().width() as usize + 1]
     };
     let mut digest = FNV_OFFSET_BASIS;
+
+    // The boundary this step is, at the one granularity the library knows and a caller does not: the shape
+    // going in and the shape coming out. ADR 0004 — through the facade, so nothing here names a stream.
+    log::info!(
+        "streaming {} x {} cells into a {} x {} table",
+        grid.width(),
+        grid.height(),
+        decimation.grid().width(),
+        decimation.grid().height()
+    );
+    // Box 7's first granularity. Bound rather than discarded, and it outlives both `?`s below.
+    let _bracket = Bracket::open(module_path!(), "table build");
 
     // The zero row, which is the padding itself: emitting it here is what lets a rectangle touching
     // the north edge subtract four corners like any other.

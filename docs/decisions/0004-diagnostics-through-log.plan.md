@@ -5,7 +5,7 @@ created: 2026-08-14
 
 # Implementation plan — ADR 0004, diagnostics through `log`
 
-**Status: in progress (2026-08-14).** Carries [ADR 0004](0004-diagnostics-through-log.md) into the tree,
+**Status: complete (2026-08-14).** Carries [ADR 0004](0004-diagnostics-through-log.md) into the tree,
 which is issue #8's last four boxes: `--log-level`, the `info` narration, the `debug` bracketing, and the
 box saying a record picks the facade. Those four are the whole of what keeps #8 open after #38, so the
 last task ticks them and roadmap #11's sixth step, and the PR carrying this plan closes the issue.
@@ -88,7 +88,7 @@ These add to the normal task loop; they do not replace it.
 The plumbing, and nothing narrates yet. Both tasks leave observable output unchanged, which is what makes
 them separately verifiable: after 1.2 the flag exists, is honoured, and has nothing to say.
 
-- [ ] **1.1 `log` is a workspace dependency and both crates take it.**
+- [x] **1.1 `log` is a workspace dependency and both crates take it.**
       `log = { version = "0.4", features = ["std"] }` in the root
       `Cargo.toml`'s `[workspace.dependencies]` — the feature because the shape 1.2 installs needs it:
       `set_boxed_logger` and `impl Error for SetLoggerError` are both behind `std` and `log` enables no
@@ -104,7 +104,7 @@ them separately verifiable: after 1.2 the flag exists, is honoured, and has noth
       prints 33 where it printed 32 — one new crate and no transitive ones, which is the figure ADR 0004
       decided on. 243 tests still pass.
 
-- [ ] **1.2 `--log-level` is a global flag, and the CLI installs a `log::Log` that honours it.** A
+- [x] **1.2 `--log-level` is a global flag, and the CLI installs a `log::Log` that honours it.** A
       `LogArgs` flattened onto `Cli` itself, with `global = true` on the `#[arg]` **inside** it rather
       than on the `#[command(flatten)]` — the attribute is the argument's — so every command takes it
       rather than each subcommand declaring it, defaulting to `info` and parsed by a `value_parser`
@@ -137,7 +137,7 @@ them separately verifiable: after 1.2 the flag exists, is honoured, and has noth
 The call sites. Read the actual output at the end of this phase rather than trusting the tests: what these
 tasks are for is a human watching a terminal, and no assertion checks that a line is worth reading.
 
-- [ ] **2.1 `info` narrates the resolved table and the answer, from the CLI.** Box 6's two ends for the
+- [x] **2.1 `info` narrates the resolved table and the answer, from the CLI.** Box 6's two ends for the
       four search commands, both known at the binary edge and neither of which the library should be asked
       for: one record after the table is resolved naming the cache path, the digest, the decimation and the
       grid's shape, and one at the end naming the answer — the radius for `smallest-for-share`, one record
@@ -160,7 +160,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
       the two runs, which is the property box 6 exists to protect. The cache may be the 5 arcmin table or
       the synthetic one `Fixture::build` writes, which reaches the same code path with no raster.
 
-- [ ] **2.2 `info` narrates the raster and cache `table build` reads and writes.** The other half of box
+- [x] **2.2 `info` narrates the raster and cache `table build` reads and writes.** The other half of box
       6's "the raster and cache in use", and its own task because `table build` opens no cache — 2.1's
       record is in `CachedTable::open` and this command never calls it. One record naming the raster path
       and the decimation before the pass, one naming the header and payload it published after.
@@ -174,7 +174,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
       than interleaved with it. Nothing in `mise run ci` covers this task, which is why the record above
       says the raster path is the figure a reader checks by eye.
 
-- [ ] **2.3 `info` marks the phase boundaries inside the library.** The boundaries a run has: the table
+- [x] **2.3 `info` marks the phase boundaries inside the library.** The boundaries a run has: the table
       build (`table::build`), the search over radius entering and leaving (`smallest::smallest`), and each
       radius the search settles (`smallest::probe`, one record naming the radius and whether the ledger
       answered it). Targets are the module paths, so a reader can tell a library record from the CLI's.
@@ -196,7 +196,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
 Box 7's three remaining granularities are 2.4 to 2.6, one task each. They are separate commits because they
 are separate call sites in two crates, and because the warm-ledger verify belongs to the radius trial alone.
 
-- [ ] **2.4 A `Bracket` guard, and the table build or load wears the first pair.** Box 7's first
+- [x] **2.4 A `Bracket` guard, and the table build or load wears the first pair.** Box 7's first
       granularity, and the task that settles how every pair closes. **The end record is written by `Drop`,
       not by hand.** Every region box 7 asks to bracket is threaded with `?` — `search.rs:382`, `405` and
       `416`, `smallest.rs:317`, `320`, `426` and `447`, and `build`'s row callback — so a hand-written end
@@ -218,7 +218,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       doing the work, and hand-written end lines are what it rules out. A unit test on the guard covers the
       target: a bracket constructed in one module reports that module on both records.
 
-- [ ] **2.5 Each search level is bracketed, and its end record carries the kernels built.** Box 7's second
+- [x] **2.5 Each search level is bracketed, and its end record carries the kernels built.** Box 7's second
       granularity. **Kernel placement is not a bracket of its own**, because there is no discrete placement
       step to open one around — kernels are built lazily inside the per-block loop, through
       `HeldKernel::get`, 15 891 times in the measured run, which is precisely the "line per kernel" the Out
@@ -233,7 +233,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       and end records are equal in number **per operation name** — `rg -cw`, counted per name rather than
       globally, since equal global totals survive one step's pair being mismatched against another's.
 
-- [ ] **2.6 Each radius trial is bracketed, warm ledger included.** Box 7's third granularity, in
+- [x] **2.6 Each radius trial is bracketed, warm ledger included.** Box 7's third granularity, in
       `smallest::probe`. A radius the ledger answers is bracketed like any other — it opens, it closes, and
       its near-zero duration is what says a rerun did no work, where emitting nothing would leave a reader
       unable to tell that from a radius never tried.
@@ -246,7 +246,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
 
 ## Phase 3 — documentation, register, close-out
 
-- [ ] **3.1 README says what the flag does and why there are two mechanisms.** A short block in the Usage
+- [x] **3.1 README says what the flag does and why there are two mechanisms.** A short block in the Usage
       section: `--log-level`, the four names, the default, and the distinction a reader will otherwise ask
       about — a log says what happened and the progress meter says how far a run has got, so a quiet run
       may still draw a meter and a verbose one may draw none. Say that `RUST_LOG` does nothing, because a
@@ -254,7 +254,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       *Verify:* `mise run lint:markdown` and `mise run lint:cspell` green, and the block names no level the
       parser rejects — `trace` does not appear in it.
 
-- [ ] **3.2 `FU-04` is closed, and the register says what closed it.** Status to `closed` with the date,
+- [x] **3.2 `FU-04` is closed, and the register says what closed it.** Status to `closed` with the date,
       naming ADR 0004 as the record its Fix demanded and this plan as the implementation, and stating the
       two ways what landed departs from the Fix as written: `log` rather than `tracing` on the emitting
       side, and a hand-written subscriber rather than `tracing-subscriber` on the consuming side, both on
@@ -275,7 +275,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       empty — the second was run on this tree while the plan was drafted and matches nothing, where the
       word-based sweep it replaces matches once.
 
-- [ ] **3.3 The issue's last four boxes are ticked, the roadmap's step is ticked, and the plan is
+- [x] **3.3 The issue's last four boxes are ticked, the roadmap's step is ticked, and the plan is
       closed.** Tick boxes 5 to 8 of issue #8 — the three logging boxes and the box saying a record picks
       the facade, which ADR 0004 is — leaving all eight ticked. Tick roadmap #11's `#8` box, which this
       plan is what makes true. **The issue is not closed by hand**: the PR carrying this plan is what
@@ -287,5 +287,4 @@ are separate call sites in two crates, and because the warm-ledger verify belong
 
 ## Follow-ups
 
-- [FU-04](../follow-ups.md#fu-04---diagnostics-have-no-facade) — `closed` by 3.2; ADR 0004 is the record
-  its Fix required.
+`FU-04` in [`../follow-ups.md`](../follow-ups.md).

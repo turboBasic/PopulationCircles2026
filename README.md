@@ -167,6 +167,19 @@ resolution in each direction, so a radius here is good to about the width of one
 against the published 3300 km result is a later step's job, and this section is a demonstration that the
 commands run rather than a claim that they are right.
 
+### Watching a run
+
+Every command takes `--log-level`, the only control over what a run says about itself: `error`, `warn`,
+`info` or `debug`, and `info` unless you say otherwise. At `info` a run names the table it resolved and the
+answer it reached; at `debug` each expensive step is bracketed by a begin and an end record carrying one
+operation name, so its duration is the difference between the two elapsed figures on the left. `RUST_LOG`
+does nothing here — the flag is the only way in.
+
+The progress meter is a **second mechanism, and the flag does not govern it.** A log says what happened;
+the meter says how far a run has got. So `--log-level error` still draws a meter, and a `debug` run piped
+to a file draws none — the meter is silent when stderr is not a terminal. Both write to stderr, and
+stdout stays exactly one JSON document at every level.
+
 `mise run cli -- --help` has the full command and flag reference.
 
 ## Data

@@ -56,7 +56,8 @@ stepped along the seam — `raster` holding the boundary a raster crosses: the
 `RasterSource` trait that hands out one row at a time with nodata already turned into zero, the
 tallies saying where every cell of a drained raster went, and an in-memory `Synthetic` a later step's
 tests are written against instead of a file; `progress` holding the one-method sink a long-running
-step reports through; `table` holding the summation table — the padded prefix-sum layout, the
+step reports through; `bracket` holding the guard whose `Drop` closes an expensive step's `debug` pair;
+`table` holding the summation table — the padded prefix-sum layout, the
 compensated build that streams a raster into it, the rectangle query over a borrowed payload, and the
 factor a coarser table folds at; `kernel` holding the spherical cap — the membership rule a span
 means, the per-row half width as an offset from a centre column, and the placement that turns one into
@@ -71,7 +72,9 @@ versioned envelope, the provenance a document names its table by, and one payloa
 command answers, which owns what a consumer of that format needs to know. The build is the
 `RasterSource` trait's first caller, the circle is `place`'s, the search is the circle's, and the search
 over radius is the search's.
-circle, geodesy, grid, kernel, progress, report, search, smallest, `raster` itself and `table` itself are pure computation with no I/O;
+bracket, circle, geodesy, grid, kernel, progress, report, search, smallest, `raster` itself and `table`
+itself are pure computation with no I/O — a `log` record is not I/O here, because none reaches a stream until the CLI's own
+subscriber writes it, which is [ADR 0004](../decisions/0004-diagnostics-through-log.md);
 the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
 the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, the ledger document and
 its own publication are `crates/popcircles/src/smallest/cache.rs`, and nothing above any of those modules
@@ -120,7 +123,10 @@ an arrow is an architecture change, not a refactor.
   one is where a wrong-units bug lives undetected. `Grid` is the existing example: the constructor
   rejects the invalid shape, so no later stage revalidates and no caller can build the impossible
   value. Prefer a type whose invalid states do not construct over a check repeated at every use.
-- **The domain computes and returns; it does not read, write, print, or format.** geodesy, grid,
+- **The domain computes and returns; it does not read, write, print, or format.** A diagnostic emitted
+  through the `log` facade is not an exception to that — the record is a value handed to whatever the
+  binary installed, and choosing a stream, a level and a format stays the CLI's
+  ([ADR 0004](../decisions/0004-diagnostics-through-log.md)). geodesy, grid,
   ingest, table, kernels and search take domain types and give back domain types. Paths, file formats,
   stdout, progress reporting and CLI flags are not domain concerns — a module that grows one has taken
   a second responsibility (SRP), and the test that used to be a pure function call now needs a

@@ -16,6 +16,11 @@ clap = { version = "4", default-features = false, features = [
   "error-context",
 ] }
 insta = { version = "1", features = ["json", "redactions"] }
+# `std` is what the CLI's own subscriber costs, not what the crate requires: `set_boxed_logger` and
+# `impl Error for SetLoggerError` are both behind it, and `log` enables no features by default, so a
+# boxed logger whose install is a handled `Result` does not compile without it. `std = []` in log's
+# manifest, so it pulls nothing.
+log = { version = "0.4", features = ["std"] }
 memmap2 = "0.9"
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
