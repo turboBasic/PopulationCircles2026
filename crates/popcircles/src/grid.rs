@@ -257,11 +257,32 @@ impl Grid {
             self.width,
             self.height
         );
-        // u32 -> f64 is exact below 2^53, so these carry no rounding of their own.
+        // u32 -> f64 is exact below 2^53, so this carries no rounding of its own.
         LatLon {
-            lat: self.origin.lat + (f64::from(row.0) + 0.5) * self.lat_step,
+            lat: self.centre_lat(row),
             lon: self.origin.lon + (f64::from(col.0) + 0.5) * self.lon_step,
         }
+    }
+
+    /// The latitude every cell centre in a row shares.
+    ///
+    /// It takes no column for the reason [`Grid::cell_area_km2`] takes none, and it exists because a
+    /// circular kernel is built from a row's latitude alone: without it such a caller has to name a
+    /// column it has no use for, and a column it invented is a column it could invent wrongly.
+    /// [`Grid::centre_of`] reads it rather than recomputing it, so a row has one latitude and not two
+    /// that agree.
+    ///
+    /// # Panics
+    /// If `row` was minted by a larger grid; [`Row`] says why that is a stop.
+    #[must_use]
+    pub fn centre_lat(&self, row: Row) -> f64 {
+        assert!(
+            row.0 < self.height,
+            "row {} is not a row of a {}-row grid",
+            row.0,
+            self.height
+        );
+        self.origin.lat + (f64::from(row.0) + 0.5) * self.lat_step
     }
 
     /// # Panics
@@ -712,6 +733,20 @@ mod tests {
         let (row, col) = cell(&grid, 21599, 43199);
         let se = grid.centre_of(row, col);
         assert!(close(se.lat, -90.0 + half) && close(se.lon, 180.0 - half));
+    }
+
+    #[test]
+    fn a_rows_latitude_is_the_one_every_cell_in_it_has() {
+        // Bit for bit, over every cell of the grid: what this pins is that the row latitude has one
+        // definition rather than two that agree to within a rounding, which is the whole reason
+        // centre_of reads centre_lat instead of repeating the expression.
+        let grid = decimated();
+        for row in grid.rows() {
+            let lat = grid.centre_lat(row);
+            for col in grid.cols() {
+                assert_eq!(grid.centre_of(row, col).lat, lat, "row {}", row.get());
+            }
+        }
     }
 
     #[test]
