@@ -110,3 +110,21 @@ Identifiers are flat, sequential and never reused.
   rather than skipped: `log` in the library, bridged into the binary's subscriber by `tracing-log`, costs
   one crate and buys no spans. If the nesting turns out shallow, that is the better answer and the record
   should say so.
+
+### FU-05 - Formatting is enforced by hooks and by nothing else
+
+- **Status** — `due`.
+- **Condition** — `mise run ci` passes on a tree a formatter would rewrite. Both halves are checkable:
+  `rg -n -- '--check' mise.toml` names no formatter task, which is what makes this `due` the day it is
+  written, and on such a checkout `cargo fmt --all --check`, `taplo fmt --check` or
+  `uv run ruff format --check .` exits non-zero while `mise run lint` stays green, which is how a sweep
+  shows it has bitten. A commit made with `--no-verify`, or from a clone where `prek install` never ran,
+  is the way it happens: `lint` runs clippy, ruff's linter, actionlint and the three LFS hooks, and no
+  formatter at all.
+- **Fix** — a `lint:format` task selecting the formatting hooks by id, `prek run --all-files cargo-fmt
+  taplo-fmt ruff-format`, with `lint` depending on it — the shape `lint:lfs` already uses, which is what
+  puts hooks in CI without a second copy of the rule. Those hooks rewrite rather than check, so a CI
+  failure reads "files were modified by this hook" rather than naming the diff; that is the same report
+  `lint:lfs` gives and is enough to stop the merge. Measured on the tree that added the taplo hook: all
+  three come back clean, and `ruff check --show-files` names only `pyproject.toml`, so the Python half
+  gates nothing yet but needs none of the deferral `typecheck:python` carries.
