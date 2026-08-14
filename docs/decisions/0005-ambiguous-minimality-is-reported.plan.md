@@ -204,7 +204,7 @@ fixture can check is a commit whose whole content is the check.
 
 ## Phase 3 — documentation, register, close-out
 
-- [ ] **3.1 The docs that describe the old claim describe the new one.**
+- [x] **3.1 The docs that describe the old claim describe the new one.**
       [`application.md`](../ai/application.md) "Approach" step 4 ends "minimality holds for a target further
       from a plateau than the summation slack the result carries" — a condition it left to a reader, which
       the result now answers for itself. That clause is what moves, and it moves by naming the field rather
