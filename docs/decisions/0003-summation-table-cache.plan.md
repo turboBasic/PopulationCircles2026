@@ -176,7 +176,7 @@ it, where the `// SAFETY:` argument is the part worth an expensive reading.
 where saying more than the change owes is this repository's standing failure mode and no gate catches
 it. 3.2 is a register entry and `gh` edits.
 
-- [ ] **3.1 Documentation the step invalidated.** Three claims stop being true, and each is corrected
+- [x] **3.1 Documentation the step invalidated.** Three claims stop being true, and each is corrected
       to state the present rather than to narrate the change — `git log` and this record own what moved:
       - `docs/ai/application.md` line 50, "Steps 1 to 5 are targets rather than existing code", and the
         inventory that follows it. Step 1 is code; the inventory gains `table` and `progress`; "Step 1 is
