@@ -176,6 +176,40 @@ impl Block {
     }
 }
 
+/// A candidate centre and the population of its circle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Candidate {
+    pub row: Row,
+    pub col: Col,
+    pub population: f64,
+}
+
+impl Candidate {
+    /// The better of two candidates: more population wins, and equal population keeps the smaller
+    /// `(row, col)`.
+    ///
+    /// A comparison rather than "keep the first one seen", and the difference is the answer's
+    /// independence from the order candidates arrive in. Pruning changes that order with every initial
+    /// spacing, so a rule reading it would give a different centre for the same raster and radius. This
+    /// one is symmetric — `a.better(b)` and `b.better(a)` are the same candidate — which is what lets the
+    /// search fold in whatever order the traversal happens to produce.
+    #[must_use]
+    pub fn better(self, other: Self) -> Self {
+        // A population that is not a number takes neither comparison and falls through to the position,
+        // so a table holding one yields a deterministic answer rather than an order-dependent one. It
+        // cannot arise from a sanitised raster; what matters here is that it has no way to be undefined.
+        if other.population > self.population {
+            other
+        } else if other.population < self.population {
+            self
+        } else if (other.row, other.col) < (self.row, self.col) {
+            other
+        } else {
+            self
+        }
+    }
+}
+
 /// An upper bound on the ground distance from `block`'s probe to any cell centre in it.
 ///
 /// Two hops and the triangle inequality on the sphere. Take the probe at `(φ₀, λ₀)` and a target cell
@@ -651,6 +685,53 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn the_better_candidate_is_the_same_whichever_order_they_arrive_in() {
+        // Folded forwards and backwards over each list, because order-independence is the property and a
+        // rule that took the first maximum it saw would pass one direction and fail the other.
+        let grid = grid();
+        let at = |row: u32, col: u32, population: f64| Candidate {
+            row: row_of(&grid, row),
+            col: col_of(&grid, col),
+            population,
+        };
+
+        let cases = [
+            // One clear maximum, which is the case that says the rule reads population first.
+            (
+                vec![at(3, 4, 10.0), at(0, 0, 50.0), at(17, 35, 20.0)],
+                (0, 0),
+            ),
+            // Two equal maxima in different rows: the northern wins.
+            (
+                vec![at(9, 2, 50.0), at(2, 30, 50.0), at(5, 5, 10.0)],
+                (2, 30),
+            ),
+            // Two equal maxima in one row: the western wins, by column index and not by longitude.
+            (vec![at(4, 30, 50.0), at(4, 7, 50.0)], (4, 7)),
+            // Everything tied, which is the all-zero raster in miniature.
+            (vec![at(1, 1, 7.0), at(0, 35, 7.0), at(0, 3, 7.0)], (0, 3)),
+        ];
+
+        for (candidates, expected) in cases {
+            for reversed in [false, true] {
+                let mut order = candidates.clone();
+                if reversed {
+                    order.reverse();
+                }
+                let winner = order
+                    .into_iter()
+                    .reduce(Candidate::better)
+                    .expect("the list is not empty");
+                assert_eq!(
+                    (winner.row.get(), winner.col.get()),
+                    expected,
+                    "reversed: {reversed}"
+                );
             }
         }
     }
