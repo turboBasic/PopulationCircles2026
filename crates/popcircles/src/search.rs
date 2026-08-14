@@ -8,9 +8,23 @@
 
 use std::num::NonZeroU32;
 
-use crate::geodesy::arc_km;
+use crate::circle;
+use crate::geodesy::{RadiusKm, arc_km};
 use crate::grid::{Col, Grid, Row};
-use crate::table::RowBand;
+use crate::kernel::{Kernel, KernelError};
+use crate::progress::Progress;
+use crate::table::{RowBand, Table};
+
+/// Why a search could not run.
+///
+/// One variant, and no arm for the widened radius: [`RadiusKm::widened_by`] is total, because the slack a
+/// block can carry is bounded by the sphere and cannot push a finite radius out of range. An error arm for
+/// it would be one every caller has to handle and no input can produce.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+pub enum SearchError {
+    #[error("the search could not build a kernel")]
+    Kernel(#[from] KernelError),
+}
 
 /// The relative amount [`slack_km`] inflates its answer by, so that the figure it returns dominates the
 /// mathematical bound rather than approximating it.
@@ -257,6 +271,188 @@ pub fn slack_km(grid: &Grid, block: Block) -> f64 {
     arc_km(two_hop_rad) * (1.0 + SLACK_MARGIN)
 }
 
+/// What a search did beside finding the answer, and the only window onto whether the bound is working.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SearchStats {
+    pub levels: u32,
+    pub blocks_examined: u64,
+    pub blocks_pruned: u64,
+    /// Blocks whose exact circle was evaluated — the ones the bound could not rule out.
+    pub circles_evaluated: u64,
+    /// How many kernels were constructed. It is here because it is what says the sort is buying the reuse
+    /// it is there for: one per (row, radius) rather than one per block.
+    pub kernels_built: u64,
+}
+
+/// The most populous circle a search found, and what "most" is exact to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MostPopulous {
+    pub centre: Candidate,
+    pub radius: RadiusKm,
+    /// The population slack the search pruned with, in persons.
+    ///
+    /// Zero: refinement runs to single-cell blocks, the prune is strict and [`slack_km`]'s bound is
+    /// inflated outward, so nothing here trades accuracy for time. What separates this figure from the
+    /// true one is the table's own arithmetic — ADR 0003's 4 ulp per rectangle query, about 4e-6 persons
+    /// at a world total — which is the floor beneath this field rather than something it reports.
+    ///
+    /// A field rather than a constant because issue #6 asks the *result* to report it, and #7 reads
+    /// results rather than this crate's constants.
+    pub tolerance_persons: f64,
+    pub stats: SearchStats,
+}
+
+/// One kernel, rebuilt only when the row or the radius changes.
+///
+/// A single entry rather than a map: the search walks a level's blocks sorted by probe row, so every block
+/// of a row asks for the same kernel in succession and one entry catches all of it. A map would hold every
+/// row's spans at once — 7128 rows of them at full resolution — to serve a locality the sort already gives.
+#[derive(Debug)]
+struct HeldKernel {
+    grid: Grid,
+    row: Row,
+    radius_bits: u64,
+    kernel: Kernel,
+    built: u64,
+}
+
+impl HeldKernel {
+    fn new(grid: Grid, row: Row, radius: RadiusKm) -> Result<Self, KernelError> {
+        Ok(Self {
+            grid,
+            row,
+            radius_bits: radius.km().to_bits(),
+            kernel: Kernel::new(grid, row, radius)?,
+            built: 1,
+        })
+    }
+
+    /// The radius is compared by bits rather than by value, which is the comparison that matches what the
+    /// cache is for: the widened radius is recomputed per block, and two blocks of the same row and the
+    /// same extent produce the same bits — exactly when the kernel is reusable.
+    fn get(&mut self, row: Row, radius: RadiusKm) -> Result<&Kernel, KernelError> {
+        let bits = radius.km().to_bits();
+        if self.row != row || self.radius_bits != bits {
+            self.kernel = Kernel::new(self.grid, row, radius)?;
+            self.row = row;
+            self.radius_bits = bits;
+            self.built += 1;
+        }
+        Ok(&self.kernel)
+    }
+}
+
+/// The most populous circle of ground radius `radius` centred on a cell of the table's grid.
+///
+/// The maximum is over the **table's** cell centres, of the population the table holds within the radius.
+/// On a whole-globe table that is the globe-wide answer; on a table spanning a band of latitude it is that
+/// band's, because [`Kernel`] clips a cap at a grid's edge rather than refusing it. The claim is worded
+/// that way rather than as "on the globe" so a band table is answered honestly instead of refused by a
+/// guard the layer below does not have.
+///
+/// `spacing` is the side of the blocks the first level is tiled into, in cells. It changes how long the
+/// search takes and not what it answers — every level's bound is admissible and refinement runs to single
+/// cells — so a spacing of one is a brute force over every centre and larger values are the same answer
+/// sooner. There is no default: the useful range is a measured property of the raster and the radius.
+///
+/// `progress` is advanced once per block, `(blocks done, blocks in this level)`, both absolute within the
+/// level being walked. Per level rather than overall because the number of levels is not known until the
+/// search runs, so a global total would be a figure this function had to revise.
+///
+/// # Errors
+/// [`SearchError::Radius`] when `radius` is large enough that widening it by a block's slack overflows —
+/// legal input, absurd value. [`SearchError::Kernel`] when the table's grid has no kernels at all, which
+/// is a grid whose columns do not close.
+///
+/// # Panics
+/// If the table's grid yields no block to examine. A [`Grid`] has at least one cell and the first block
+/// examined cannot be pruned — there is no incumbent to prune it against — so this is an invariant of the
+/// two rather than a case a caller can reach.
+pub fn most_populous<P: Progress>(
+    table: &Table<'_>,
+    radius: RadiusKm,
+    spacing: NonZeroU32,
+    progress: &mut P,
+) -> Result<MostPopulous, SearchError> {
+    let grid = *table.grid();
+    let mut level = Block::tile(&grid, spacing);
+    let mut best: Option<Candidate> = None;
+    let mut stats = SearchStats::default();
+
+    let seed = grid.middle_row();
+    let mut exact = HeldKernel::new(grid, seed, radius)?;
+    let mut widest = HeldKernel::new(grid, seed, radius)?;
+
+    while !level.is_empty() {
+        // The traversal decision, and it buys two things at once: every kernel band slides north to south
+        // so each table row is read forward, and consecutive blocks share a probe row so the kernel above
+        // is reused rather than rebuilt. Splitting yields children in each parent's order, which is not
+        // the level's order, so the sort is per level rather than once.
+        level.sort_unstable_by_key(|block| {
+            let (row, col) = block.probe(&grid);
+            (row.get(), col.get())
+        });
+        stats.levels += 1;
+
+        // Saturating rather than casting, so a host where a Vec's length does not fit a u64 reports a
+        // capped total instead of a wrapped one.
+        let total = u64::try_from(level.len()).unwrap_or(u64::MAX);
+        let mut done = 0u64;
+        let mut survivors: Vec<Block> = Vec::new();
+
+        for block in &level {
+            let (probe_row, probe_col) = block.probe(&grid);
+            let widened = radius.widened_by(slack_km(&grid, *block));
+            let ceiling = circle::population(table, widest.get(probe_row, widened)?, probe_col);
+            stats.blocks_examined += 1;
+
+            // Strictly under, never equal. A block whose bound merely ties the incumbent may hold a
+            // centre that ties it too and wins on position, and that centre is the answer — so a `<=`
+            // here would drop the tie before the tie-break ever saw it, and the result would depend on
+            // the spacing. Under a strict incumbent, every centre in the block is beaten outright.
+            if best.is_some_and(|held| ceiling < held.population) {
+                stats.blocks_pruned += 1;
+            } else {
+                let population =
+                    circle::population(table, exact.get(probe_row, radius)?, probe_col);
+                let candidate = Candidate {
+                    row: probe_row,
+                    col: probe_col,
+                    population,
+                };
+                best = Some(match best {
+                    Some(held) => held.better(candidate),
+                    None => candidate,
+                });
+                stats.circles_evaluated += 1;
+                survivors.push(*block);
+            }
+
+            done += 1;
+            progress.advance(done, total);
+        }
+
+        level = survivors
+            .into_iter()
+            .flat_map(|block| block.split(&grid).collect::<Vec<Block>>())
+            .collect();
+    }
+
+    stats.kernels_built = exact.built + widest.built;
+    match best {
+        Some(centre) => Ok(MostPopulous {
+            centre,
+            radius,
+            tolerance_persons: 0.0,
+            stats,
+        }),
+        None => panic!(
+            "a grid has at least one cell, so a tiling has at least one block and the first cannot be \
+             pruned"
+        ),
+    }
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
 // exemption; docs/ai/code.md allows both in tests. float_cmp is for the exactly-zero and tightness
 // assertions, where the value being exactly what it is is the property.
@@ -274,11 +470,9 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::circle;
-    use crate::geodesy::{LatLon, RadiusKm, great_circle_km};
-    use crate::kernel::Kernel;
+    use crate::geodesy::{LatLon, great_circle_km};
     use crate::raster::Synthetic;
-    use crate::table::{Decimation, Table, build};
+    use crate::table::{Decimation, build};
 
     const WIDTH: u32 = 36;
     const HEIGHT: u32 = 18;
@@ -614,15 +808,11 @@ mod tests {
         RadiusKm::new(km).expect("a fixture radius is a length")
     }
 
-    /// The padded payload a real build emits over a grid whose cells are distinct small integers, so a
-    /// cell counted twice or not at all moves a total and every partial sum stays exact in f64.
-    fn payload_over(grid: &Grid) -> Vec<f64> {
+    /// The padded payload a real build emits over a grid, from a cell function: the fixture is then the
+    /// path the search uses rather than a second construction of it.
+    fn payload_over(grid: &Grid, cell: impl Fn(u32, u32) -> f32) -> Vec<f64> {
         let rows: Vec<Vec<f32>> = (0..grid.height())
-            .map(|row| {
-                (0..grid.width())
-                    .map(|col| (row * grid.width() + col + 1) as f32)
-                    .collect()
-            })
+            .map(|row| (0..grid.width()).map(|col| cell(row, col)).collect())
             .collect();
         let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
         let mut payload = Vec::new();
@@ -647,7 +837,7 @@ mod tests {
         // the same set preserves it. Which is why the bound holds on every grid `Kernel` accepts, and not
         // only on a whole globe.
         for (grid, spacings) in [(grid(), vec![4u32, 18]), (band_grid(), vec![90u32])] {
-            let payload = payload_over(&grid);
+            let payload = payload_over(&grid, distinct(&grid));
             let table = Table::new(grid, &payload).expect("the build emits the padded product");
 
             for radius_km in [1500.0, 8000.0] {
@@ -687,6 +877,232 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Distinct at every position and no larger than 10 800, so every partial sum in the table and in the
+    /// fold is exact in f64 and a cell counted twice moves a total.
+    fn distinct(grid: &Grid) -> impl Fn(u32, u32) -> f32 + use<> {
+        let width = grid.width();
+        move |row, col| (row * width + col + 1) as f32
+    }
+
+    /// The maximum over every cell of the grid, by `circle::population` and 3.1's rule. #5 pinned that
+    /// function against a whole-grid distance scan, so this reference inherits a checked answer rather
+    /// than being a third fold of the same sum.
+    fn brute_force(table: &Table<'_>, grid: &Grid, radius_km: f64) -> Candidate {
+        let mut best: Option<Candidate> = None;
+        for row in grid.rows() {
+            let kernel = Kernel::new(*grid, row, radius(radius_km)).expect("a grid that closes");
+            for col in grid.cols() {
+                let candidate = Candidate {
+                    row,
+                    col,
+                    population: circle::population(table, &kernel, col),
+                };
+                best = Some(match best {
+                    Some(held) => held.better(candidate),
+                    None => candidate,
+                });
+            }
+        }
+        best.expect("the grid has cells")
+    }
+
+    fn search(table: &Table<'_>, radius_km: f64, cells: u32) -> MostPopulous {
+        most_populous(table, radius(radius_km), spacing(cells), &mut ())
+            .expect("a whole-globe grid and a radius far from the overflow")
+    }
+
+    #[test]
+    fn the_search_finds_what_an_exhaustive_scan_finds() {
+        // The centre and the population, both by `assert_eq!`: a search that found a near-miss centre
+        // would report a plausible population, and only the pair pins it.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        for radius_km in [1500.0, 8000.0] {
+            let expected = brute_force(&table, &grid, radius_km);
+            for cells in [3u32, 5, 18] {
+                let found = search(&table, radius_km, cells).centre;
+                assert_eq!(
+                    (found.row.get(), found.col.get(), found.population),
+                    (expected.row.get(), expected.col.get(), expected.population),
+                    "radius {radius_km} km, spacing {cells}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_answer_does_not_depend_on_the_initial_spacing() {
+        // Spacing 1 is a brute force by construction — every block is one cell, so every slack is zero and
+        // every bound is the exact circle — which makes this both a spacing check and the strict prune's
+        // own test: a `<=` prune drops ties, and a dropped tie shows up here as a different centre at a
+        // different spacing.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        for radius_km in [1500.0, 8000.0] {
+            let reference = search(&table, radius_km, 1).centre;
+            for cells in [2u32, 3, 5, 18] {
+                let found = search(&table, radius_km, cells).centre;
+                assert_eq!(
+                    (found.row, found.col, found.population.to_bits()),
+                    (reference.row, reference.col, reference.population.to_bits()),
+                    "radius {radius_km} km, spacing {cells}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_all_zero_raster_answers_the_north_west_cell() {
+        // Every circle holds nothing, so every candidate ties and the tie-break decides alone. This is the
+        // case an incumbent seeded with a population of zero gets wrong: the first block's own probe would
+        // prune the rest of the globe and the answer would be that probe rather than cell (0, 0).
+        let grid = grid();
+        let payload = payload_over(&grid, |_, _| 0.0);
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 1500.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                (0, 0, 0.0),
+                "spacing {cells}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_largest_radius_there_is_answers_the_whole_table() {
+        // Absurd and legal, and the case that says widening cannot overflow. A block's slack is bounded by
+        // the sphere at about 60 000 km, while the gap between `f64::MAX` and its neighbour is 2e292, so
+        // the widened radius is `f64::MAX` again rather than an infinity — which is why the search has no
+        // error arm for it. Every circle is the world, so every candidate ties and cell (0, 0) wins.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let (rows, cols) = table.whole();
+
+        let found = search(&table, f64::MAX, 4).centre;
+        assert_eq!(
+            (found.row.get(), found.col.get(), found.population),
+            (0, 0, table.population(rows, cols))
+        );
+    }
+
+    #[test]
+    fn a_grid_whose_columns_do_not_close_has_no_search() {
+        let window = Grid::new(
+            60,
+            60,
+            LatLon {
+                lat: 60.0,
+                lon: -10.0,
+            },
+            0.5,
+            -0.5,
+        )
+        .expect("a window grid is valid");
+        let payload = payload_over(&window, distinct(&window));
+        let table = Table::new(window, &payload).expect("the build emits the padded product");
+
+        assert!(matches!(
+            most_populous(&table, radius(500.0), spacing(4), &mut ()),
+            Err(SearchError::Kernel(KernelError::ColumnsDoNotClose { .. }))
+        ));
+    }
+
+    #[test]
+    fn the_same_search_twice_gives_the_same_bits() {
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let (first, second) = (search(&table, 4000.0, 5), search(&table, 4000.0, 5));
+        assert_eq!(
+            first.centre.population.to_bits(),
+            second.centre.population.to_bits()
+        );
+        assert_eq!(first.centre.row, second.centre.row);
+        assert_eq!(first.centre.col, second.centre.col);
+        assert_eq!(first.stats, second.stats);
+    }
+
+    #[derive(Debug, Default)]
+    struct Reported {
+        calls: Vec<(u64, u64)>,
+    }
+
+    impl Progress for Reported {
+        fn advance(&mut self, done: u64, total: u64) {
+            self.calls.push((done, total));
+        }
+    }
+
+    #[test]
+    fn the_sink_sees_one_finished_pair_per_level() {
+        // The per-level contract, asserted as the runs it produces: a level's calls start at one and end
+        // at (n, n), and the number of runs is the number of levels the stats report. A level counter that
+        // drifted from the reporting would fail here rather than being invisible.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut sink = Reported::default();
+        let result = most_populous(&table, radius(2000.0), spacing(5), &mut sink)
+            .expect("a whole-globe grid");
+
+        let mut runs: Vec<Vec<(u64, u64)>> = Vec::new();
+        for call in sink.calls {
+            if call.0 == 1 {
+                runs.push(Vec::new());
+            }
+            runs.last_mut().expect("a run opens at one").push(call);
+        }
+
+        assert_eq!(u32::try_from(runs.len()).unwrap(), result.stats.levels);
+        for run in runs {
+            let (done, total) = *run.last().expect("a run is not empty");
+            assert_eq!(done, total);
+            assert_eq!(u64::try_from(run.len()).unwrap(), total);
+        }
+    }
+
+    #[test]
+    fn one_kernel_serves_a_whole_row_of_blocks() {
+        // The reuse claim, and the reason `kernels_built` is on the result at all: two kernels per probe
+        // row per level is the ceiling the sort makes possible, and a build per block would exceed it by
+        // the width of the grid.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let result = search(&table, 2000.0, 5);
+        let ceiling = 2 * u64::from(result.stats.levels) * u64::from(grid.height());
+        assert!(
+            result.stats.kernels_built <= ceiling,
+            "{} kernels for {} levels, past {ceiling}",
+            result.stats.kernels_built,
+            result.stats.levels
+        );
+        assert!(result.stats.kernels_built < result.stats.blocks_examined);
+    }
+
+    #[test]
+    fn the_result_reports_a_tolerance_of_zero() {
+        // Box 4 of issue #6: the tolerance is a documented choice and the result reports it. Zero is that
+        // choice, and the search is exact over cell centres because of it.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let result = search(&table, 3000.0, 4);
+        assert_eq!(result.tolerance_persons, 0.0);
+        assert_eq!(result.radius.km(), 3000.0);
     }
 
     #[test]

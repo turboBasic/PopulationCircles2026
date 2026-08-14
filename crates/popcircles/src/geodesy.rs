@@ -87,10 +87,9 @@ impl RadiusKm {
     /// # Errors
     /// [`RadiusError::NotFinite`] or [`RadiusError::Negative`] when the value is not a length.
     ///
-    /// No upper bound. A radius past half the circumference names the whole sphere, which is a legal
-    /// question with a legal answer, and one large enough that adding to it overflows belongs to the
-    /// caller doing the adding: it gets that failure reported by this constructor rather than
-    /// forbidden by an arbitrary ceiling here.
+    /// No upper bound: a radius past half the circumference names the whole sphere, which is a legal
+    /// question with a legal answer. Growing one is [`RadiusKm::widened_by`]'s, which is total, so nothing
+    /// downstream needs a ceiling here to protect it.
     pub fn new(km: f64) -> Result<Self, RadiusError> {
         if !km.is_finite() {
             return Err(RadiusError::NotFinite { km });
@@ -104,6 +103,28 @@ impl RadiusKm {
     #[must_use]
     pub const fn km(self) -> f64 {
         self.0
+    }
+
+    /// This radius widened by `km`.
+    ///
+    /// Total rather than fallible, and the reason is a bound on the argument its caller can prove.
+    /// `search`'s slack is bounded by the sphere — a [`crate::grid::Grid`] spans at most a full turn of
+    /// longitude and half a turn of latitude, so the two-hop bound over one cannot exceed about 60 000 km
+    /// — and adding a quantity that small to any finite radius stays finite, because the gap between
+    /// `f64::MAX` and its neighbour is 2e292. A fallible constructor here would hand every caller an error
+    /// arm no input can reach.
+    ///
+    /// Anything that is not a length lands on the widest radius there is rather than on the original. A
+    /// caller widens in order to bound something, so an answer narrower than asked is the one failure mode
+    /// that could lose a maximum; wider is merely slower.
+    #[must_use]
+    pub fn widened_by(self, km: f64) -> Self {
+        let widened = self.0 + km;
+        if widened.is_finite() {
+            Self(widened.max(self.0))
+        } else {
+            Self(f64::MAX)
+        }
     }
 }
 
@@ -436,6 +457,27 @@ mod tests {
             RadiusKm::new(largest.km() + 1e300).unwrap_err(),
             RadiusError::NotFinite { km: f64::INFINITY }
         );
+    }
+
+    #[test]
+    fn widening_a_radius_never_narrows_it_and_never_leaves_the_range() {
+        // The ordinary case, then the three a bound must not be quietly narrowed by. `f64::MAX` widened by
+        // any slack the sphere can produce is `f64::MAX` again — the gap to its neighbour is 2e292 — which
+        // is what makes this total rather than fallible.
+        assert_eq!(
+            RadiusKm::new(3000.0).unwrap().widened_by(300.0).km(),
+            3300.0
+        );
+
+        let largest = RadiusKm::new(f64::MAX).unwrap();
+        assert_eq!(largest.widened_by(60_083.0).km(), f64::MAX);
+        // Past what any grid can produce, so the answer saturates rather than returning something
+        // narrower than asked: for a bound, wider is slower and narrower loses a maximum.
+        assert_eq!(largest.widened_by(1e300).km(), f64::MAX);
+
+        let three = RadiusKm::new(3000.0).unwrap();
+        assert_eq!(three.widened_by(-500.0).km(), 3000.0);
+        assert_eq!(three.widened_by(f64::NAN).km(), f64::MAX);
     }
 
     #[test]
