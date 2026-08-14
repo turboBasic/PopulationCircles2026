@@ -2,10 +2,14 @@
 // decision 3: the domain types change when the search changes, so what is serialised is a separate
 // representation with its own version, and a field here is a promise to two renderers and two
 // command surfaces.
+use std::path::Path;
+
 use serde::Serialize;
 
 use crate::geodesy::{LatLon, wrap_lon};
 use crate::grid::Grid;
+use crate::raster::CellTallies;
+use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
 /// Bumped when a change to a document below is not additive — a renamed or removed field, or one
 /// whose meaning moved. A new field does not bump it.
@@ -100,6 +104,152 @@ impl From<&Grid> for GridSummary {
     }
 }
 
+/// Where every cell of a drained raster went, as published.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct CellTalliesReport {
+    nodata: u64,
+    unexpected_negative: u64,
+    zero: u64,
+    populated: u64,
+    total: u64,
+}
+
+impl From<CellTallies> for CellTalliesReport {
+    fn from(tallies: CellTallies) -> Self {
+        Self {
+            nodata: tallies.nodata,
+            unexpected_negative: tallies.unexpected_negative,
+            zero: tallies.zero,
+            populated: tallies.populated,
+            total: tallies.total(),
+        }
+    }
+}
+
+/// What a summation table build settled, and where it published the table.
+///
+/// The digest is a string of hexadecimal rather than a number: it is an identity and not a quantity, and
+/// a `u64` past 2^53 does not survive a JSON consumer that parses numbers as doubles. `digest` is what a
+/// later query passes back to name the table it wants.
+#[derive(Debug, Clone, Serialize)]
+pub struct TableBuildReport {
+    digest: String,
+    decimation: u32,
+    grid: GridSummary,
+    total_population: f64,
+    cells: CellTalliesReport,
+    cache: CacheFiles,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CacheFiles {
+    header: String,
+    payload: String,
+}
+
+impl TableBuildReport {
+    /// A path is published with whatever is not UTF-8 replaced, because a document a renderer parses is
+    /// UTF-8 and a path is not promised to be.
+    #[must_use]
+    pub fn new(built: &BuiltTable, header: &Path, payload: &Path) -> Self {
+        Self {
+            digest: hexadecimal(built.digest),
+            decimation: built.decimation.factor(),
+            grid: GridSummary::from(built.decimation.grid()),
+            total_population: built.total,
+            cells: built.tallies.into(),
+            cache: CacheFiles {
+                header: header.to_string_lossy().into_owned(),
+                payload: payload.to_string_lossy().into_owned(),
+            },
+        }
+    }
+}
+
+/// The population of one rectangle of a table, with the rectangle the table resolved the request to.
+///
+/// `window` is absent when the request was the table's whole extent, which is not a window any pair of
+/// coordinates expresses — [`Table::whole`](crate::table::Table::whole) says why.
+#[derive(Debug, Clone, Serialize)]
+pub struct TableQueryReport {
+    digest: String,
+    grid: GridSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    window: Option<WindowReport>,
+    rows: RowRange,
+    columns: ColRange,
+    population: f64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct WindowReport {
+    north: f64,
+    south: f64,
+    west: f64,
+    east: f64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct RowRange {
+    north: u32,
+    south: u32,
+}
+
+/// The columns covered, with the full turn stated rather than left to be inferred from `west` and
+/// `east`: on a grid whose columns close, one column and all of them are the same pair of indices.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ColRange {
+    west: u32,
+    east: u32,
+    full_turn: bool,
+}
+
+impl TableQueryReport {
+    #[must_use]
+    pub fn new(
+        digest: u64,
+        grid: &Grid,
+        window: Option<Window>,
+        rows: RowBand,
+        cols: ColSpan,
+        population: f64,
+    ) -> Self {
+        let columns = match cols {
+            ColSpan::FullTurn => ColRange {
+                west: 0,
+                east: grid.width() - 1,
+                full_turn: true,
+            },
+            ColSpan::Through { west, east } => ColRange {
+                west: west.get(),
+                east: east.get(),
+                full_turn: false,
+            },
+        };
+        Self {
+            digest: hexadecimal(digest),
+            grid: GridSummary::from(grid),
+            window: window.map(|window| WindowReport {
+                north: window.north,
+                south: window.south,
+                west: window.west,
+                east: window.east,
+            }),
+            rows: RowRange {
+                north: rows.north().get(),
+                south: rows.south().get(),
+            },
+            columns,
+            population,
+        }
+    }
+}
+
+/// The one spelling of a digest, so the string a build publishes is the string a query accepts.
+fn hexadecimal(digest: u64) -> String {
+    format!("{digest:#018x}")
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
 // narrow exemption; docs/ai/code.md allows both in tests.
 #[cfg(test)]
@@ -107,6 +257,7 @@ impl From<&Grid> for GridSummary {
 mod tests {
     use super::*;
     use crate::geodesy::great_circle_km;
+    use crate::table::Decimation;
 
     #[test]
     fn the_envelope_leads_with_its_schema_version() {
@@ -151,6 +302,63 @@ mod tests {
             Envelope::new(DistanceReport::new(from, to, great_circle_km(from, to))),
             { ".result.great_circle_km" => insta::rounded_redaction(6) }
         );
+    }
+
+    /// A one-degree whole-globe grid, small enough to read and closed in longitude, so the full turn in
+    /// the query document below is a case this grid actually has.
+    fn degree_grid() -> Grid {
+        Grid::new(
+            360,
+            180,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a 1 degree whole-globe grid is valid")
+    }
+
+    #[test]
+    fn the_table_build_document_holds_its_shape() {
+        // Assembled rather than built, so the numbers are the ones a reader can check against the fields
+        // they land in: the tallies sum to the grid's cell count, and the digest is the value a query
+        // has to pass back verbatim.
+        let built = BuiltTable {
+            digest: 0x3a5d_5e3b_082f_2fb7,
+            tallies: CellTallies {
+                nodata: 40_000,
+                unexpected_negative: 0,
+                zero: 8_000,
+                populated: 16_800,
+            },
+            total: 7_757_982_599.32,
+            decimation: Decimation::none(degree_grid()),
+        };
+        insta::assert_json_snapshot!(Envelope::new(TableBuildReport::new(
+            &built,
+            Path::new("out/table.header.json"),
+            Path::new("out/table.payload.bin"),
+        )));
+    }
+
+    #[test]
+    fn the_table_query_document_holds_its_shape() {
+        let grid = degree_grid();
+        let rows = RowBand::new(
+            grid.row(0).expect("a row of the fixture"),
+            grid.row(179).expect("a row of the fixture"),
+        );
+        // The full turn, because that is the case whose `west` and `east` a consumer cannot infer.
+        insta::assert_json_snapshot!(Envelope::new(TableQueryReport::new(
+            0x3a5d_5e3b_082f_2fb7,
+            &grid,
+            None,
+            rows,
+            ColSpan::FullTurn,
+            7_757_982_599.32,
+        )));
     }
 
     #[test]

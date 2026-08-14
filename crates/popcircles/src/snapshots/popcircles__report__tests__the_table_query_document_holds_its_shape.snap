@@ -1,0 +1,34 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(TableQueryReport::new(0x3a5d_5e3b_082f_2fb7, &grid, None, rows,\nColSpan::FullTurn, 7_757_982_599.32,))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "digest": "0x3a5d5e3b082f2fb7",
+    "grid": {
+      "width": 360,
+      "height": 180,
+      "origin": {
+        "lat": 90.0,
+        "lon": -180.0
+      },
+      "lon_step": 1.0,
+      "lat_step": -1.0,
+      "spans_full_turn": true,
+      "middle_row_cell_area_km2": 12363.718145180046
+    },
+    "rows": {
+      "north": 0,
+      "south": 179
+    },
+    "columns": {
+      "west": 0,
+      "east": 359,
+      "full_turn": true
+    },
+    "population": 7757982599.32
+  }
+}

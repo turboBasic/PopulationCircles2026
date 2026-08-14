@@ -46,6 +46,29 @@ $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --o
 {"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048046, …}}
 ```
 
+A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then a
+population query answered from it by mmap — the payload is never resident:
+
+```sh
+$ mise run cli -- table build --raster data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif \
+    --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
+    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --nodata -3.40282306073709653e38 --epsg 4326 --decimate 10 --cache out/gpw-5arcmin
+{"schema_version":1, …,"result":{"digest":"0xf17aa802a6890f0c","total_population":7757982599.323671, …}}
+
+$ mise run cli -- table query --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
+    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 --decimate 10 \
+    --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c --north -12 --south -21 --west 176 --east -178
+{"schema_version":1, …,"result":{"columns":{"west":4272,"east":24,"full_turn":false},"population":919250.7823575613, …}}
+```
+
+The digest names the cells a table was built from, so it is what a query passes back to say which
+table it wants — and a cache of any other table is refused rather than reused. With no window the
+query covers the table's whole extent; with one, `west` above `east` is a span across the
+antimeridian and needs nothing said about it. Both cache files land under `out/`, which is gitignored
+because a generated table is never committed. Building needs the raster, so `mise run data:pull`
+first.
+
 `mise run cli -- --help` has the full command and flag reference.
 
 ## Data

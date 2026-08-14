@@ -4,7 +4,8 @@
 
 pub mod cache;
 
-use crate::grid::{Col, Grid, GridError, Row};
+use crate::geodesy::LatLon;
+use crate::grid::{BOUNDARY_TOLERANCE_DEG, Col, Grid, GridError, Row};
 use crate::progress::Progress;
 use crate::raster::{CellTallies, RasterError, RasterSource};
 
@@ -84,6 +85,20 @@ pub enum ColSpan {
     FullTurn,
 }
 
+/// A latitude and longitude window a caller wants the population of.
+///
+/// Four degrees rather than two [`LatLon`] corners, because the **span** `east - west` is what decides
+/// which [`ColSpan`] a window means and a pair of corners cannot say: −180 and 180 reduce to the same
+/// column, so a window given as corners cannot tell one column from the whole turn. A span of a full
+/// turn or more is [`ColSpan::FullTurn`]; a negative span wraps the antimeridian and is ordinary.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Window {
+    pub north: f64,
+    pub south: f64,
+    pub west: f64,
+    pub east: f64,
+}
+
 /// A summed-area table over a grid, borrowing its payload.
 ///
 /// The payload is padded to `(height + 1) x (width + 1)` with a zero first row and column — ADR 0003
@@ -156,6 +171,53 @@ impl<'a> Table<'a> {
                 }
             }
         }
+    }
+
+    /// Every row and every column, which is the table's whole extent.
+    ///
+    /// Not a [`Window`] of 90 to −90: the grid's outer southern boundary lies in no cell, by
+    /// [`Grid::cell_containing`]'s convention, so the whole-globe question is this rather than a window
+    /// a caller has to nudge off the pole.
+    #[must_use]
+    pub fn whole(&self) -> (RowBand, ColSpan) {
+        // Seeded with the middle row, the one row [`Grid`] mints without an `Option`, and widened by
+        // every row the grid hands out. That is what makes the extent an expression over the grid's own
+        // mints rather than a pair of indices this module asserts are rows.
+        let middle = self.grid.middle_row();
+        let rows = self
+            .grid
+            .rows()
+            .fold(RowBand::new(middle, middle), |band, row| {
+                RowBand::new(band.north().min(row), band.south().max(row))
+            });
+        (rows, ColSpan::FullTurn)
+    }
+
+    /// The rows and columns a [`Window`] covers, or `None` when a corner falls outside the grid.
+    ///
+    /// Here rather than in a caller because it is coordinate arithmetic and one branch — the full turn —
+    /// and a caller that assembled a [`ColSpan`] itself from a pair of longitudes would get that branch
+    /// wrong at −180 to 180, which is the case a whole-globe question is always asked in.
+    ///
+    /// A coordinate on a cell's boundary belongs to the cell south or east of it, and the grid's own
+    /// outer southern and eastern boundaries belong to no cell at all — both are
+    /// [`Grid::cell_containing`]'s convention rather than this method's, and [`whole`](Self::whole) is
+    /// what a caller wanting the extent asks for instead.
+    #[must_use]
+    pub fn covering(&self, window: Window) -> Option<(RowBand, ColSpan)> {
+        // A latitude alone has no cell, so pair each with a longitude every grid has: its own origin's.
+        let at = |lat: f64, lon: f64| self.grid.cell_containing(LatLon { lat, lon });
+        let west_edge = self.grid.origin().lon;
+        let (north, _) = at(window.north, west_edge)?;
+        let (south, _) = at(window.south, west_edge)?;
+        let rows = RowBand::new(north, south);
+
+        if window.east - window.west >= 360.0 - BOUNDARY_TOLERANCE_DEG {
+            return Some((rows, ColSpan::FullTurn));
+        }
+        let (_, west) = at(window.north, window.west)?;
+        let (_, east) = at(window.north, window.east)?;
+        Some((rows, ColSpan::Through { west, east }))
     }
 
     /// `first` and `last` are grid columns, half-open, and both are already padded indices.
@@ -530,6 +592,91 @@ mod tests {
                 expected: 20,
                 found: 21
             }
+        );
+    }
+
+    #[test]
+    fn the_whole_table_is_every_row_and_the_full_turn() {
+        let table = table();
+        let (rows, cols) = table.whole();
+        assert_eq!((rows, cols), (band(0, 2), ColSpan::FullTurn));
+        assert_eq!(table.population(rows, cols), direct(0..=2, &[0, 1, 2, 3]));
+    }
+
+    #[test]
+    fn a_window_spanning_a_full_turn_is_every_column_and_not_one() {
+        // The case a caller reducing two longitudes to columns gets wrong: -180 and 180 are the same
+        // column, so corners alone would ask for the westernmost strip and call it the globe. The
+        // southern latitude is off the pole because the grid's outer boundary lies in no cell, which is
+        // why `whole` exists above.
+        let table = table();
+        let world = Window {
+            north: 90.0,
+            south: -89.0,
+            west: -180.0,
+            east: 180.0,
+        };
+        let (rows, cols) = table
+            .covering(world)
+            .expect("both latitudes are on a whole-globe grid");
+        assert_eq!((rows, cols), (band(0, 2), ColSpan::FullTurn));
+    }
+
+    #[test]
+    fn a_window_across_the_antimeridian_wraps_and_one_of_zero_width_is_a_column() {
+        let table = table();
+        // The fixture's columns are 90 degrees wide from -180, so 170E is the last column and 170W the
+        // first; 31N is inside the first row, where 30N is the second row's northern boundary and so the
+        // second row's own.
+        let wrapped = Window {
+            north: 90.0,
+            south: 31.0,
+            west: 170.0,
+            east: -170.0,
+        };
+        let (rows, cols) = table
+            .covering(wrapped)
+            .expect("both corners are on the grid");
+        assert_eq!((rows, cols), (band(0, 0), through(3, 0)));
+
+        let single = Window {
+            north: 90.0,
+            south: -89.0,
+            west: 0.0,
+            east: 0.0,
+        };
+        let (_, cols) = table
+            .covering(single)
+            .expect("both corners are on the grid");
+        assert_eq!(cols, through(2, 2));
+    }
+
+    #[test]
+    fn a_window_off_the_grid_has_no_rows() {
+        // A window grid is where this bites: a latitude outside it has no row, and the answer is that
+        // there is no rectangle rather than the nearest one.
+        let grid = Grid::new(
+            4,
+            1,
+            LatLon {
+                lat: 10.0,
+                lon: -180.0,
+            },
+            90.0,
+            -10.0,
+        )
+        .expect("a one-row band is a valid grid");
+        let payload = [0.0f64; 10];
+        let table = Table::new(grid, &payload).expect("the payload is the padded product");
+        assert!(
+            table
+                .covering(Window {
+                    north: 90.0,
+                    south: 0.0,
+                    west: -180.0,
+                    east: 180.0,
+                })
+                .is_none()
         );
     }
 
