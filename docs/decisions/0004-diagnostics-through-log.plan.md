@@ -246,7 +246,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
 
 ## Phase 3 — documentation, register, close-out
 
-- [ ] **3.1 README says what the flag does and why there are two mechanisms.** A short block in the Usage
+- [x] **3.1 README says what the flag does and why there are two mechanisms.** A short block in the Usage
       section: `--log-level`, the four names, the default, and the distinction a reader will otherwise ask
       about — a log says what happened and the progress meter says how far a run has got, so a quiet run
       may still draw a meter and a verbose one may draw none. Say that `RUST_LOG` does nothing, because a
