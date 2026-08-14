@@ -77,9 +77,19 @@ run = "actionlint"
 description = "Check geo data is LFS-tracked and no large blob is committed outside LFS"
 run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
 
+# CI never runs prek, so the formatting hooks would be local-only advice. This task selects the
+# three formatting hooks by id and `lint` depends on it, the same shape `lint:lfs` uses to put
+# hooks in CI without a second copy of the logic. Those hooks rewrite rather than check, so a CI
+# failure reads "files were modified by this hook" rather than naming the diff — the same report
+# `lint:lfs` gives, and enough to stop the merge.
+# --all-files rather than the staged set, because on a CI checkout nothing is staged.
+[tasks."lint:format"]
+description = "Check Rust, TOML and Python are formatted"
+run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
+
 [tasks.lint]
 description = "Run every linter"
-depends = ["lint:rust", "lint:python", "lint:workflows", "lint:lfs"]
+depends = ["lint:rust", "lint:python", "lint:workflows", "lint:lfs", "lint:format"]
 
 [tasks.typecheck]
 description = "Type-check Rust"

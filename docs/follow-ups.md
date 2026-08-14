@@ -113,7 +113,8 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-05 - Formatting is enforced by hooks and by nothing else
 
-- **Status** — `due`.
+- **Status** — `closed` (2026-08-14): `lint:format` runs `prek run --all-files cargo-fmt taplo-fmt
+  ruff-format` and `lint` now depends on it, per the fix below.
 - **Condition** — `mise run ci` passes on a tree a formatter would rewrite. Both halves are checkable:
   `rg -n -- '--check' mise.toml` names no formatter task, which is what makes this `due` the day it is
   written, and on such a checkout `cargo fmt --all --check`, `taplo fmt --check` or
