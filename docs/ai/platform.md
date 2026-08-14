@@ -73,8 +73,8 @@ The judgment around that mechanism:
   investigate.
 - cspell checks every tracked file. A legitimate term it flags goes in `.cspell/project.txt`, in the
   section it belongs to — never an inline ignore.
-- Markdown is linted with markdownlint-cli2; `.markdownlint-cli2.jsonc` owns which rules are
-  disabled and why `docs/decisions/` is excluded rather than tuned rule-by-rule.
+- Markdown is linted with markdownlint-cli2, `docs/decisions/` included; `.markdownlint-cli2.jsonc`
+  owns which rules are disabled globally versus scoped to one path, and why.
 
 ### Type checking
 

@@ -1,19 +1,31 @@
 {
-  // MD013 (line length) and MD041 (first line must be a top-level heading) are conventions
-  // this project does not enforce — docs/ai-instructions.md "Working style" says not to object
-  // over line length or file placement, and every living doc here already exceeds 80 and often
-  // 100 columns by design. MD041 fires on .github/PULL_REQUEST_TEMPLATE.md, which starts at `##`
-  // on purpose: GitHub renders the PR title as the page's heading.
+  // MD013 (line length) is a convention this project does not enforce — docs/ai-instructions.md
+  // "Working style" says not to object over line length, and every living doc here already
+  // exceeds 80 and often 100 columns by design.
   "config": {
     "default": true,
-    "MD013": false,
-    "MD041": false
+    "MD013": false
   },
-  // docs/decisions/ records are frozen once accepted or complete (docs/ai/platform.md
-  // "Architecture decisions" and "Implementation plans") — only two sanctioned fields may ever
-  // be edited afterward. A linter cannot ask for a style fix there without contradicting that
-  // rule, so the directory is excluded rather than tuned rule-by-rule.
-  "ignores": [
-    "docs/decisions/**"
+  // GitHub renders the PR title as the page's heading, so this file starts at `##` on purpose.
+  // MD041 (first line must be a top-level heading) is the only rule this trips, and it is the
+  // only file in the repo that needs the exception, so the exception is scoped to it instead
+  // of disabled project-wide.
+  "overrides": [
+    {
+      "filter": [".github/PULL_REQUEST_TEMPLATE.md"],
+      "config": { "MD041": false },
+      "combine": "merge"
+    },
+    // The write-adr skill's Consequences section is bold **Positive** / **Negative** labels, not
+    // headings — a template convention, not drift, and the only rule this trips across every
+    // accepted ADR and plan. docs/decisions/ is otherwise linted like anywhere else: a record is
+    // frozen once accepted or complete (docs/ai/platform.md "Architecture decisions" and
+    // "Implementation plans"), so this scopes the exception to what the template actually does
+    // rather than exempting the directory from every future rule too.
+    {
+      "filter": ["docs/decisions/**"],
+      "config": { "MD036": false },
+      "combine": "merge"
+    }
   ]
 }
