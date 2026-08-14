@@ -332,11 +332,16 @@ impl RadiusLedger for Ledger {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
+    use std::convert::Infallible;
+    use std::num::NonZeroU32;
+
     use tempfile::TempDir;
 
+    use super::super::{Share, smallest};
     use super::*;
     use crate::geodesy::LatLon;
-    use crate::table::Decimation;
+    use crate::raster::Synthetic;
+    use crate::table::{Decimation, Table, build};
 
     fn grid(width: u32, height: u32) -> Grid {
         Grid::new(
@@ -655,5 +660,116 @@ mod tests {
         ledger.put(2000, candidate(&identity, 3, 4, 900.0)).unwrap();
         assert!(!orphan.exists());
         assert_eq!(reopen(&ledger, &identity).unwrap().len(), 4);
+    }
+
+    /// The registry raster's sentinel, so a fixture reaches the table by the path a real raster takes.
+    const NODATA: f32 = -3.402_823e38;
+
+    /// The whole-globe fixture the module's own tests use, with cells distinct so a maximum read back at
+    /// the wrong radius shows up as a wrong figure rather than as a coincidence.
+    fn payload_over(grid: &Grid) -> Vec<f64> {
+        let rows: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| {
+                (0..grid.width())
+                    .map(|col| f32::from(u16::try_from(row * grid.width() + col + 1).unwrap()))
+                    .collect()
+            })
+            .collect();
+        let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        build(source, Decimation::none(*grid), &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        payload
+    }
+
+    /// A real ledger that stops recording after `budget` probes: the first ones reach the file, and then it
+    /// refuses. A process killed mid-run leaves exactly what this leaves.
+    #[derive(Debug)]
+    struct StopsAfter<'a> {
+        inner: &'a mut Ledger,
+        budget: usize,
+    }
+
+    impl RadiusLedger for StopsAfter<'_> {
+        type Error = LedgerError;
+
+        fn get(&self, km: u32) -> Option<Candidate> {
+            self.inner.get(km)
+        }
+
+        fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            if self.budget == 0 {
+                return Err(LedgerError::Write {
+                    path: self.inner.path().to_path_buf(),
+                    source: io::Error::other("the run was interrupted"),
+                });
+            }
+            self.budget -= 1;
+            self.inner.put(km, found)
+        }
+    }
+
+    #[test]
+    fn an_interrupted_run_resumes_from_the_file_and_answers_what_an_uninterrupted_one_does() {
+        // Issue #7's second box, end to end: through a real document in a real directory, with the entry
+        // count read back off the disk rather than from the decorator's own tally.
+        let fixture = grid(36, 18);
+        let payload = payload_over(&fixture);
+        let table = Table::new(fixture, &payload).expect("the build emits the padded product");
+        let identity = Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(fixture),
+        };
+        let share = Share::new(0.25).expect("a fixture share is a proportion");
+        let spacing = NonZeroU32::new(4).expect("a fixture spacing is not zero");
+
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("radii.json");
+
+        // What the answer is when nothing is interrupted, for the resumed run to be held to.
+        let uninterrupted = smallest(&table, share, spacing, &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+
+        // The run that dies on its fourth probe, having banked three.
+        let mut interrupted = Ledger::open_or_empty(&path, &identity).unwrap();
+        let mut stopping = StopsAfter {
+            inner: &mut interrupted,
+            budget: 3,
+        };
+        assert!(matches!(
+            smallest(&table, share, spacing, &mut stopping, &mut ()),
+            Err(crate::smallest::SmallestError::Ledger(
+                LedgerError::Write { .. }
+            ))
+        ));
+
+        // The next process, which knows nothing but the path: three radii are on disk.
+        let mut resumed_ledger = Ledger::open_or_empty(&path, &identity).unwrap();
+        assert_eq!(resumed_ledger.len(), 3);
+
+        let resumed = smallest(&table, share, spacing, &mut resumed_ledger, &mut ())
+            .expect("the ledger is this table's and the directory is writable");
+        assert_eq!(resumed.stats.radii_reused, 3);
+        assert_eq!(
+            resumed.stats.radii_settled(),
+            uninterrupted.stats.radii_settled()
+        );
+        assert_eq!(resumed.radius_km, uninterrupted.radius_km);
+        assert_eq!(
+            resumed.centre.population.to_bits(),
+            uninterrupted.centre.population.to_bits()
+        );
+        assert_eq!(resumed.centre.row, uninterrupted.centre.row);
+        assert_eq!(resumed.centre.col, uninterrupted.centre.col);
+        assert_eq!(resumed.short_below, uninterrupted.short_below);
+
+        // Every radius the finished run settled is on disk, so a third run would search nothing at all.
+        assert_eq!(
+            Ledger::open_or_empty(&path, &identity).unwrap().len() as u64,
+            uninterrupted.stats.radii_settled()
+        );
     }
 }
