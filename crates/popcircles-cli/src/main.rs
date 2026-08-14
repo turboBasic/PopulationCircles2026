@@ -14,7 +14,8 @@ use popcircles::progress::Progress;
 use popcircles::raster::{PixelType, RasterError, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
     CircleReport, DistanceReport, Envelope, GridSummary, LedgerReport, MostPopulousReport,
-    Provenance, SmallestDocument, SmallestReport, TableBuildReport, TableQueryReport,
+    Provenance, SmallestDocument, SmallestReport, SweepDocument, SweepShares, TableBuildReport,
+    TableQueryReport,
 };
 use popcircles::search::{self, SearchError};
 use popcircles::smallest::cache::{Ledger, LedgerError};
@@ -88,6 +89,35 @@ enum Command {
         #[command(flatten)]
         ledger: LedgerArgs,
     },
+    /// The smallest circle for each of a range of shares, over one ledger.
+    Sweep {
+        #[command(flatten)]
+        cached: CachedTableArgs,
+        #[command(flatten)]
+        shares: SweepArgs,
+        #[command(flatten)]
+        search: SearchArgs,
+        #[command(flatten)]
+        ledger: LedgerArgs,
+    },
+}
+
+/// The range of shares a sweep walks, in whole percent.
+///
+/// Integers rather than fractions, and the walk is over them: a step of a tenth accumulated in f64 reaches
+/// `0.30000000000000004` by its third share and publishes it. Dividing each integer by a hundred instead
+/// gives the f64 a caller typing the fraction would have got, with no accumulation anywhere.
+#[derive(Args, Debug, Clone, Copy)]
+struct SweepArgs {
+    /// The first share to answer, in whole percent.
+    #[arg(long)]
+    from: u32,
+    /// The last share to answer, in whole percent. A share the step would carry past it is not answered.
+    #[arg(long)]
+    to: u32,
+    /// How much to raise the share by between records, in whole percent.
+    #[arg(long)]
+    step: u32,
 }
 
 /// Where the radii a run settles are kept, so an interrupted run resumes instead of paying for them
@@ -305,6 +335,15 @@ impl Failure {
         Self::new(exit_code_for_search_error(error), &error)
     }
 
+    /// Bad input this crate has diagnosed itself, where there is no library error to carry the sentence:
+    /// a coordinate off the grid, a window off it, a sweep that runs backwards.
+    fn bad_input(message: impl Into<String>) -> Self {
+        Self {
+            code: EXIT_BAD_INPUT,
+            message: message.into(),
+        }
+    }
+
     fn ledger(error: &LedgerError) -> Self {
         Self::new(exit_code_for_ledger_error(error), error)
     }
@@ -370,6 +409,12 @@ fn run(command: Command) -> Result<String, Failure> {
             search,
             ledger,
         } => smallest_for_share(&cached, share, search, &ledger),
+        Command::Sweep {
+            cached,
+            shares,
+            search,
+            ledger,
+        } => sweep(&cached, shares, search, &ledger),
     }
 }
 
@@ -491,9 +536,8 @@ impl CachedTable {
 /// A function of its own so both arms are testable without a table: what makes a coordinate bad input is
 /// the grid, and opening a cache to find that out would put a fixture in the way of the check.
 fn centre_cell(grid: &Grid, at: LatLon) -> Result<(Row, Col), Failure> {
-    grid.cell_containing(at).ok_or_else(|| Failure {
-        code: EXIT_BAD_INPUT,
-        message: format!(
+    grid.cell_containing(at).ok_or_else(|| {
+        Failure::bad_input(format!(
             "(lat {}, lon {}) is not on a {} x {} grid whose origin is (lat {}, lon {}); a coordinate \
              on the grid's outer southern or eastern boundary lies in no cell",
             at.lat,
@@ -502,7 +546,7 @@ fn centre_cell(grid: &Grid, at: LatLon) -> Result<(Row, Col), Failure> {
             grid.height(),
             grid.origin().lat,
             grid.origin().lon
-        ),
+        ))
     })
 }
 
@@ -549,6 +593,78 @@ fn most_populous(
     )))
 }
 
+/// The ledger at `path` for the table `wanted` names, with room made for it.
+///
+/// The one place this crate opens one, so a sweep cannot open a ledger per share: what a ledger records is
+/// the maximum at a radius, a property of the table alone, so a twenty-five percent share reuses every
+/// radius a fifty percent share paid for.
+fn open_ledger(path: &Path, wanted: &Identity) -> Result<Ledger, Failure> {
+    make_room_for(path)?;
+    Ledger::open_or_empty(path, wanted).map_err(|error| Failure::ledger(&error))
+}
+
+/// The shares a sweep walks, ascending, each converted by [`Share::from_percent`].
+///
+/// A function of its own so the count and every rejection are testable without a table. The walk is over
+/// integers, and the two grounds below are relations between flags rather than properties of one, which is
+/// why they are not a value parser's to refuse.
+fn shares(from: u32, to: u32, step: u32) -> Result<Vec<Share>, Failure> {
+    if step == 0 {
+        return Err(Failure::bad_input(
+            "a sweep's step must be at least one percent; a step of zero never reaches its end",
+        ));
+    }
+    if from > to {
+        return Err(Failure::bad_input(format!(
+            "a sweep runs from the smaller share to the larger; {from}% is above {to}%"
+        )));
+    }
+
+    let mut walk = Vec::new();
+    let mut percent = from;
+    loop {
+        walk.push(
+            Share::from_percent(percent).map_err(|error| Failure::bad_input(error.to_string()))?,
+        );
+        // Saturating, so a step near `u32::MAX` ends the walk rather than wrapping back under `to`.
+        let next = percent.saturating_add(step);
+        if next > to {
+            return Ok(walk);
+        }
+        percent = next;
+    }
+}
+
+fn sweep(
+    cached: &CachedTableArgs,
+    range: SweepArgs,
+    search: SearchArgs,
+    ledger: &LedgerArgs,
+) -> Result<String, Failure> {
+    let cached = CachedTable::open(cached)?;
+    let view = cached.table()?;
+    let walk = shares(range.from, range.to, range.step)?;
+    let mut ledger = open_ledger(&ledger.ledger, &cached.identity)?;
+
+    let mut progress = StderrProgress::new();
+    let mut records = Vec::with_capacity(walk.len());
+    for share in walk {
+        let found = smallest::smallest(&view, share, search.spacing, &mut ledger, &mut progress)
+            .map_err(|error| Failure::smallest(&error))?;
+        records.push(SmallestReport::new(&found, &cached.grid));
+    }
+    progress.finish();
+
+    serialised(serde_json::to_string(&Envelope::with_provenance(
+        SweepDocument::new(
+            LedgerReport::new(ledger.path(), ledger.len()),
+            SweepShares::new(range.from, range.to, range.step),
+            records,
+        ),
+        cached.provenance(),
+    )))
+}
+
 fn smallest_for_share(
     cached: &CachedTableArgs,
     share: Share,
@@ -560,9 +676,7 @@ fn smallest_for_share(
 
     // Against the same identity the table was opened with, so a ledger of some other table is refused
     // rather than resumed from — which is what makes an opt-out unnecessary.
-    make_room_for(&ledger.ledger)?;
-    let mut ledger = Ledger::open_or_empty(&ledger.ledger, &cached.identity)
-        .map_err(|error| Failure::ledger(&error))?;
+    let mut ledger = open_ledger(&ledger.ledger, &cached.identity)?;
 
     let mut progress = StderrProgress::new();
     let found = smallest::smallest(&view, share, search.spacing, &mut ledger, &mut progress)
@@ -584,9 +698,8 @@ fn query_table(cached: &CachedTableArgs, window: Option<Window>) -> Result<Strin
     let grid = cached.grid;
 
     let (rows, cols) = match window {
-        Some(window) => view.covering(window).ok_or_else(|| Failure {
-            code: EXIT_BAD_INPUT,
-            message: format!(
+        Some(window) => view.covering(window).ok_or_else(|| {
+            Failure::bad_input(format!(
                 "the window is not on a {} x {} grid whose origin is (lat {}, lon {}); a coordinate \
                  on the grid's outer southern or eastern boundary lies in no cell, and the whole \
                  extent is what the query does with no window at all",
@@ -594,7 +707,7 @@ fn query_table(cached: &CachedTableArgs, window: Option<Window>) -> Result<Strin
                 grid.height(),
                 grid.origin().lat,
                 grid.origin().lon
-            ),
+            ))
         })?,
         None => view.whole(),
     };
@@ -813,8 +926,8 @@ const fn exit_code_for_search_error(error: SearchError) -> u8 {
 /// hold together — unreadable, not this JSON, or recording two maxima for one radius — is neither the
 /// caller's doing nor a rebuild away from being trusted.
 ///
-/// Absent has no arm because it is not an error: [`Ledger::open_or_empty`] answers a first run with an
-/// empty one.
+/// Absent has no arm because it is not an error: opening a [`Ledger`] answers a first run with an empty
+/// one.
 fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
     match error {
         LedgerError::FormatVersion { .. }
@@ -1106,6 +1219,55 @@ mod tests {
             ))),
             EXIT_BAD_INPUT
         );
+    }
+
+    #[test]
+    fn a_sweep_walks_whole_percent_and_ends_on_its_last_share() {
+        let walk = shares(10, 90, 10).expect("a sweep from a tenth to nine tenths is a range");
+        assert_eq!(walk.len(), 9);
+        assert_eq!(walk.first().map(|share| share.get()), Some(0.1));
+        assert_eq!(walk.last().map(|share| share.get()), Some(0.9));
+        // Ascending and exact, which is what the records inherit.
+        let values: Vec<f64> = walk.iter().map(|share| share.get()).collect();
+        assert_eq!(values, vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]);
+
+        // A share the step would carry past the end is not answered, which is what a stepped range means.
+        let short =
+            shares(10, 95, 10).expect("a range whose step overshoots its end is still a range");
+        assert_eq!(short.len(), 9);
+        assert_eq!(short.last().map(|share| share.get()), Some(0.9));
+
+        // One share is a sweep of one, and everyone is a share.
+        let whole = shares(100, 100, 10).expect("a hundred percent is a share");
+        assert_eq!(whole.len(), 1);
+        assert_eq!(whole.first().map(|share| share.get()), Some(1.0));
+    }
+
+    #[test]
+    fn a_sweep_with_no_step_is_refused() {
+        // Refused rather than looping: a step of zero would settle the first share for ever.
+        let none = shares(10, 90, 0).expect_err("zero is not a step");
+        assert_eq!(none.code, EXIT_BAD_INPUT);
+        assert!(none.message.contains("step"), "{}", none.message);
+    }
+
+    #[test]
+    fn a_sweep_from_no_share_is_refused() {
+        // `Share::from_percent` refuses it, and the reason is the domain's: a circle holding nobody is
+        // satisfied by every radius there is.
+        let empty = shares(0, 90, 10).expect_err("zero percent is not a share");
+        assert_eq!(empty.code, EXIT_BAD_INPUT);
+        // Past a hundred too, wherever the walk reaches it, rather than being silently truncated.
+        assert!(shares(90, 150, 10).is_err());
+    }
+
+    #[test]
+    fn a_sweep_that_runs_backwards_is_refused_rather_than_empty() {
+        // The failure this one exists to prevent is the quiet one: a descending range yielding nothing at
+        // all, and a document of zero records reading as a table with nobody in it.
+        let backwards = shares(60, 40, 10).expect_err("a sweep does not run backwards");
+        assert_eq!(backwards.code, EXIT_BAD_INPUT);
+        assert!(backwards.message.contains("60%"), "{}", backwards.message);
     }
 
     #[test]
