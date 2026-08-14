@@ -30,11 +30,6 @@ repos:
     hooks:
       - id: actionlint-system
 
-  - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v10.0.1
-    hooks:
-      - id: cspell
-
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.17.0
     hooks:
@@ -104,3 +99,24 @@ repos:
         language: system
         types: [toml]
         pass_filenames: false
+
+      # Args match the upstream hook's defaults; --files must stay last so pre-commit's
+      # filenames land after it.
+      - id: cspell
+        name: cspell
+        entry: cspell-cli
+        language: system
+        types: [text]
+        args:
+          - --no-must-find-files
+          - --no-progress
+          - --no-summary
+          - --gitignore
+          - --files
+
+      # `.markdownlint-cli2.jsonc` owns which files and rules apply, so no args are needed here.
+      - id: markdownlint-cli2
+        name: markdownlint-cli2
+        entry: markdownlint-cli2
+        language: system
+        types: [markdown]

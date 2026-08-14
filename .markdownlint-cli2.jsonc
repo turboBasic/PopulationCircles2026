@@ -1,0 +1,19 @@
+{
+  // MD013 (line length) and MD041 (first line must be a top-level heading) are conventions
+  // this project does not enforce — docs/ai-instructions.md "Working style" says not to object
+  // over line length or file placement, and every living doc here already exceeds 80 and often
+  // 100 columns by design. MD041 fires on .github/PULL_REQUEST_TEMPLATE.md, which starts at `##`
+  // on purpose: GitHub renders the PR title as the page's heading.
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD041": false
+  },
+  // docs/decisions/ records are frozen once accepted or complete (docs/ai/platform.md
+  // "Architecture decisions" and "Implementation plans") — only two sanctioned fields may ever
+  // be edited afterward. A linter cannot ask for a style fix there without contradicting that
+  // rule, so the directory is excluded rather than tuned rule-by-rule.
+  "ignores": [
+    "docs/decisions/**"
+  ]
+}

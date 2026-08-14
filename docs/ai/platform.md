@@ -33,6 +33,10 @@ waiting on sources and tests to exist, not on someone noticing them.
 - Python: dev tooling in `[dependency-groups].dev`. No `setup.py`, `setup.cfg` or
   `requirements.txt`. Run `uv lock` after editing dependencies and commit the result in the same
   change.
+- Node: a CLI host only, never an application dependency. Pin `node` and the tool itself in
+  `mise.toml`'s `[tools]` via the `npm:` backend (e.g. `"npm:markdownlint-cli2" = "0.23.2"`);
+  never `npm install -g`. Its prek hook calls the pinned binary directly (`language: system`),
+  the same shape `cargo-fmt`/`taplo-fmt` use, rather than letting the hook manage its own runtime.
 - Before adding a dependency, check whether one already in the tree covers the need. Prefer the
   standard library for anything small.
 - Introducing a new file type or framework updates `.editorconfig`, `.gitattributes` and
@@ -69,6 +73,8 @@ The judgment around that mechanism:
   investigate.
 - cspell checks every tracked file. A legitimate term it flags goes in `.cspell/project.txt`, in the
   section it belongs to — never an inline ignore.
+- Markdown is linted with markdownlint-cli2; `.markdownlint-cli2.jsonc` owns which rules are
+  disabled and why `docs/decisions/` is excluded rather than tuned rule-by-rule.
 
 ### Type checking
 

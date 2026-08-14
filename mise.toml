@@ -8,6 +8,9 @@ prek = "latest"
 actionlint = "latest"
 shellcheck = "latest"
 taplo = "latest"
+node = "24.19.0"
+"npm:markdownlint-cli2" = "0.23.2"
+"npm:cspell-cli" = "10.0.1"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
@@ -87,9 +90,27 @@ run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
 description = "Check Rust, TOML and Python are formatted"
 run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 
+# Puts the prek hook in CI; see `lint:lfs` for why.
+[tasks."lint:markdown"]
+description = "Lint Markdown with markdownlint-cli2"
+run = "prek run --all-files markdownlint-cli2"
+
+# Puts the prek hook in CI; see `lint:lfs` for why.
+[tasks."lint:cspell"]
+description = "Spell-check every tracked file with cspell"
+run = "prek run --all-files cspell"
+
 [tasks.lint]
 description = "Run every linter"
-depends = ["lint:rust", "lint:python", "lint:workflows", "lint:lfs", "lint:format"]
+depends = [
+  "lint:rust",
+  "lint:python",
+  "lint:workflows",
+  "lint:lfs",
+  "lint:format",
+  "lint:markdown",
+  "lint:cspell",
+]
 
 [tasks.typecheck]
 description = "Type-check Rust"

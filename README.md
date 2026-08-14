@@ -28,6 +28,26 @@ mise run data:status                # what is present locally versus pointer-onl
 Skipping is a layered default rather than a guarantee, and the layers are worth knowing before a
 clone surprises you: [`data/README.md`](data/README.md#fetching).
 
+## Usage
+
+Great-circle distance, Wiesbaden to Rome:
+
+```sh
+$ mise run cli -- distance 50.0782 8.2398 41.9028 12.4964
+{"schema_version":1,"tool":"popcircles","result":{"great_circle_km":966.3013398709427, …}}
+```
+
+Grid geometry for the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading
+the file itself:
+
+```sh
+$ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
+    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333
+{"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048046, …}}
+```
+
+`mise run cli -- --help` has the full command and flag reference.
+
 ## Data
 
 The population raster is [GPWv4.11 UN WPP-adjusted population count for 2020][gpw] at 30
@@ -56,10 +76,10 @@ them apply to every change. [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup an
 ## Inspiration
 
 The problem, and the demonstration that it is tractable at full raster resolution, come from
-[alexmijo/PopulationCircles](https://github.com/alexmijo/PopulationCircles) — a C++ project that
-produced the published maps of these circles. This is an independent implementation: the approach
-is reused, the code is not. That repository carries no licence, so none of its source is copied or
-ported here; see [the application doc](docs/ai/application.md#provenance-and-the-copying-rule).
+[alexmijo/PopulationCircles] — a C++ project that produced the published maps of these circles.
+This is an independent implementation: the approach is reused, the code is not. That repository
+carries no licence, so none of its source is copied or ported here;
+see [the application doc](docs/ai/application.md#provenance-and-the-copying-rule).
 
 Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepieris].
 
@@ -69,6 +89,7 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 
 <!-- Link references: badges at the top of this file. -->
 
+[alexmijo/PopulationCircles]: https://github.com/alexmijo/PopulationCircles
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
 [ci]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml/badge.svg?branch=main
