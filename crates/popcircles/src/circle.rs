@@ -49,6 +49,8 @@ pub fn population(table: &Table<'_>, kernel: &Kernel, centre: Col) -> f64 {
 mod tests {
     use std::convert::Infallible;
 
+    use proptest::prelude::*;
+
     use super::*;
     use crate::geodesy::{LatLon, great_circle_km};
     use crate::grid::{Grid, Row};
@@ -310,6 +312,50 @@ mod tests {
             population(&table, &kernel, centre),
             f64::from(cell(row.get(), centre.get()))
         );
+    }
+
+    proptest! {
+        /// The invariant application.md "Correctness invariants" states directly, and the one #7's binary
+        /// search over radius rests on. #4's proptest pinned its geometric half — no row's span narrows as
+        /// the radius grows — and what this adds is that the fold reads every row the wider kernel has: a
+        /// row dropped for some radii leaves every span monotone while the population is not.
+        ///
+        /// Over 1.2's fixture and not a generated payload, deliberately. Monotonicity is a property of the
+        /// cell set, while `Table::population` is a four-corner subtraction: on cells whose partial sums
+        /// round, the wider circle can come back a hair low and the failure would read as a dropped row
+        /// while being the table's arithmetic. Cells no larger than 648 make every rectangle exact, which
+        /// is what turns `>=` from an approximation into the claim.
+        ///
+        /// The radius range reaches caps that close a row, so `Span::FullTurn` is inside the domain rather
+        /// than beside it: at 85 N — row 0 — the far side of the parallel is 1112 km away.
+        #[test]
+        fn growing_the_radius_never_shrinks_the_population(
+            centre_row in 0u32..HEIGHT,
+            centre_col in 0u32..WIDTH,
+            radius_km in 50.0f64..9000.0,
+            growth in 1.0f64..3000.0,
+        ) {
+            let grid = grid();
+            let payload = payload_over(cells());
+            let table = Table::new(grid, &payload).expect("the build emits the padded product");
+            let row = grid.row(centre_row).expect("a row of the fixture");
+            let centre = grid.col(centre_col).expect("a column of the fixture");
+
+            let inner = Kernel::new(grid, row, radius_km)
+                .expect("a whole-globe grid and a radius that is a length");
+            let outer = Kernel::new(grid, row, radius_km + growth)
+                .expect("a whole-globe grid and a radius that is a length");
+
+            let (narrow, wide) = (
+                population(&table, &inner, centre),
+                population(&table, &outer, centre),
+            );
+            prop_assert!(
+                wide >= narrow,
+                "{radius_km} km holds {narrow} and {} km holds {wide}",
+                radius_km + growth
+            );
+        }
     }
 
     #[test]
