@@ -159,7 +159,11 @@ moment. The failure to avoid is not a wrong answer but a quiet third convention.
 
 ## CI
 
-- Pin actions to a full SHA with the version in a trailing comment, never `@main`.
+- Pin actions to a full SHA with the version in a trailing comment, never `@main`. The one exception
+  is a reusable workflow call into `turboBasic/github-actions`, which may stay pinned to a version
+  tag: it is a first-party repo Dependabot already tracks (`.github/dependabot.yml`,
+  `github-actions` ecosystem), so a tag it controls costs no more than the SHA it would otherwise
+  bump to. Every other action, first- or third-party, still takes the full SHA.
 - Reuse `turboBasic/github-actions` reusable workflows wherever one fits. The Rust job is inline
   because no shared `rust-ci.yml` exists yet; extracting one there is the intended next step, and
   until then this repo's `ci.yml` is the prototype for it. Do not fork Python-specific shared

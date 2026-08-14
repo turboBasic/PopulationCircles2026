@@ -12,14 +12,15 @@ mise run setup      # toolchains, dependencies, git hooks
 ## The loop
 
 ```sh
-mise run fmt        # cargo fmt, ruff format, taplo fmt
-mise run lint       # clippy (warnings are errors), ruff, actionlint
-mise run typecheck  # cargo check
-mise run test       # cargo test
+mise run fmt        # format
+mise run lint       # lint
+mise run typecheck  # type-check
+mise run test       # test
 mise run ci         # all of the above — what CI runs
 ```
 
-`mise run ci` is the check to run before opening a PR. Hooks run through
+Each task's description in `mise.toml` names what it actually runs; `mise run ci` is the check to
+run before opening a PR. Hooks run through
 [prek](https://github.com/j178/prek), not pre-commit; the config keeps pre-commit's filename and
 format because prek reads it.
 
