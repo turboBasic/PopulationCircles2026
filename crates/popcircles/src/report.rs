@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::geodesy::{LatLon, wrap_lon};
 use crate::grid::Grid;
 use crate::raster::CellTallies;
+use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
 /// Bumped when a change to a document below is not additive — a renamed or removed field, or one
@@ -18,16 +19,20 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// Every document the program writes.
 ///
 /// `schema_version` is declared first because serde emits struct fields in declaration order, so a
-/// consumer reads the version before anything it might not understand.
+/// consumer reads the version before anything it might not understand. `provenance` precedes `result`
+/// for the same reason one step out: what produced a document is read before the document.
 #[derive(Debug, Clone, Serialize)]
 pub struct Envelope<T> {
     schema_version: u32,
     tool: &'static str,
     tool_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provenance: Option<Provenance>,
     result: T,
 }
 
 impl<T> Envelope<T> {
+    /// A document with no provenance to declare, which is every command that reads no cached table.
     #[must_use]
     pub const fn new(result: T) -> Self {
         Self {
@@ -36,7 +41,48 @@ impl<T> Envelope<T> {
             // the caller's name would make one document's producer unidentifiable from another's.
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            provenance: None,
             result,
+        }
+    }
+
+    /// The fields are spelled out rather than updated over [`Self::new`]: a functional update would drop
+    /// the `None` it replaces, and dropping a value with glue is not something a `const fn` may do.
+    #[must_use]
+    pub const fn with_provenance(result: T, provenance: Provenance) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            tool: env!("CARGO_PKG_NAME"),
+            tool_version: env!("CARGO_PKG_VERSION"),
+            provenance: Some(provenance),
+            result,
+        }
+    }
+}
+
+/// The table a command answered from, and where it sits.
+///
+/// Two of the three facts here are the cache's own and the third is not, which is why the distinction is
+/// documented rather than left to a reader: `digest` and `decimation` are what a cache **attested** to,
+/// because opening one compares both. `grid` is the grid the caller **declared** — the header binds a
+/// width, a height and a factor and no origin or step, so a table built over one geometry opens cleanly
+/// for a query declaring another. `FU-11` is that gap; closing it is a record's call.
+#[derive(Debug, Clone, Serialize)]
+pub struct Provenance {
+    digest: String,
+    decimation: u32,
+    grid: GridSummary,
+    cache: CacheFiles,
+}
+
+impl Provenance {
+    #[must_use]
+    pub fn new(identity: &Identity, header: &Path, payload: &Path) -> Self {
+        Self {
+            digest: hexadecimal(identity.digest),
+            decimation: identity.decimation.factor(),
+            grid: GridSummary::from(identity.decimation.grid()),
+            cache: CacheFiles::new(header, payload),
         }
     }
 }
@@ -147,9 +193,18 @@ pub struct CacheFiles {
     payload: String,
 }
 
-impl TableBuildReport {
+impl CacheFiles {
     /// A path is published with whatever is not UTF-8 replaced, because a document a renderer parses is
     /// UTF-8 and a path is not promised to be.
+    fn new(header: &Path, payload: &Path) -> Self {
+        Self {
+            header: header.to_string_lossy().into_owned(),
+            payload: payload.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+impl TableBuildReport {
     #[must_use]
     pub fn new(built: &BuiltTable, header: &Path, payload: &Path) -> Self {
         Self {
@@ -158,10 +213,7 @@ impl TableBuildReport {
             grid: GridSummary::from(built.decimation.grid()),
             total_population: built.total,
             cells: built.tallies.into(),
-            cache: CacheFiles {
-                header: header.to_string_lossy().into_owned(),
-                payload: payload.to_string_lossy().into_owned(),
-            },
+            cache: CacheFiles::new(header, payload),
         }
     }
 }
@@ -266,6 +318,35 @@ mod tests {
         // to understand anything else.
         let json = serde_json::to_string(&Envelope::new(())).unwrap();
         assert!(json.starts_with(r#"{"schema_version":1,"#), "{json}");
+    }
+
+    /// The provenance of a table over [`degree_grid`], for the two tests that want one and vary nothing
+    /// about it.
+    fn provenance() -> Provenance {
+        Provenance::new(
+            &Identity {
+                digest: 0x3a5d_5e3b_082f_2fb7,
+                decimation: Decimation::none(degree_grid()),
+            },
+            Path::new("out/table.header.json"),
+            Path::new("out/table.payload.bin"),
+        )
+    }
+
+    #[test]
+    fn an_envelope_without_provenance_carries_no_key_for_it() {
+        // The absent case as a substring rather than as a parsed value: what the skip promises is that
+        // the key is not there at all, and a consumer distinguishing absent from null reads the text.
+        let json = serde_json::to_string(&Envelope::new(())).unwrap();
+        assert!(!json.contains("provenance"), "{json}");
+    }
+
+    #[test]
+    fn provenance_is_published_before_the_result_it_produced() {
+        let json = serde_json::to_string(&Envelope::with_provenance((), provenance())).unwrap();
+        let at = json.find(r#""provenance":"#).expect("the key is emitted");
+        let result = json.find(r#""result":"#).expect("the payload is emitted");
+        assert!(at < result, "{json}");
     }
 
     #[test]
