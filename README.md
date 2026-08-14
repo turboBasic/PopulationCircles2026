@@ -46,8 +46,10 @@ $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --o
 {"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048046, …}}
 ```
 
-A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then a
-population query answered from it by mmap — the payload is never resident:
+A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then
+population queries answered from it by mmap — the payload is never resident. The `query` function is
+this file's doing rather than the CLI's, because the same grid, table and digest go to every query and
+only the window changes:
 
 ```sh
 $ mise run cli -- table build --raster data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif \
@@ -56,18 +58,38 @@ $ mise run cli -- table build --raster data/population/gpw-v4-11-unwpp-adjusted-
     --nodata -3.40282306073709653e38 --epsg 4326 --decimate 10 --cache out/gpw-5arcmin
 {"schema_version":1, …,"result":{"digest":"0xf17aa802a6890f0c","total_population":7757982599.323671, …}}
 
-$ mise run cli -- table query --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
-    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 --decimate 10 \
-    --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c --north -12 --south -21 --west 176 --east -178
-{"schema_version":1, …,"result":{"columns":{"west":4272,"east":24,"full_turn":false},"population":919250.7823575613, …}}
+$ query() { mise run cli -- table query --width 43200 --height 21600 --origin-lat 90 \
+    --origin-lon -180 --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
+
+$ query                                                            # every cell there is
+{…,"rows":{"north":0,"south":2159},"columns":{"west":0,"east":4319,"full_turn":true},"population":7757982599.323671}}
+
+$ query --north 55.06 --south 47.27 --west 5.87 --east 15.04       # the box around Germany
+{…,"rows":{"north":419,"south":512},"columns":{"west":2230,"east":2340,"full_turn":false},"population":103837251.96947795}}
+
+$ query --north 52.38 --south 44.39 --west 22.14 --east 40.23      # the box around Ukraine
+{…,"rows":{"north":451,"south":547},"columns":{"west":2425,"east":2642,"full_turn":false},"population":75109401.82679437}}
+
+$ query --north -12 --south -21 --west 176 --east -178             # Fiji, across the antimeridian
+{…,"rows":{"north":1224,"south":1332},"columns":{"west":4272,"east":24,"full_turn":false},"population":919250.7823575613}}
 ```
 
 The digest names the cells a table was built from, so it is what a query passes back to say which
-table it wants — and a cache of any other table is refused rather than reused. With no window the
-query covers the table's whole extent; with one, `west` above `east` is a span across the
-antimeridian and needs nothing said about it. Both cache files land under `out/`, which is gitignored
-because a generated table is never committed. Building needs the raster, so `mise run data:pull`
-first.
+table it wants — and a cache of any other table is refused rather than reused. The Fiji window wraps
+the antimeridian, which needs nothing said about it because `west` is above `east`; the whole extent,
+though, is what a query with no window covers, because −180 and 180 reduce to the same column and so
+no pair of coordinates can mean the globe.
+
+**A window is a box, not a country.** The middle two are the bounding boxes of Germany and Ukraine,
+and each holds a good deal more than the country it is named for: the German box takes in the
+Netherlands, Belgium, Czechia, Austria and Switzerland whole, and parts of Poland, France and Denmark.
+Counting a country needs a mask over the grid, which is a later step — and treating a box, or a
+circle, as a country is the spec error
+[the application doc](docs/ai/application.md#what-this-program-does) names.
+
+Both cache files land under `out/`, which is gitignored because a generated table is never committed.
+Building needs the raster, so `mise run data:pull` first.
 
 `mise run cli -- --help` has the full command and flag reference.
 
