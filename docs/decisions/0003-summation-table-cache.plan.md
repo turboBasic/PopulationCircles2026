@@ -5,7 +5,7 @@ created: 2026-08-14
 
 # Implementation plan — ADR 0003, the summation table and its cache
 
-**Status: in progress (2026-08-14).** Carries the work
+**Status: complete (2026-08-14).** Carries the work
 [ADR 0003](0003-summation-table-cache.md) decided, which is the whole of issue #3: the table, its
 accuracy, its cache and the one `unsafe` that reads it. Nothing that consumes the table is here — #4's
 kernels and #5's circle evaluation are the first callers, and both are behind this.
@@ -197,7 +197,7 @@ it. 3.2 is a register entry and `gh` edits.
       `mise run lint:docs` green, which is the check that would catch a path named here and absent on
       disk; `prek run --all-files` green.
 
-- [ ] **3.2 Close the plan.** `FU-06` in [`../follow-ups.md`](../follow-ups.md), in that file's format
+- [x] **3.2 Close the plan.** `FU-06` in [`../follow-ups.md`](../follow-ups.md), in that file's format
       and meeting its bar: nothing couples a change of the cache header's shape to a bump of its format
       version, with a condition worded against this tree and a fix that notes it is `FU-03`'s shape for a
       second constant, so one hook can discharge both.
