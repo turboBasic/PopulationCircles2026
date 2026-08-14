@@ -360,9 +360,8 @@ impl HeldKernel {
 /// search runs, so a global total would be a figure this function had to revise.
 ///
 /// # Errors
-/// [`SearchError::Radius`] when `radius` is large enough that widening it by a block's slack overflows —
-/// legal input, absurd value. [`SearchError::Kernel`] when the table's grid has no kernels at all, which
-/// is a grid whose columns do not close.
+/// [`SearchError::Kernel`], the only variant there is, when the table's grid has no kernels at all —
+/// which is a grid whose columns do not close.
 ///
 /// # Panics
 /// If the table's grid yields no block to examine. A [`Grid`] has at least one cell and the first block

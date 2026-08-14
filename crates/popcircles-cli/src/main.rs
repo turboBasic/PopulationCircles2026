@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::{IsTerminal, Write};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -12,9 +13,10 @@ use popcircles::kernel::{Kernel, KernelError};
 use popcircles::progress::Progress;
 use popcircles::raster::{PixelType, RasterError, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
-    CircleReport, DistanceReport, Envelope, GridSummary, Provenance, TableBuildReport,
-    TableQueryReport,
+    CircleReport, DistanceReport, Envelope, GridSummary, MostPopulousReport, Provenance,
+    TableBuildReport, TableQueryReport,
 };
+use popcircles::search::{self, SearchError};
 use popcircles::table::cache::{Cache, CacheError, Identity, Mapped};
 use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build};
 
@@ -62,6 +64,31 @@ enum Command {
         #[arg(long, allow_negative_numbers = true, value_parser = parse_radius)]
         radius_km: RadiusKm,
     },
+    /// The most populous circle of a fixed ground radius, over every cell centre of the grid.
+    MostPopulous {
+        #[command(flatten)]
+        cached: CachedTableArgs,
+        /// The circle's ground radius: a great-circle arc on the sphere, never a distance in degrees.
+        #[arg(long, allow_negative_numbers = true, value_parser = parse_radius)]
+        radius_km: RadiusKm,
+        #[command(flatten)]
+        search: SearchArgs,
+    },
+}
+
+/// What the branch and bound needs beyond the circle it is looking for.
+///
+/// Required and with no default, deliberately. The search answers the same thing at every spacing —
+/// refinement runs to single cells — so what this changes is only how long it takes, and the useful range
+/// is a measured property of the raster and the radius that nothing here has measured. A default would
+/// make this crate the author of a figure it took from nowhere.
+#[derive(Args, Debug, Clone, Copy)]
+struct SearchArgs {
+    /// The side, in cells, of the blocks the first level is tiled into. It changes how long the search
+    /// takes and not what it answers: tiles as wide as one cell are a brute force over every centre, and
+    /// tiles wide enough that a block's bound covers the globe prune nothing.
+    #[arg(long)]
+    spacing: NonZeroU32,
 }
 
 #[derive(Subcommand, Debug, Clone, Copy)]
@@ -246,6 +273,11 @@ impl Failure {
         Self::new(exit_code_for_kernel_error(error), &error)
     }
 
+    /// By value for [`Self::kernel`]'s reason: a `SearchError` wraps one and is no wider.
+    fn search(error: SearchError) -> Self {
+        Self::new(exit_code_for_search_error(error), &error)
+    }
+
     /// The whole source chain, because a `thiserror` message is one link and the sentence naming the
     /// file or the syscall is usually the one beneath it.
     fn new(code: u8, error: &dyn std::error::Error) -> Self {
@@ -292,6 +324,11 @@ fn run(command: Command) -> Result<String, Failure> {
             lon,
             radius_km,
         } => population_at(&cached, lat, lon, radius_km),
+        Command::MostPopulous {
+            cached,
+            radius_km,
+            search,
+        } => most_populous(&cached, radius_km, search),
     }
 }
 
@@ -458,6 +495,27 @@ fn population_at(
 
     serialised(serde_json::to_string(&Envelope::with_provenance(
         CircleReport::new(requested, cell, &cached.grid, radius, population, total),
+        cached.provenance(),
+    )))
+}
+
+fn most_populous(
+    cached: &CachedTableArgs,
+    radius: RadiusKm,
+    search: SearchArgs,
+) -> Result<String, Failure> {
+    let cached = CachedTable::open(cached)?;
+    let view = cached.table()?;
+    let (rows, cols) = view.whole();
+    let total = view.population(rows, cols);
+
+    let mut progress = StderrProgress::new();
+    let found = search::most_populous(&view, radius, search.spacing, &mut progress)
+        .map_err(Failure::search)?;
+    progress.finish();
+
+    serialised(serde_json::to_string(&Envelope::with_provenance(
+        MostPopulousReport::new(&found, &cached.grid, total),
         cached.provenance(),
     )))
 }
@@ -661,6 +719,13 @@ const fn exit_code_for_kernel_error(error: KernelError) -> u8 {
     }
 }
 
+/// One variant, and it is the kernel's, so a search inherits that classification rather than restating it.
+const fn exit_code_for_search_error(error: SearchError) -> u8 {
+    match error {
+        SearchError::Kernel(error) => exit_code_for_kernel_error(error),
+    }
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
 // narrow exemption; docs/ai/code.md allows both in tests.
 #[cfg(test)]
@@ -861,6 +926,44 @@ mod tests {
             exit_code_for_kernel_error(KernelError::ColumnsDoNotClose { lon_span: 90.0 }),
             EXIT_BAD_INPUT
         );
+        // A search's only failure is the kernel's, and it keeps the kernel's class.
+        assert_eq!(
+            exit_code_for_search_error(SearchError::Kernel(KernelError::ColumnsDoNotClose {
+                lon_span: 90.0
+            })),
+            EXIT_BAD_INPUT
+        );
+    }
+
+    #[test]
+    fn a_search_without_a_spacing_is_a_usage_error() {
+        // Required rather than defaulted, which is FU-08's distinction: a command that forwards the
+        // caller's number chooses nothing, and inventing a figure here is what that entry exists to stop.
+        let named = ["popcircles", "most-populous"];
+        let circle = ["--radius-km", "3000"];
+
+        let without =
+            Cli::try_parse_from(named.into_iter().chain(cached_table_flags()).chain(circle));
+        assert!(without.is_err());
+
+        let with = Cli::try_parse_from(
+            named
+                .into_iter()
+                .chain(cached_table_flags())
+                .chain(circle)
+                .chain(["--spacing", "8"]),
+        );
+        assert!(with.is_ok(), "{with:?}");
+
+        // Zero is not a spacing, and `NonZeroU32` is what refuses it rather than a check in this crate.
+        let zero = Cli::try_parse_from(
+            named
+                .into_iter()
+                .chain(cached_table_flags())
+                .chain(circle)
+                .chain(["--spacing", "0"]),
+        );
+        assert!(zero.is_err());
     }
 
     #[test]
