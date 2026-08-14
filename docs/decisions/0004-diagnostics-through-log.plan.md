@@ -160,7 +160,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
       the two runs, which is the property box 6 exists to protect. The cache may be the 5 arcmin table or
       the synthetic one `Fixture::build` writes, which reaches the same code path with no raster.
 
-- [ ] **2.2 `info` narrates the raster and cache `table build` reads and writes.** The other half of box
+- [x] **2.2 `info` narrates the raster and cache `table build` reads and writes.** The other half of box
       6's "the raster and cache in use", and its own task because `table build` opens no cache — 2.1's
       record is in `CachedTable::open` and this command never calls it. One record naming the raster path
       and the decimation before the pass, one naming the header and payload it published after.

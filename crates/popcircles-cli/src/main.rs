@@ -501,6 +501,14 @@ fn build_table(
     let cache = Cache::new(&table.cache);
     make_room_for(&table.cache)?;
 
+    // Box 6's other half, and the reason it is not `CachedTable::open`'s record: this command opens no
+    // cache. After the file was opened rather than before, so the record names a raster that is there.
+    log::info!(
+        "reading {} at decimation {}",
+        raster.display(),
+        decimation.factor()
+    );
+
     let mut writer = cache.writer().map_err(|error| Failure::cache(&error))?;
     let mut progress = StderrProgress::new();
     let built = build(source, decimation, &mut progress, |row| {
@@ -511,6 +519,13 @@ fn build_table(
         .publish(&built)
         .map_err(|error| Failure::cache(&error))?;
     progress.finish();
+
+    // After `finish`, so the meter's own line is closed rather than written over.
+    log::info!(
+        "published {} and {}",
+        cache.header_path().display(),
+        cache.payload_path().display()
+    );
 
     serialised(serde_json::to_string(&Envelope::new(
         TableBuildReport::new(&built, cache.header_path(), cache.payload_path()),
