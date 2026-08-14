@@ -58,9 +58,12 @@ pmtiles
 tiffinfo
 
 # --- Library and API identifiers ---
+anstream
+anstyle
 bpaf
 bytemuck
 colortype
+corasick
 flate
 indicatif
 insta
