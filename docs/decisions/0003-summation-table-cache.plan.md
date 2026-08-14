@@ -55,7 +55,7 @@ These add to the normal task loop; they do not replace it.
 error, which is the failure mode `application.md` "Correctness invariants" is written against. Nothing
 in this phase touches a file or adds a crate.
 
-- [ ] **1.1 The progress sink exists.** `crates/popcircles/src/progress.rs`, declared in `lib.rs`: a
+- [x] **1.1 The progress sink exists.** `crates/popcircles/src/progress.rs`, declared in `lib.rs`: a
       trait with one method, `fn advance(&mut self, done: u64, total: u64)`, and an implementation for
       `()` that does nothing, so a caller wanting no reporting passes `()` and the builder's signature
       does not fork. ADR 0001 decision 4 fixed this shape and left it undeclared until a caller existed;
