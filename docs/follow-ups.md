@@ -153,7 +153,11 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-07 - A radius in kilometres is a bare f64 in more than one signature
 
-- **Status** — `dormant`.
+- **Status** — `closed` (2026-08-14): `RadiusKm` in `crates/popcircles/src/geodesy.rs` is the fix below,
+  and `Kernel::new` takes one, so the sweep now names no signature at all rather than one. The second
+  caller was #6's search over candidate centres, not #7's binary search this entry expected: the search
+  builds a kernel per candidate row and a second per widened bound radius, so it takes a radius by value
+  one issue earlier than predicted.
 - **Condition** — more than one **public** library signature takes a radius in kilometres as a bare
   `f64`. The sweep is `rg -n 'pub fn [a-z_]+\([^)]*radius_km: f64' crates/popcircles/src`, which names
   exactly one on 2026-08-14: `Kernel::new`. Three near misses the wording excludes deliberately —
