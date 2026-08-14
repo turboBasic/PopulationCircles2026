@@ -52,8 +52,9 @@ mod tests {
     use super::*;
     use crate::geodesy::{LatLon, great_circle_km};
     use crate::grid::{Grid, Row};
+    use crate::kernel::Span;
     use crate::raster::Synthetic;
-    use crate::table::{Decimation, build};
+    use crate::table::{ColSpan, Decimation, build};
 
     const WIDTH: u32 = 36;
     const HEIGHT: u32 = 18;
@@ -215,6 +216,99 @@ mod tests {
         assert_eq!(
             population(&table, &kernel, centre).to_bits(),
             population(&table, &kernel, centre).to_bits()
+        );
+    }
+
+    /// The fixture and a table over it, which every case below wants and none of them varies.
+    fn fixture() -> (Grid, Vec<f64>) {
+        (grid(), payload_over(cells()))
+    }
+
+    #[test]
+    fn a_cap_over_the_pole_counts_the_polar_row_once() {
+        // Row 0 is 85 N and a 2000 km cap is 17.99 degrees, so the far side of that parallel is 10
+        // degrees away and the whole row is inside: the case a fold assembling a closed row from two
+        // pieces would double-count. The span is asserted as well as the population, so a later change
+        // that stops closing the row fails here rather than passing on a case it no longer covers.
+        let (grid, payload) = fixture();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let row = grid.row(0).expect("a row of the fixture");
+        let kernel = Kernel::new(grid, row, 2000.0)
+            .expect("a whole-globe grid and a radius that is a length");
+
+        assert_eq!(kernel.rows().next(), Some((row, Span::FullTurn)));
+        for centre_col in [0u32, 18] {
+            let centre = grid.col(centre_col).expect("a column of the fixture");
+            assert_eq!(
+                population(&table, &kernel, centre),
+                by_distance(&grid, (row, centre), 2000.0),
+                "column {centre_col}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_cap_across_the_antimeridian_counts_both_sides() {
+        // Row 9 is 5 S and a 1500 km cap reaches a column either side, so placing it on column 0 runs
+        // back onto column 35: west holds the higher index, which is a wrap and not an inversion.
+        let (grid, payload) = fixture();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let row = grid.row(9).expect("a row of the fixture");
+        let centre = grid.col(0).expect("a column of the fixture");
+        let kernel = Kernel::new(grid, row, 1500.0)
+            .expect("a whole-globe grid and a radius that is a length");
+
+        let (_, cols) = kernel
+            .place(centre)
+            .find(|(placed, _)| *placed == row)
+            .expect("the centre row is in the band");
+        match cols {
+            ColSpan::Through { west, east } => {
+                assert!(west.get() > east.get(), "{west:?} {east:?}");
+            }
+            ColSpan::FullTurn => panic!("a 1500 km cap does not close a row at 5 S on this grid"),
+        }
+
+        assert_eq!(
+            population(&table, &kernel, centre),
+            by_distance(&grid, (row, centre), 1500.0)
+        );
+    }
+
+    #[test]
+    fn a_cap_larger_than_the_globe_is_the_whole_table() {
+        // Past half the circumference, so every row closes and the circle is the world. Compared against
+        // the table's own extent rather than against a second sum of its own: a fold that double-counted a
+        // seam or read a row twice would agree with another fold making the same mistake, and cannot agree
+        // with this.
+        let (grid, payload) = fixture();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let kernel = Kernel::new(grid, grid.middle_row(), 20_016.0)
+            .expect("a whole-globe grid and a radius that is a length");
+        let (rows, cols) = table.whole();
+
+        assert_eq!(
+            population(
+                &table,
+                &kernel,
+                grid.col(23).expect("a column of the fixture")
+            ),
+            table.population(rows, cols)
+        );
+    }
+
+    #[test]
+    fn a_zero_radius_is_the_centre_cell() {
+        // Degenerate and legal: the centre cell is within zero of itself and no other cell is.
+        let (grid, payload) = fixture();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let row = grid.row(4).expect("a row of the fixture");
+        let centre = grid.col(29).expect("a column of the fixture");
+        let kernel = Kernel::new(grid, row, 0.0).expect("zero is a length");
+
+        assert_eq!(
+            population(&table, &kernel, centre),
+            f64::from(cell(row.get(), centre.get()))
         );
     }
 
