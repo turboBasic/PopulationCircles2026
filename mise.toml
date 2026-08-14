@@ -48,9 +48,14 @@ run = [
   "git config --local fetch.prune true",
 ]
 
+# --release for the reason `test:raster` and `test:slow` carry it, and this task's only caller makes it
+# safe: a person at a terminal. Nothing in CI, no task's `depends`, no hook and no test runs it. A pass
+# over the registry raster takes seconds optimised and minutes unoptimised, so a debug build here is how
+# a timing gets quoted an order of magnitude wrong. The cost is a slower compile after each edit, thin
+# LTO included; a fast inner loop is `cargo run` directly.
 [tasks.cli]
-description = "Run the popcircles CLI"
-run = "cargo run -p popcircles-cli --"
+description = "Run the popcircles CLI, optimised"
+run = "cargo run --release -p popcircles-cli --"
 
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
