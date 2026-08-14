@@ -7,6 +7,7 @@ pub mod cache;
 
 use std::num::NonZeroU32;
 
+use crate::bracket::Bracket;
 use crate::geodesy::RadiusKm;
 use crate::grid::{Col, Grid, Row};
 use crate::kernel::Kernel;
@@ -308,6 +309,11 @@ fn probe<L: RadiusLedger>(
     ledger: &mut L,
     stats: &mut SmallestStats,
 ) -> Result<Candidate, SmallestError<L::Error>> {
+    // Box 7's third granularity, opened before the ledger is asked so a radius it answers is bracketed like
+    // any other: the pair's near-zero duration is what says a rerun did no work, where emitting nothing
+    // would leave a reader unable to tell that from a radius never tried.
+    let _bracket = Bracket::open(module_path!(), format!("radius {km} km"));
+
     if let Some(found) = ledger.get(km) {
         stats.radii_reused += 1;
         // Inside the early return, so a record is emitted once per call on both paths and their count is

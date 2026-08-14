@@ -233,7 +233,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       and end records are equal in number **per operation name** — `rg -cw`, counted per name rather than
       globally, since equal global totals survive one step's pair being mismatched against another's.
 
-- [ ] **2.6 Each radius trial is bracketed, warm ledger included.** Box 7's third granularity, in
+- [x] **2.6 Each radius trial is bracketed, warm ledger included.** Box 7's third granularity, in
       `smallest::probe`. A radius the ledger answers is bracketed like any other — it opens, it closes, and
       its near-zero duration is what says a rerun did no work, where emitting nothing would leave a reader
       unable to tell that from a radius never tried.
