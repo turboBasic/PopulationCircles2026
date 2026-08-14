@@ -9,7 +9,8 @@
 // test reproduces — application.md "Correctness invariants".
 
 use crate::geodesy::{LatLon, angular_distance_rad, central_angle_rad};
-use crate::grid::{Grid, Row};
+use crate::grid::{Col, Grid, Row};
+use crate::table::ColSpan;
 
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum KernelError {
@@ -238,6 +239,41 @@ impl Kernel {
             .skip(self.north.get() as usize)
             .zip(self.spans.iter().copied())
     }
+
+    /// The kernel laid on a centre column: each row it reaches and the columns it covers there, in the
+    /// terms [`crate::table::Table::population`] takes.
+    ///
+    /// Yielding a [`ColSpan`] rather than a shape of its own is deliberate. A second spelling of
+    /// "wrapped columns" would have to be converted into that one somewhere, and the conversion is
+    /// exactly where the double count [`ColSpan::FullTurn`] exists to prevent comes back.
+    ///
+    /// The offsets are symmetric about the centre, so which of a [`ColSpan::Through`]'s two fields the
+    /// lower index lands in follows `lon_step`'s sign. The set of columns does not, and neither does its
+    /// population.
+    ///
+    /// # Panics
+    /// If `centre` was minted by a larger grid; [`crate::grid::Row`] says why that is a stop.
+    pub fn place(&self, centre: Col) -> impl Iterator<Item = (Row, ColSpan)> + '_ {
+        assert!(
+            centre.get() < self.grid.width(),
+            "column {} is not a column of a {}-column grid",
+            centre.get(),
+            self.grid.width()
+        );
+        self.rows().map(move |(row, span)| {
+            let cols = match span {
+                Span::FullTurn => ColSpan::FullTurn,
+                Span::Around { half_width } => {
+                    let offset = i64::from(half_width);
+                    ColSpan::Through {
+                        west: self.grid.col_along(centre, -offset),
+                        east: self.grid.col_along(centre, offset),
+                    }
+                }
+            };
+            (row, cols)
+        })
+    }
 }
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
@@ -246,7 +282,7 @@ impl Kernel {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use proptest::prelude::*;
 
@@ -520,6 +556,153 @@ mod tests {
     fn a_finer_grids_row_is_no_centre_here() {
         let centre = row(&globe(4), 719);
         let _ = Kernel::new(globe(1), centre, 500.0);
+    }
+
+    /// An east-to-west whole globe, where a placed span's `west` field holds the eastern column: the set
+    /// of columns is the same either way, which is what `place` claims and this is what tests it.
+    fn westward() -> Grid {
+        Grid::new(
+            360,
+            180,
+            LatLon {
+                lat: 90.0,
+                lon: 180.0,
+            },
+            -1.0,
+            -1.0,
+        )
+        .expect("an east-to-west whole-globe grid is valid")
+    }
+
+    fn col(grid: &Grid, index: u32) -> Col {
+        grid.col(index).expect("a column of the fixture")
+    }
+
+    /// The columns a span names, expanded, so a wrapped one and a closed one are the same kind of thing.
+    fn columns(grid: &Grid, span: ColSpan) -> Vec<u32> {
+        match span {
+            ColSpan::FullTurn => (0..grid.width()).collect(),
+            ColSpan::Through { west, east } => {
+                if west.get() <= east.get() {
+                    (west.get()..=east.get()).collect()
+                } else {
+                    (west.get()..grid.width()).chain(0..=east.get()).collect()
+                }
+            }
+        }
+    }
+
+    fn placed(grid: &Grid, kernel: &Kernel, centre: Col) -> BTreeSet<(u32, u32)> {
+        kernel
+            .place(centre)
+            .flat_map(|(row, cols)| {
+                columns(grid, cols)
+                    .into_iter()
+                    .map(move |col| (row.get(), col))
+            })
+            .collect()
+    }
+
+    /// Every cell of the whole grid within `radius_km` of the centre cell, by the distance test and
+    /// nothing else. The scan covers the grid rather than the kernel's band, which is the only way it can
+    /// catch a cell the kernel left out.
+    fn by_distance(grid: &Grid, centre: (Row, Col), radius_km: f64) -> BTreeSet<(u32, u32)> {
+        let from = grid.centre_of(centre.0, centre.1);
+        grid.rows()
+            .flat_map(|row| grid.cols().map(move |col| (row, col)))
+            .filter(|(row, col)| great_circle_km(from, grid.centre_of(*row, *col)) <= radius_km)
+            .map(|(row, col)| (row.get(), col.get()))
+            .collect()
+    }
+
+    #[test]
+    fn a_placed_kernel_is_the_cells_a_distance_test_admits() {
+        // Row 2 is 87.5 N, where a 1000 km cap covers the pole; row 45 is mid-latitude; row 90 straddles
+        // the equator. Columns 0 and 359 put the seam inside the span, which is the case a span clipped
+        // instead of wrapped would fail on.
+        let grid = globe(1);
+        for centre_row in [2u32, 45, 90] {
+            for radius_km in [1000.0, 4000.0] {
+                let kernel = kernel(grid, centre_row, radius_km);
+                for centre_col in [0u32, 180, 359] {
+                    let centre = (row(&grid, centre_row), col(&grid, centre_col));
+                    assert_eq!(
+                        placed(&grid, &kernel, centre.1),
+                        by_distance(&grid, centre, radius_km),
+                        "row {centre_row}, column {centre_col}, radius {radius_km} km"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_placed_kernel_on_a_westward_grid_is_the_same_cells() {
+        // The compass names in a `ColSpan` follow the grid's column direction; the cells do not. Nothing
+        // in the kernel knows which way the columns run, and this is what says that is sound.
+        let grid = westward();
+        let kernel =
+            Kernel::new(grid, row(&grid, 60), 2500.0).expect("a whole-globe grid has kernels");
+        for centre_col in [0u32, 359] {
+            let centre = (row(&grid, 60), col(&grid, centre_col));
+            assert_eq!(
+                placed(&grid, &kernel, centre.1),
+                by_distance(&grid, centre, 2500.0),
+                "column {centre_col}"
+            );
+        }
+    }
+
+    #[test]
+    fn one_kernel_serves_every_centre_on_its_row() {
+        // The claim the offsets are for: placing the same kernel anywhere along its row gives the same
+        // shape, shifted. Asserted as the shifted set rather than as a count, because two different
+        // shapes can share a cell count.
+        let grid = globe(1);
+        let kernel = kernel(grid, 70, 3000.0);
+        let at_origin = placed(&grid, &kernel, col(&grid, 0));
+
+        for centre_col in grid.cols() {
+            let here = placed(&grid, &kernel, centre_col);
+            let shifted: BTreeSet<(u32, u32)> = at_origin
+                .iter()
+                .map(|(row, column)| (*row, (column + centre_col.get()) % grid.width()))
+                .collect();
+            assert_eq!(here, shifted, "column {}", centre_col.get());
+        }
+    }
+
+    #[test]
+    fn a_closed_row_places_as_the_full_turn_and_never_as_a_pair() {
+        let grid = globe(1);
+        let closed = kernel(grid, 90, 20_016.0);
+        assert!(
+            closed
+                .place(col(&grid, 17))
+                .all(|(_, cols)| cols == ColSpan::FullTurn)
+        );
+
+        // And the seam beside a partial span: at column 0 the span runs back past the first column onto
+        // the last, so west holds the higher index. That is a wrap, not an inversion.
+        let small = kernel(grid, 90, 500.0);
+        let (_, cols) = small
+            .place(col(&grid, 0))
+            .find(|(row, _)| *row == small.centre())
+            .expect("the centre row is in the band");
+        match cols {
+            ColSpan::Through { west, east } => {
+                assert!(west.get() > east.get(), "{west:?} to {east:?}");
+                assert_eq!(columns(&grid, cols).len(), 2 * 4 + 1);
+            }
+            ColSpan::FullTurn => panic!("a 500 km cap does not close a row at the equator"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "is not a column of a 360-column grid")]
+    fn a_finer_grids_column_is_no_centre_here() {
+        let centre = col(&globe(4), 1439);
+        let _ = kernel(globe(1), 90, 500.0).place(centre);
     }
 
     /// Whether `wider` covers every column `narrower` does, both being spans about one centre.
