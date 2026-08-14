@@ -387,7 +387,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
                 population: total,
             },
             target,
-            share_achieved: achieved(total, total),
+            share_achieved: share_of(total, total),
             short_below,
             covers_whole_grid: true,
             predicate_slack_persons: predicate_slack_persons(&grid, total),
@@ -422,7 +422,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         radius: RadiusKm::from(high),
         centre: best,
         target,
-        share_achieved: achieved(best.population, total),
+        share_achieved: share_of(best.population, total),
         // Only the radius directly below the answer is a witness to its minimality; a short probe further
         // down is one the bisection has already superseded.
         short_below: short_below.filter(|(km, _)| Some(*km) == high.checked_sub(1)),
@@ -435,7 +435,10 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
 
 /// The share a population is of a total, and zero when the total is nothing: every circle over an empty
 /// table achieves the same nothing, and `0 / 0` would publish a `NaN` standing for it.
-fn achieved(population: f64, total: f64) -> f64 {
+///
+/// `pub(crate)` because [`crate::report`] publishes the same quotient for a circle nothing searched for,
+/// and two answers to one question is how a renderer ends up printing `NaN%`.
+pub(crate) fn share_of(population: f64, total: f64) -> f64 {
     if total > 0.0 { population / total } else { 0.0 }
 }
 

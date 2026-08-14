@@ -6,9 +6,10 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::geodesy::{LatLon, wrap_lon};
-use crate::grid::Grid;
+use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
+use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
+use crate::smallest::share_of;
 use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
@@ -297,19 +298,73 @@ impl TableQueryReport {
     }
 }
 
+/// One circle a caller named, and the population it holds.
+///
+/// Both coordinates are published because they are different questions. `requested` is what was asked
+/// for; `centre` is the centre of the cell the grid resolved it to, which is where the circle actually
+/// sits — up to half a cell away, and 500 m of that at the registry raster's resolution.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct CircleReport {
+    requested: Coordinate,
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    radius_km: f64,
+    population: f64,
+    total_population: f64,
+    share_of_total: f64,
+}
+
+impl CircleReport {
+    #[must_use]
+    pub fn new(
+        requested: LatLon,
+        cell: (Row, Col),
+        grid: &Grid,
+        radius: RadiusKm,
+        population: f64,
+        total: f64,
+    ) -> Self {
+        let (row, col) = cell;
+        Self {
+            requested: requested.into(),
+            centre: grid.centre_of(row, col).into(),
+            row: row.get(),
+            col: col.get(),
+            radius_km: radius.km(),
+            population,
+            total_population: total,
+            share_of_total: share_of(population, total),
+        }
+    }
+}
+
 /// The one spelling of a digest, so the string a build publishes is the string a query accepts.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
 }
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
-// narrow exemption; docs/ai/code.md allows both in tests.
+// narrow exemption; docs/ai/code.md allows both in tests. float_cmp is the point rather than a
+// concession: the fixture's cells are small distinct integers, so every figure a document below carries
+// is an exact f64 and a tolerance would let a dropped row pass. cast_precision_loss likewise — the
+// largest cell is 648, which u32 -> f32 holds exactly.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp,
+    clippy::cast_precision_loss
+)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::*;
+    use crate::circle;
     use crate::geodesy::great_circle_km;
-    use crate::table::Decimation;
+    use crate::kernel::Kernel;
+    use crate::raster::Synthetic;
+    use crate::table::{Decimation, Table, build};
 
     #[test]
     fn the_envelope_leads_with_its_schema_version() {
@@ -440,6 +495,131 @@ mod tests {
             ColSpan::FullTurn,
             7_757_982_599.32,
         )));
+    }
+
+    const FIXTURE_WIDTH: u32 = 36;
+    const FIXTURE_HEIGHT: u32 = 18;
+
+    /// The registry raster's sentinel, so a fixture reaches the table by the path a real raster takes.
+    const NODATA: f32 = -3.402_823e38;
+
+    /// The fixture every search document below is built over: ten degrees a side, closing in longitude
+    /// because [`Kernel::new`] refuses a grid that does not, and small enough that a whole search over it
+    /// is a fraction of a second. It is `circle.rs`'s and `search.rs`'s shape, so a figure a document
+    /// here carries can be read against the tests that pinned the computation.
+    fn fixture_grid() -> Grid {
+        Grid::new(
+            FIXTURE_WIDTH,
+            FIXTURE_HEIGHT,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            10.0,
+            -10.0,
+        )
+        .expect("a 36 x 18 whole-globe grid is valid")
+    }
+
+    /// Distinct at every position and no larger than 648, so every partial sum is exact in f64: a cell
+    /// counted twice or dropped moves a published figure rather than hiding in a rounding.
+    fn fixture_cell(row: u32, col: u32) -> f32 {
+        (row * FIXTURE_WIDTH + col + 1) as f32
+    }
+
+    /// The padded payload a real build emits over `cell`, rather than one written out by hand: the
+    /// fixture is then the path the search takes and not a second construction of it.
+    fn payload_over(grid: &Grid, cell: impl Fn(u32, u32) -> f32) -> Vec<f64> {
+        let rows: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| (0..grid.width()).map(|col| cell(row, col)).collect())
+            .collect();
+        let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        build(source, Decimation::none(*grid), &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        payload
+    }
+
+    fn fixture_payload() -> Vec<f64> {
+        payload_over(&fixture_grid(), fixture_cell)
+    }
+
+    /// The population inside a circle of `radius_km` about the cell holding `at`, with the cell.
+    ///
+    /// The path `population-at` takes: snap the coordinate, build the cap, fold it. So the document below
+    /// is over the computation the command performs rather than over an assembled figure.
+    fn circle_at(
+        table: &Table<'_>,
+        at: LatLon,
+        radius_km: f64,
+    ) -> ((Row, Col), RadiusKm, f64, f64) {
+        let grid = *table.grid();
+        let cell = grid
+            .cell_containing(at)
+            .expect("the fixture spans the globe");
+        let radius = RadiusKm::new(radius_km).expect("a fixture radius is a length");
+        let kernel = Kernel::new(grid, cell.0, radius).expect("a whole-globe grid");
+        let (rows, cols) = table.whole();
+        (
+            cell,
+            radius,
+            circle::population(table, &kernel, cell.1),
+            table.population(rows, cols),
+        )
+    }
+
+    #[test]
+    fn the_circle_document_holds_its_shape() {
+        // A request that lands nowhere near a cell centre, which is the case the two coordinates exist
+        // to separate: (48 N, 11 E) falls in the cell centred on (45 N, 15 E), three degrees away in one
+        // extent and four in the other. A request already on a centre would pass with the fields swapped.
+        //
+        // 1200 km about that centre is 10.79 degrees of arc, and on this grid it admits five cells — the
+        // centre and its four neighbours, the diagonals being 14.1 degrees away and out:
+        //
+        //   (3, 19) = 128, (4, 18) = 163, (4, 19) = 164, (4, 20) = 165, (5, 19) = 200
+        //
+        // which sum to 820 of the fixture's 210 276 people.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let requested = LatLon {
+            lat: 48.0,
+            lon: 11.0,
+        };
+        let (cell, radius, population, total) = circle_at(&table, requested, 1200.0);
+
+        assert_eq!((cell.0.get(), cell.1.get()), (4, 19));
+        assert_eq!(population, 820.0);
+        assert_eq!(total, 210_276.0);
+
+        insta::assert_json_snapshot!(Envelope::new(CircleReport::new(
+            requested, cell, &grid, radius, population, total,
+        )));
+    }
+
+    #[test]
+    fn a_circle_over_a_table_holding_nobody_publishes_a_share_of_zero() {
+        // Every cell the sentinel, so the build sanitises the lot to zero and the total is nothing. The
+        // quotient would be a `NaN`, which serialises as `null` and reaches a renderer as a chart labelled
+        // with it — so the text is asserted rather than the value.
+        let grid = fixture_grid();
+        let payload = payload_over(&grid, |_, _| NODATA);
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let requested = LatLon {
+            lat: 48.0,
+            lon: 11.0,
+        };
+        let (cell, radius, population, total) = circle_at(&table, requested, 1200.0);
+        assert_eq!((population, total), (0.0, 0.0));
+
+        let report = CircleReport::new(requested, cell, &grid, radius, population, total);
+        assert_eq!(report.share_of_total, 0.0);
+        let json = serde_json::to_string(&Envelope::new(report)).unwrap();
+        assert!(!json.contains("null") && !json.contains("NaN"), "{json}");
     }
 
     #[test]

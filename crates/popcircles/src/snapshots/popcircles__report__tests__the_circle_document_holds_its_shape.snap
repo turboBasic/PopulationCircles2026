@@ -1,0 +1,25 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(CircleReport::new(requested, cell, &grid, radius, population,\ntotal,))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "requested": {
+      "lat": 48.0,
+      "lon": 11.0
+    },
+    "centre": {
+      "lat": 45.0,
+      "lon": 15.0
+    },
+    "row": 4,
+    "col": 19,
+    "radius_km": 1200.0,
+    "population": 820.0,
+    "total_population": 210276.0,
+    "share_of_total": 0.0038996366679982498
+  }
+}
