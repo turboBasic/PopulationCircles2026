@@ -250,6 +250,22 @@ pub fn predicate_slack_persons(grid: &Grid, total: f64) -> f64 {
     rows * 4.0 * ulp + rows * f64::EPSILON * total
 }
 
+/// Whether a margin is inside the slack, so the comparison that produced it could have gone either way.
+///
+/// A margin rather than a population and a target, because the two sides are one question: the reaching
+/// margin is `population - target` and the short margin is its negation, and the absolute value is what
+/// makes them the same test.
+///
+/// **Equal to the slack counts as inside.** The slack is a bound on the error, so a margin that is exactly
+/// it is exactly the case the bound was derived to cover.
+///
+/// `pub` beside [`predicate_slack_persons`], which is what supplies the second argument: a caller reading
+/// that figure off a published result has this comparison to make and no way to make it otherwise.
+#[must_use]
+pub fn within_slack(margin: f64, slack: f64) -> bool {
+    margin.abs() <= slack
+}
+
 /// The row `index` names.
 ///
 /// A panic rather than a `Result` for [`search`]'s reason: a [`Grid`] has at least one row and one column,
@@ -508,6 +524,45 @@ mod tests {
     use crate::kernel::{Kernel, Span};
     use crate::raster::Synthetic;
     use crate::table::{Decimation, Table, build};
+
+    /// The boundary of [`within_slack`], as two literals at a time.
+    ///
+    /// It is tested here rather than through a search because no fixture small enough to commit can reach
+    /// it: every synthetic table that is ambiguous at all is ambiguous by a margin of **exactly zero** — a
+    /// handful of populated rows gives the fold nothing to reorder — so `margin == 0.0` would satisfy every
+    /// fixture case in this module. The registry raster's own residue appears below as a literal for that
+    /// reason, and ADR 0005's Context is where it was measured.
+    #[test]
+    fn the_slack_is_inside_itself_and_the_bit_above_it_is_not() {
+        let slack = 0.011_960_601_365_319_32;
+
+        // `<=`, pinned at the bit rather than at a rounding: the slack bounds the error, so a margin equal
+        // to it is the case the bound exists to cover.
+        assert!(within_slack(slack, slack));
+        assert!(within_slack(slack.next_down(), slack));
+        assert!(!within_slack(slack.next_up(), slack));
+
+        // Both zeroes, because a margin of zero is what an exact tie between two summation orders gives and
+        // `-0.0 <= x` needs no special case to hold.
+        assert!(within_slack(0.0, slack));
+        assert!(within_slack(-0.0, slack));
+
+        // The registry raster at a share of one, both ways round: 1.34e-5 of residue is inside the slack
+        // that table carries, and outside a slack eleven thousand times smaller. This pair is the whole
+        // reason the comparison is a function — no fixture produces a margin between the two.
+        assert!(within_slack(1.34e-5, slack));
+        assert!(!within_slack(1.34e-5, 1e-9));
+
+        // The 50% run, seven orders of magnitude out, which is the ordinary answer staying separated.
+        assert!(!within_slack(121_814.0, slack));
+        // Sign does not matter: the short margin is the reaching margin's negation.
+        assert!(!within_slack(-121_814.0, slack));
+
+        // Stated rather than relied on. `search` documents that a population which is not a number cannot
+        // arise from a sanitised raster; if one ever did, every comparison against it is false, so this
+        // reports separated rather than claiming an ambiguity it cannot describe.
+        assert!(!within_slack(f64::NAN, slack));
+    }
 
     /// A ledger in a map, which is what the tests here drive a search with: the seam without the
     /// filesystem, so what a resumed run does is pinned before `cache.rs` exists.

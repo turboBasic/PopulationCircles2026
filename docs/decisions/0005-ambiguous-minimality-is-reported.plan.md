@@ -100,7 +100,7 @@ These add to the normal task loop; they do not replace it.
 The result learns to say it. Declare the comparison, then wire it, then say it out loud — so the one part no
 fixture can check is a commit whose whole content is the check.
 
-- [ ] **1.1 The slack comparison is a function of two numbers, and nothing calls it yet.**
+- [x] **1.1 The slack comparison is a function of two numbers, and nothing calls it yet.**
       `pub fn within_slack(margin: f64, slack: f64) -> bool` in `smallest.rs`, `margin.abs() <= slack`, with
       no caller until 1.2 wires it. It takes the margin rather than a population and a target so that one
       function serves both sides — the reaching margin is `population - target` and the short margin is its
