@@ -5,14 +5,17 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
-use popcircles::geodesy::{LatLon, great_circle_km};
-use popcircles::grid::{Grid, GridError};
+use popcircles::circle;
+use popcircles::geodesy::{LatLon, RadiusKm, great_circle_km};
+use popcircles::grid::{Col, Grid, GridError, Row};
+use popcircles::kernel::{Kernel, KernelError};
 use popcircles::progress::Progress;
 use popcircles::raster::{PixelType, RasterError, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
-    DistanceReport, Envelope, GridSummary, TableBuildReport, TableQueryReport,
+    CircleReport, DistanceReport, Envelope, GridSummary, Provenance, TableBuildReport,
+    TableQueryReport,
 };
-use popcircles::table::cache::{Cache, CacheError, Identity};
+use popcircles::table::cache::{Cache, CacheError, Identity, Mapped};
 use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build};
 
 #[derive(Parser, Debug)]
@@ -45,6 +48,20 @@ enum Command {
         #[command(subcommand)]
         command: TableCommand,
     },
+    /// The population inside a circle of a given ground radius about a coordinate.
+    PopulationAt {
+        #[command(flatten)]
+        cached: CachedTableArgs,
+        /// The circle's centre. It is snapped to the centre of the cell containing it, which the document
+        /// publishes beside the coordinate asked for.
+        #[arg(long, allow_negative_numbers = true)]
+        lat: f64,
+        #[arg(long, allow_negative_numbers = true)]
+        lon: f64,
+        /// The circle's ground radius: a great-circle arc on the sphere, never a distance in degrees.
+        #[arg(long, allow_negative_numbers = true, value_parser = parse_radius)]
+        radius_km: RadiusKm,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, Copy)]
@@ -73,15 +90,26 @@ enum TableCommand {
     /// Query a cached table for the population of a rectangle, reading it by mmap.
     Query {
         #[command(flatten)]
-        grid: GridArgs,
-        #[command(flatten)]
-        table: TableArgs,
-        /// The digest a build reported, which is what names the table wanted.
-        #[arg(long, value_parser = parse_digest)]
-        digest: u64,
+        cached: CachedTableArgs,
         #[command(flatten)]
         window: WindowArgs,
     },
+}
+
+/// A table that has already been built, named the way opening one needs: the grid it was declared over,
+/// where the cache sits, and the digest that says which table is wanted.
+///
+/// Flattened into every command that reads a cached table, so those flags have one spelling and one help
+/// string rather than a copy per command.
+#[derive(Args, Debug, Clone)]
+struct CachedTableArgs {
+    #[command(flatten)]
+    grid: GridArgs,
+    #[command(flatten)]
+    table: TableArgs,
+    /// The digest a build reported, which is what names the table wanted.
+    #[arg(long, value_parser = parse_digest)]
+    digest: u64,
 }
 
 /// The grid a raster is declared to be. The declared grid wins over the file's own tags, which is why
@@ -212,6 +240,12 @@ impl Failure {
         Self::new(exit_code_for_build_error(error), error)
     }
 
+    /// By value rather than by reference, unlike its neighbours: a `KernelError` is one f64 wide, and
+    /// clippy's copy threshold is what settles that rather than a preference.
+    fn kernel(error: KernelError) -> Self {
+        Self::new(exit_code_for_kernel_error(error), &error)
+    }
+
     /// The whole source chain, because a `thiserror` message is one link and the sentence naming the
     /// file or the syscall is usually the one beneath it.
     fn new(code: u8, error: &dyn std::error::Error) -> Self {
@@ -250,14 +284,14 @@ fn run(command: Command) -> Result<String, Failure> {
                 },
         } => build_table(&raster, grid, raster_spec, &table),
         Command::Table {
-            command:
-                TableCommand::Query {
-                    grid,
-                    table,
-                    digest,
-                    window,
-                },
-        } => query_table(grid, &table, digest, window.window()),
+            command: TableCommand::Query { cached, window },
+        } => query_table(&cached, window.window()),
+        Command::PopulationAt {
+            cached,
+            lat,
+            lon,
+            radius_km,
+        } => population_at(&cached, lat, lon, radius_km),
     }
 }
 
@@ -329,23 +363,109 @@ fn build_table(
     )))
 }
 
-fn query_table(
-    grid: GridArgs,
-    table: &TableArgs,
-    digest: u64,
-    window: Option<Window>,
-) -> Result<String, Failure> {
-    let source = grid.grid().map_err(|error| Failure::grid(&error))?;
-    let decimation =
-        Decimation::new(source, table.decimate).map_err(|error| Failure::table(&error))?;
-    let wanted = Identity { digest, decimation };
+/// A cached table, opened and mapped, with the provenance a document declares it by.
+///
+/// The mapping is held rather than the cells, because a [`Table`] borrows from it: keeping the two
+/// together is what ties the lifetime of every query to the mapping through the compiler. Which is also
+/// why [`Self::table`] is a method and not something the resolver returns — a value cannot hold a borrow
+/// of its own field.
+#[derive(Debug)]
+struct CachedTable {
+    grid: Grid,
+    identity: Identity,
+    mapped: Mapped,
+    header: PathBuf,
+    payload: PathBuf,
+}
 
-    let mapped = Cache::new(&table.cache)
-        .open(&wanted)
-        .map_err(|error| Failure::cache(&error))?;
-    let cells = mapped.cells().map_err(|error| Failure::cache(&error))?;
-    let grid = *decimation.grid();
-    let view = Table::new(grid, cells).map_err(|error| Failure::table(&error))?;
+impl CachedTable {
+    /// Resolves the flags to a mapped table: the declared grid, the decimation, the identity wanted, and
+    /// the cache opened against it.
+    ///
+    /// The one place a command reads a cache, so a command asks for a table rather than assembling the
+    /// path, the identity and the provenance of one for itself.
+    fn open(args: &CachedTableArgs) -> Result<Self, Failure> {
+        let source = args.grid.grid().map_err(|error| Failure::grid(&error))?;
+        let decimation =
+            Decimation::new(source, args.table.decimate).map_err(|error| Failure::table(&error))?;
+        let identity = Identity {
+            digest: args.digest,
+            decimation,
+        };
+
+        let cache = Cache::new(&args.table.cache);
+        let mapped = cache
+            .open(&identity)
+            .map_err(|error| Failure::cache(&error))?;
+        Ok(Self {
+            grid: *decimation.grid(),
+            identity,
+            mapped,
+            header: cache.header_path().to_path_buf(),
+            payload: cache.payload_path().to_path_buf(),
+        })
+    }
+
+    /// The table over the mapping, and the only place in this crate one is constructed.
+    fn table(&self) -> Result<Table<'_>, Failure> {
+        let cells = self
+            .mapped
+            .cells()
+            .map_err(|error| Failure::cache(&error))?;
+        Table::new(self.grid, cells).map_err(|error| Failure::table(&error))
+    }
+
+    fn provenance(&self) -> Provenance {
+        Provenance::new(&self.identity, &self.header, &self.payload)
+    }
+}
+
+/// The cell holding `at`, or bad input naming the extent it is not on.
+///
+/// A function of its own so both arms are testable without a table: what makes a coordinate bad input is
+/// the grid, and opening a cache to find that out would put a fixture in the way of the check.
+fn centre_cell(grid: &Grid, at: LatLon) -> Result<(Row, Col), Failure> {
+    grid.cell_containing(at).ok_or_else(|| Failure {
+        code: EXIT_BAD_INPUT,
+        message: format!(
+            "(lat {}, lon {}) is not on a {} x {} grid whose origin is (lat {}, lon {}); a coordinate \
+             on the grid's outer southern or eastern boundary lies in no cell",
+            at.lat,
+            at.lon,
+            grid.width(),
+            grid.height(),
+            grid.origin().lat,
+            grid.origin().lon
+        ),
+    })
+}
+
+fn population_at(
+    cached: &CachedTableArgs,
+    lat: f64,
+    lon: f64,
+    radius: RadiusKm,
+) -> Result<String, Failure> {
+    let cached = CachedTable::open(cached)?;
+    let view = cached.table()?;
+    let requested = LatLon { lat, lon };
+    let cell = centre_cell(&cached.grid, requested)?;
+
+    let kernel = Kernel::new(cached.grid, cell.0, radius).map_err(Failure::kernel)?;
+    let population = circle::population(&view, &kernel, cell.1);
+    let (rows, cols) = view.whole();
+    let total = view.population(rows, cols);
+
+    serialised(serde_json::to_string(&Envelope::with_provenance(
+        CircleReport::new(requested, cell, &cached.grid, radius, population, total),
+        cached.provenance(),
+    )))
+}
+
+fn query_table(cached: &CachedTableArgs, window: Option<Window>) -> Result<String, Failure> {
+    let cached = CachedTable::open(cached)?;
+    let view = cached.table()?;
+    let grid = cached.grid;
 
     let (rows, cols) = match window {
         Some(window) => view.covering(window).ok_or_else(|| Failure {
@@ -364,8 +484,18 @@ fn query_table(
     };
     let population = view.population(rows, cols);
 
+    // No provenance block, and that is not an omission: this document's own payload carries the digest
+    // and the grid, because the table is what the command is *about*. `report`'s module documentation
+    // owns that distinction.
     serialised(serde_json::to_string(&Envelope::new(
-        TableQueryReport::new(digest, &grid, window, rows, cols, population),
+        TableQueryReport::new(
+            cached.identity.digest,
+            &grid,
+            window,
+            rows,
+            cols,
+            population,
+        ),
     )))
 }
 
@@ -375,6 +505,18 @@ fn parse_digest(value: &str) -> Result<u64, String> {
     let digits = value.strip_prefix("0x").unwrap_or(value);
     u64::from_str_radix(digits, 16)
         .map_err(|error| format!("`{value}` is not a 64-bit hexadecimal digest: {error}"))
+}
+
+/// A radius through [`RadiusKm::new`], so a negative or non-finite one is a usage error the parser
+/// reports.
+///
+/// Exit 2 is what clap gives a usage error, which is already `EXIT_BAD_INPUT`, so `RadiusError` needs no
+/// arm of its own in the classifiers below.
+fn parse_radius(value: &str) -> Result<RadiusKm, String> {
+    let km: f64 = value
+        .parse()
+        .map_err(|error| format!("`{value}` is not a number of kilometres: {error}"))?;
+    RadiusKm::new(km).map_err(|error| error.to_string())
 }
 
 fn serialised(json: serde_json::Result<String>) -> Result<String, Failure> {
@@ -511,7 +653,18 @@ fn exit_code_for_build_error(error: &BuildError<CacheError>) -> u8 {
     }
 }
 
+/// A grid whose columns do not close has no kernels at all, and the six grid numbers are flags, so this is
+/// bad input rather than a failure.
+const fn exit_code_for_kernel_error(error: KernelError) -> u8 {
+    match error {
+        KernelError::ColumnsDoNotClose { .. } => EXIT_BAD_INPUT,
+    }
+}
+
+// unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
+// narrow exemption; docs/ai/code.md allows both in tests.
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -614,6 +767,100 @@ mod tests {
         // The prefix alone is not a digest either, and neither is one 17 digits long.
         assert!(parse_digest("0x").is_err());
         assert!(parse_digest("0x1f17aa802a6890f0c").is_err());
+    }
+
+    /// A four-by-three whole-globe grid, which is what the parsing tests below declare and what
+    /// `centre_cell` is checked against: the smallest shape whose columns close.
+    fn coarse_grid() -> Grid {
+        Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            90.0,
+            -60.0,
+        )
+        .expect("a 4 x 3 whole-globe grid is valid")
+    }
+
+    /// The six grid flags and the three cache ones every cached-table command takes, so a test naming a
+    /// command spells out only what is its own.
+    fn cached_table_flags() -> [&'static str; 14] {
+        [
+            "--width",
+            "4",
+            "--height",
+            "3",
+            "--origin-lat",
+            "90",
+            "--origin-lon",
+            "-180",
+            "--lon-step",
+            "90",
+            "--lat-step",
+            "-60",
+            "--digest",
+            "0x1",
+        ]
+    }
+
+    #[test]
+    fn a_radius_that_is_not_a_length_is_refused_by_the_parser() {
+        // At the parser, which is what makes it exit 2 without a cache being opened: `RadiusKm::new` holds
+        // the two checks and clap reports whichever one fired.
+        assert!(parse_radius("-1").is_err());
+        assert!(parse_radius("nan").is_err());
+        assert!(parse_radius("inf").is_err());
+        assert!(parse_radius("wide").is_err());
+        // Zero is a radius — the circle is its own centre cell — and so is a figure past half the globe.
+        assert_eq!(parse_radius("0"), Ok(RadiusKm::new(0.0).unwrap()));
+        assert_eq!(parse_radius("20016"), Ok(RadiusKm::new(20_016.0).unwrap()));
+
+        let negative = Cli::try_parse_from(
+            ["popcircles", "population-at"]
+                .into_iter()
+                .chain(cached_table_flags())
+                .chain(["--lat", "0", "--lon", "0", "--radius-km", "-1"]),
+        );
+        assert!(negative.is_err());
+    }
+
+    #[test]
+    fn a_coordinate_off_the_grid_is_bad_input_naming_the_extent() {
+        let grid = coarse_grid();
+        let inside = centre_cell(
+            &grid,
+            LatLon {
+                lat: 45.0,
+                lon: -90.0,
+            },
+        )
+        .expect("the coordinate is on the grid");
+        assert_eq!((inside.0.get(), inside.1.get()), (0, 1));
+
+        // The outer southern boundary lies in no cell, which is `Grid::cell_containing`'s rule rather than
+        // this crate's, and the message has to say enough for a caller to see which extent it missed.
+        let outside = centre_cell(
+            &grid,
+            LatLon {
+                lat: -90.0,
+                lon: 0.0,
+            },
+        )
+        .expect_err("the south pole is on no row of this grid");
+        assert_eq!(outside.code, EXIT_BAD_INPUT);
+        assert!(outside.message.contains("4 x 3"), "{}", outside.message);
+        assert!(outside.message.contains("lat 90"), "{}", outside.message);
+    }
+
+    #[test]
+    fn a_grid_whose_columns_do_not_close_is_bad_input() {
+        assert_eq!(
+            exit_code_for_kernel_error(KernelError::ColumnsDoNotClose { lon_span: 90.0 }),
+            EXIT_BAD_INPUT
+        );
     }
 
     #[test]
