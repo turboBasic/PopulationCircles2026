@@ -104,7 +104,7 @@ them separately verifiable: after 1.2 the flag exists, is honoured, and has noth
       prints 33 where it printed 32 — one new crate and no transitive ones, which is the figure ADR 0004
       decided on. 243 tests still pass.
 
-- [ ] **1.2 `--log-level` is a global flag, and the CLI installs a `log::Log` that honours it.** A
+- [x] **1.2 `--log-level` is a global flag, and the CLI installs a `log::Log` that honours it.** A
       `LogArgs` flattened onto `Cli` itself, with `global = true` on the `#[arg]` **inside** it rather
       than on the `#[command(flatten)]` — the attribute is the argument's — so every command takes it
       rather than each subcommand declaring it, defaulting to `info` and parsed by a `value_parser`

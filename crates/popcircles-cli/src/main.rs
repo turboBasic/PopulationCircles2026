@@ -3,9 +3,11 @@ use std::io::{IsTerminal, Write};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
+use log::{LevelFilter, Metadata, Record};
 use popcircles::circle;
 use popcircles::geodesy::{LatLon, RadiusKm, great_circle_km};
 use popcircles::grid::{Col, Grid, GridError, Row};
@@ -26,8 +28,43 @@ use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build
 #[derive(Parser, Debug)]
 #[command(name = "popcircles", version)]
 struct Cli {
+    #[command(flatten)]
+    log: LogArgs,
     #[command(subcommand)]
     command: Command,
+}
+
+/// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. No
+/// `--verbose` and no `--quiet`: two booleans standing in for a threshold is the shape `FU-04` was
+/// watching for.
+///
+/// `global` sits on the argument rather than on the `#[command(flatten)]` above, because the attribute is
+/// the argument's: that is what lets every subcommand take the flag after its own name without declaring
+/// it.
+#[derive(Args, Debug, Clone, Copy)]
+struct LogArgs {
+    /// How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress
+    /// meter, which answers how far a run has got rather than what happened.
+    #[arg(long, global = true, default_value = "info", value_name = "LEVEL", value_parser = parse_log_level)]
+    log_level: LevelFilter,
+}
+
+/// The four names box 5 of issue #8 gives, and no others.
+///
+/// Its own parser rather than `LevelFilter`'s `FromStr`, which also accepts `trace` and `off`: a level is
+/// accepted here as a threshold a reader asks for, and `trace` adds none that `debug` does not already
+/// give — the granularity below `debug`'s is the candidate block and the kernel, which are half a million
+/// and sixteen thousand in a measured run and logged at no level.
+fn parse_log_level(value: &str) -> Result<LevelFilter, String> {
+    match value {
+        "error" => Ok(LevelFilter::Error),
+        "warn" => Ok(LevelFilter::Warn),
+        "info" => Ok(LevelFilter::Info),
+        "debug" => Ok(LevelFilter::Debug),
+        other => Err(format!(
+            "`{other}` is not a level; the levels are error, warn, info and debug"
+        )),
+    }
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -283,7 +320,13 @@ const EXIT_BAD_INPUT: u8 = 2;
 const EXIT_MISSING_DATA: u8 = 3;
 
 fn main() -> ExitCode {
-    match run(Cli::parse().command) {
+    // The first statement, before argument parsing: ADR 0004 decision 2 says elapsed since the process
+    // started, and a clock started after `Cli::parse()` and the install is not that.
+    let started = Instant::now();
+    let cli = Cli::parse();
+    StderrLog::install(started, cli.log.log_level);
+
+    match run(cli.command) {
         Ok(json) => {
             println!("{json}");
             ExitCode::SUCCESS
@@ -818,6 +861,75 @@ impl Progress for StderrProgress {
     }
 }
 
+/// One record per line on stderr, which is ADR 0004 decision 2: the library emits through the facade and
+/// this crate is the only place a diagnostic reaches a stream.
+///
+/// The elapsed figure is what makes a duration a subtraction over two lines, and it is milliseconds since
+/// the process started rather than a wall-clock time — the weaker of the two deliberately, because a
+/// monotonic elapsed figure is in `std` and a formatted timestamp is a datetime library.
+#[derive(Debug)]
+struct StderrLog {
+    started: Instant,
+    level: LevelFilter,
+    interactive: bool,
+}
+
+/// A record rendered, split out from the writing so the format is pinned by a test rather than by reading
+/// a process's stderr. It is what box 7's subtraction rests on.
+fn line(elapsed: Duration, record: &Record<'_>) -> String {
+    format!(
+        "{:>6}ms {:<5} {}: {}",
+        elapsed.as_millis(),
+        record.level(),
+        record.target(),
+        record.args()
+    )
+}
+
+impl StderrLog {
+    /// Installs it, and leaves the process's level alone if something already has.
+    ///
+    /// The `Result` is handled rather than unwrapped for `StderrProgress::advance`'s reason one level up: a
+    /// diagnostic that cannot be printed is not a reason to lose the document on stdout.
+    fn install(started: Instant, level: LevelFilter) {
+        let logger = Self {
+            started,
+            level,
+            interactive: std::io::stderr().is_terminal(),
+        };
+        if log::set_boxed_logger(Box::new(logger)).is_ok() {
+            log::set_max_level(level);
+        }
+    }
+}
+
+impl log::Log for StderrLog {
+    /// Against the filter this value holds, not `log::max_level()`. The latter is process-global and
+    /// `cargo test` runs a binary's unit tests as parallel threads in one process, so a check built on it
+    /// would answer according to whichever test called `set_max_level` last.
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+        metadata.level() <= self.level
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        // `StderrProgress::advance` leaves the cursor mid-line by design, so the meter's line is erased
+        // before a record lands on top of it. The knowledge runs one way and that is the point: a logger
+        // that clears a line something may have drawn learns nothing about the meter, where a meter
+        // redrawn after a record would have to hold the logger.
+        let clear = if self.interactive { "\r\x1b[2K" } else { "" };
+        let mut stderr = std::io::stderr();
+        let _ = writeln!(stderr, "{clear}{}", line(self.started.elapsed(), record));
+    }
+
+    fn flush(&self) {
+        let _ = std::io::stderr().flush();
+    }
+}
+
 const EXIT_FAILURE: u8 = 1;
 
 /// Bad input is the only class a `GridError` has. A variant it gains later has no arm here to fall
@@ -1299,6 +1411,89 @@ mod tests {
                 .chain(["--spacing", "0"]),
         );
         assert!(zero.is_err());
+    }
+
+    #[test]
+    fn the_four_levels_parse_and_a_fifth_does_not() {
+        assert_eq!(parse_log_level("error"), Ok(LevelFilter::Error));
+        assert_eq!(parse_log_level("warn"), Ok(LevelFilter::Warn));
+        assert_eq!(parse_log_level("info"), Ok(LevelFilter::Info));
+        assert_eq!(parse_log_level("debug"), Ok(LevelFilter::Debug));
+
+        // `LevelFilter`'s own `FromStr` takes both of these, which is why the parser is this crate's.
+        assert!(parse_log_level("trace").is_err());
+        assert!(parse_log_level("off").is_err());
+        assert!(parse_log_level("nonsense").is_err());
+    }
+
+    #[test]
+    fn the_level_is_taken_before_a_subcommand_and_after_it() {
+        // What `global` on the argument buys: one declaration, accepted on either side of the subcommand
+        // name, so no subcommand carries a copy of the flag.
+        let before = Cli::try_parse_from([
+            "popcircles",
+            "--log-level",
+            "debug",
+            "distance",
+            "0",
+            "0",
+            "0",
+            "90",
+        ])
+        .expect("the flag is global");
+        assert_eq!(before.log.log_level, LevelFilter::Debug);
+
+        let after = Cli::try_parse_from([
+            "popcircles",
+            "distance",
+            "0",
+            "0",
+            "0",
+            "90",
+            "--log-level",
+            "warn",
+        ])
+        .expect("the flag is global");
+        assert_eq!(after.log.log_level, LevelFilter::Warn);
+
+        // The default is `info`, per box 5.
+        let neither = Cli::try_parse_from(["popcircles", "distance", "0", "0", "0", "90"])
+            .expect("the level defaults");
+        assert_eq!(neither.log.log_level, LevelFilter::Info);
+    }
+
+    #[test]
+    fn a_record_renders_to_the_line_a_duration_is_subtracted_from() {
+        let rendered = line(
+            Duration::from_millis(1234),
+            &Record::builder()
+                .level(log::Level::Info)
+                .target("popcircles::table")
+                .args(format_args!("built 18 rows"))
+                .build(),
+        );
+        assert_eq!(rendered, "  1234ms INFO  popcircles::table: built 18 rows");
+    }
+
+    #[test]
+    fn a_level_filters_the_records_beneath_it() {
+        use log::Log;
+
+        let logger = StderrLog {
+            started: Instant::now(),
+            level: LevelFilter::Warn,
+            interactive: false,
+        };
+        let at = |level| {
+            logger.enabled(
+                &Metadata::builder()
+                    .level(level)
+                    .target("popcircles::table")
+                    .build(),
+            )
+        };
+        assert!(!at(log::Level::Info));
+        assert!(at(log::Level::Error));
     }
 
     #[test]
