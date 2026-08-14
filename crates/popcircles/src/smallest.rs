@@ -310,6 +310,10 @@ fn probe<L: RadiusLedger>(
 ) -> Result<Candidate, SmallestError<L::Error>> {
     if let Some(found) = ledger.get(km) {
         stats.radii_reused += 1;
+        // Inside the early return, so a record is emitted once per call on both paths and their count is
+        // `radii_evaluated + radii_reused` — the figure the document publishes. Saying which of the two
+        // answered is the whole reason a reader is reading this line.
+        log::info!("{km} km holds {} — from the ledger", found.population);
         return Ok(found);
     }
     // The inner search reports per level of its own refinement; two meters through one sink interleave
@@ -324,6 +328,7 @@ fn probe<L: RadiusLedger>(
     stats.searched.blocks_pruned += searched.stats.blocks_pruned;
     stats.searched.circles_evaluated += searched.stats.circles_evaluated;
     stats.searched.kernels_built += searched.stats.kernels_built;
+    log::info!("{km} km holds {} — searched", searched.centre.population);
     Ok(searched.centre)
 }
 
@@ -366,6 +371,11 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     let total = table.population(whole_rows, whole_cols);
     let target = Target::of(share, total);
 
+    log::info!(
+        "searching for the smallest circle holding {} of {total}",
+        target.persons
+    );
+
     let mut stats = SmallestStats::default();
     // The climb. `CEILING_KM - 1` is the cap because the ceiling itself is not a radius this searches.
     let cap = CEILING_KM - 1;
@@ -396,6 +406,10 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         // population is the extent's own query, and every cell of the grid is a maximiser of it — so
         // `Candidate::better`'s rule, ties to the smaller `(row, col)`, names the north-west one.
         let (row, col) = north_west(&grid);
+        log::info!(
+            "nothing under the ceiling reaches it: {CEILING_KM} km, {} radii settled",
+            stats.radii_settled()
+        );
         return Ok(Smallest {
             radius_km: CEILING_KM,
             radius: ceiling_radius(),
@@ -435,6 +449,10 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     }
 
     progress.advance(stats.radii_settled(), stats.radii_settled());
+    log::info!(
+        "reached at {high} km, {} radii settled",
+        stats.radii_settled()
+    );
     Ok(Smallest {
         radius_km: high,
         radius: RadiusKm::from(high),

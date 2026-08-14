@@ -174,7 +174,7 @@ tasks are for is a human watching a terminal, and no assertion checks that a lin
       than interleaved with it. Nothing in `mise run ci` covers this task, which is why the record above
       says the raster path is the figure a reader checks by eye.
 
-- [ ] **2.3 `info` marks the phase boundaries inside the library.** The boundaries a run has: the table
+- [x] **2.3 `info` marks the phase boundaries inside the library.** The boundaries a run has: the table
       build (`table::build`), the search over radius entering and leaving (`smallest::smallest`), and each
       radius the search settles (`smallest::probe`, one record naming the radius and whether the ledger
       answered it). Targets are the module paths, so a reader can tell a library record from the CLI's.

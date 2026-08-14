@@ -386,6 +386,16 @@ where
     };
     let mut digest = FNV_OFFSET_BASIS;
 
+    // The boundary this step is, at the one granularity the library knows and a caller does not: the shape
+    // going in and the shape coming out. ADR 0004 — through the facade, so nothing here names a stream.
+    log::info!(
+        "streaming {} x {} cells into a {} x {} table",
+        grid.width(),
+        grid.height(),
+        decimation.grid().width(),
+        decimation.grid().height()
+    );
+
     // The zero row, which is the padding itself: emitting it here is what lets a rectangle touching
     // the north edge subtract four corners like any other.
     emit(decimated(&acc, &mut coarse, factor)).map_err(BuildError::Sink)?;
