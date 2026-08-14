@@ -8,7 +8,7 @@
 // its derivative is unbounded, and what the search needs is a membership rule a brute-force distance
 // test reproduces — application.md "Correctness invariants".
 
-use crate::geodesy::{LatLon, angular_distance_rad, central_angle_rad};
+use crate::geodesy::{LatLon, RadiusKm, angular_distance_rad, central_angle_rad};
 use crate::grid::{Col, Grid, Row};
 use crate::table::ColSpan;
 
@@ -18,12 +18,6 @@ pub enum KernelError {
         "a kernel is longitude-invariant only where the columns close; these span {lon_span} degrees"
     )]
     ColumnsDoNotClose { lon_span: f64 },
-
-    #[error("a circle radius must be finite; {radius_km} km is not")]
-    RadiusNotFinite { radius_km: f64 },
-
-    #[error("a circle radius must not be negative; {radius_km} km is")]
-    RadiusNegative { radius_km: f64 },
 }
 
 /// The columns one row of a kernel covers, as an offset from the centre column.
@@ -159,33 +153,27 @@ impl Cap {
 pub struct Kernel {
     grid: Grid,
     centre: Row,
-    radius_km: f64,
+    radius: RadiusKm,
     north: Row,
     spans: Vec<Span>,
 }
 
 impl Kernel {
     /// # Errors
-    /// [`KernelError::ColumnsDoNotClose`] when the grid's columns do not close on themselves;
-    /// [`KernelError::RadiusNotFinite`] or [`KernelError::RadiusNegative`] when the radius is not a
-    /// length. Zero is a length: the cap is the centre cell alone.
+    /// [`KernelError::ColumnsDoNotClose`] when the grid's columns do not close on themselves, which is
+    /// the whole of what a caller holding a [`RadiusKm`] can be wrong about here. Zero is a radius: the
+    /// cap is the centre cell alone.
     ///
     /// # Panics
     /// If `centre` was minted by a larger grid; [`crate::grid::Row`] says why that is a stop.
-    pub fn new(grid: Grid, centre: Row, radius_km: f64) -> Result<Self, KernelError> {
+    pub fn new(grid: Grid, centre: Row, radius: RadiusKm) -> Result<Self, KernelError> {
         if !grid.spans_full_turn() {
             return Err(KernelError::ColumnsDoNotClose {
                 lon_span: f64::from(grid.width()) * grid.lon_step().abs(),
             });
         }
-        if !radius_km.is_finite() {
-            return Err(KernelError::RadiusNotFinite { radius_km });
-        }
-        if radius_km < 0.0 {
-            return Err(KernelError::RadiusNegative { radius_km });
-        }
 
-        let cap = Cap::over(&grid, grid.centre_lat(centre), radius_km);
+        let cap = Cap::over(&grid, grid.centre_lat(centre), radius.km());
 
         // North then south from the centre row, each stopping at the first row the cap does not reach:
         // the rows it reaches are contiguous, so a first miss is the end of the band and not a gap in
@@ -216,7 +204,7 @@ impl Kernel {
         Ok(Self {
             grid,
             centre,
-            radius_km,
+            radius,
             north,
             spans,
         })
@@ -227,9 +215,11 @@ impl Kernel {
         self.centre
     }
 
+    /// The radius this kernel was built for, as the type it was built from: a caller wanting the number
+    /// asks it for kilometres, and one widening it re-enters the constructor that checks the sum.
     #[must_use]
-    pub const fn radius_km(&self) -> f64 {
-        self.radius_km
+    pub const fn radius(&self) -> RadiusKm {
+        self.radius
     }
 
     /// The grid this kernel was built over — the whole of it, not the band the cap reaches. A cap
@@ -317,9 +307,12 @@ mod tests {
         grid.row(index).expect("a row of the fixture")
     }
 
+    fn radius(km: f64) -> RadiusKm {
+        RadiusKm::new(km).expect("a fixture radius is a length")
+    }
+
     fn kernel(grid: Grid, centre: u32, radius_km: f64) -> Kernel {
-        Kernel::new(grid, row(&grid, centre), radius_km)
-            .expect("a whole-globe grid and a radius that is a length")
+        Kernel::new(grid, row(&grid, centre), radius(radius_km)).expect("a whole-globe grid")
     }
 
     #[test]
@@ -471,28 +464,9 @@ mod tests {
         )
         .expect("a window grid is valid");
         assert!(matches!(
-            Kernel::new(window, row(&window, 0), 500.0),
+            Kernel::new(window, row(&window, 0), radius(500.0)),
             Err(KernelError::ColumnsDoNotClose { .. })
         ));
-    }
-
-    #[test]
-    fn a_radius_that_is_not_a_length_has_no_kernel() {
-        let grid = globe(1);
-        let centre = grid.middle_row();
-        for radius_km in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert!(
-                matches!(
-                    Kernel::new(grid, centre, radius_km),
-                    Err(KernelError::RadiusNotFinite { .. })
-                ),
-                "{radius_km}"
-            );
-        }
-        assert_eq!(
-            Kernel::new(grid, centre, -1.0).unwrap_err(),
-            KernelError::RadiusNegative { radius_km: -1.0 }
-        );
     }
 
     #[test]
@@ -500,7 +474,7 @@ mod tests {
         // Degenerate and legal: the centre's own cell is within zero of itself and no other cell is.
         let grid = globe(1);
         let centre = row(&grid, 100);
-        let kernel = Kernel::new(grid, centre, 0.0).expect("zero is a length");
+        let kernel = Kernel::new(grid, centre, radius(0.0)).expect("zero is a radius");
         assert_eq!(
             kernel.rows().collect::<Vec<(Row, Span)>>(),
             vec![(centre, Span::Around { half_width: 0 })]
@@ -550,7 +524,8 @@ mod tests {
             -1.0,
         )
         .expect("a band grid that closes in longitude is valid");
-        let kernel = Kernel::new(band, row(&band, 0), 3000.0).expect("a band grid has kernels");
+        let kernel =
+            Kernel::new(band, row(&band, 0), radius(3000.0)).expect("a band grid has kernels");
 
         let rows: Vec<Row> = kernel.rows().map(|(row, _)| row).collect();
         // 3000 km is 26.979 degrees, so the band runs from 59.5 N to 33.5 N: twenty-seven rows, of which
@@ -572,7 +547,8 @@ mod tests {
             -1.0,
         )
         .expect("a band grid that closes in longitude is valid");
-        let kernel = Kernel::new(band, row(&band, 0), 3000.0).expect("a band grid has kernels");
+        let kernel =
+            Kernel::new(band, row(&band, 0), radius(3000.0)).expect("a band grid has kernels");
 
         assert_eq!(*kernel.grid(), band);
         // Twenty-seven of the grid's thirty rows, so an accessor answering with the band the cap
@@ -584,7 +560,7 @@ mod tests {
     #[should_panic(expected = "is not a row of a 180-row grid")]
     fn a_finer_grids_row_is_no_centre_here() {
         let centre = row(&globe(4), 719);
-        let _ = Kernel::new(globe(1), centre, 500.0);
+        let _ = Kernel::new(globe(1), centre, radius(500.0));
     }
 
     /// An east-to-west whole globe, where a placed span's `west` field holds the eastern column: the set
@@ -670,8 +646,8 @@ mod tests {
         // The compass names in a `ColSpan` follow the grid's column direction; the cells do not. Nothing
         // in the kernel knows which way the columns run, and this is what says that is sound.
         let grid = westward();
-        let kernel =
-            Kernel::new(grid, row(&grid, 60), 2500.0).expect("a whole-globe grid has kernels");
+        let kernel = Kernel::new(grid, row(&grid, 60), radius(2500.0))
+            .expect("a whole-globe grid has kernels");
         for centre_col in [0u32, 359] {
             let centre = (row(&grid, 60), col(&grid, centre_col));
             assert_eq!(

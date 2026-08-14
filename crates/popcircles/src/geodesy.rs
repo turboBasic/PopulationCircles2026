@@ -43,7 +43,17 @@ pub fn angular_distance_rad(from: LatLon, to: LatLon) -> f64 {
 /// Great-circle distance in kilometres on the [`EARTH_RADIUS_KM`] sphere.
 #[must_use]
 pub fn great_circle_km(from: LatLon, to: LatLon) -> f64 {
-    EARTH_RADIUS_KM * angular_distance_rad(from, to)
+    arc_km(angular_distance_rad(from, to))
+}
+
+/// The length of an arc subtending `angle_rad`: [`central_angle_rad`]'s inverse.
+///
+/// Apart from [`great_circle_km`] because a length assembled from two arcs has no pair of points to
+/// measure between — a bound over a rectangle of the grid is one hop along a parallel and one along a
+/// meridian, summed as angles and converted once.
+#[must_use]
+pub fn arc_km(angle_rad: f64) -> f64 {
+    EARTH_RADIUS_KM * angle_rad
 }
 
 /// The central angle an arc of `km` subtends: [`great_circle_km`]'s inverse.
@@ -54,6 +64,68 @@ pub fn great_circle_km(from: LatLon, to: LatLon) -> f64 {
 #[must_use]
 pub fn central_angle_rad(km: f64) -> f64 {
     km / EARTH_RADIUS_KM
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+pub enum RadiusError {
+    #[error("a circle radius must be finite; {km} km is not")]
+    NotFinite { km: f64 },
+
+    #[error("a circle radius must not be negative; {km} km is")]
+    Negative { km: f64 },
+}
+
+/// A circle radius in kilometres, checked once where it is made.
+///
+/// It lives here because the check is against the earth model rather than against any one caller: a
+/// radius is a length on this sphere, and every signature taking one would otherwise repeat the same
+/// two tests. Zero is a radius — the circle is its own centre.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct RadiusKm(f64);
+
+impl RadiusKm {
+    /// # Errors
+    /// [`RadiusError::NotFinite`] or [`RadiusError::Negative`] when the value is not a length.
+    ///
+    /// No upper bound: a radius past half the circumference names the whole sphere, which is a legal
+    /// question with a legal answer. Growing one is [`RadiusKm::widened_by`]'s, which is total, so nothing
+    /// downstream needs a ceiling here to protect it.
+    pub fn new(km: f64) -> Result<Self, RadiusError> {
+        if !km.is_finite() {
+            return Err(RadiusError::NotFinite { km });
+        }
+        if km < 0.0 {
+            return Err(RadiusError::Negative { km });
+        }
+        Ok(Self(km))
+    }
+
+    #[must_use]
+    pub const fn km(self) -> f64 {
+        self.0
+    }
+
+    /// This radius widened by `km`.
+    ///
+    /// Total rather than fallible, and the reason is a bound on the argument its caller can prove.
+    /// `search`'s slack is bounded by the sphere — a [`crate::grid::Grid`] spans at most a full turn of
+    /// longitude and half a turn of latitude, so the two-hop bound over one cannot exceed about 60 000 km
+    /// — and adding a quantity that small to any finite radius stays finite, because the gap between
+    /// `f64::MAX` and its neighbour is 2e292. A fallible constructor here would hand every caller an error
+    /// arm no input can reach.
+    ///
+    /// Anything that is not a length lands on the widest radius there is rather than on the original. A
+    /// caller widens in order to bound something, so an answer narrower than asked is the one failure mode
+    /// that could lose a maximum; wider is merely slower.
+    #[must_use]
+    pub fn widened_by(self, km: f64) -> Self {
+        let widened = self.0 + km;
+        if widened.is_finite() {
+            Self(widened.max(self.0))
+        } else {
+            Self(f64::MAX)
+        }
+    }
 }
 
 /// The band of latitude between two parallels: what a spherical zone stands on, and what a grid row
@@ -314,6 +386,98 @@ mod tests {
             south: 90.0,
         };
         assert!(zone_area_km2(band, 360.0) < 0.0);
+    }
+
+    #[test]
+    fn an_arc_is_the_angle_it_subtends_and_back_again() {
+        // The pair is what a radius is converted through in both directions, so the round trip is the
+        // property rather than either figure. Zero is separate because it is the one value where the
+        // conversion has no division to lose anything in.
+        for angle_rad in [1e-9, 0.5, 1.0, std::f64::consts::PI] {
+            assert_rel(
+                central_angle_rad(arc_km(angle_rad)),
+                angle_rad,
+                "round trip",
+            );
+        }
+        assert_eq!(arc_km(0.0), 0.0);
+        assert_eq!(arc_km(1.0), EARTH_RADIUS_KM);
+    }
+
+    #[test]
+    fn a_radius_that_is_not_a_number_is_no_radius() {
+        // Matched rather than compared: the variant carries the value it rejected, and a NaN is not
+        // equal to itself, so `assert_eq!` on this one would fail on a correct rejection.
+        assert!(matches!(
+            RadiusKm::new(f64::NAN),
+            Err(RadiusError::NotFinite { km }) if km.is_nan()
+        ));
+    }
+
+    #[test]
+    fn an_infinite_radius_is_no_radius() {
+        for km in [f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                RadiusKm::new(km).unwrap_err(),
+                RadiusError::NotFinite { km },
+                "{km}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_negative_radius_is_no_radius() {
+        // Rejected before the sign test can be mistaken for the finite one: -1 is finite, so this
+        // fails on the second branch and not the first.
+        assert_eq!(
+            RadiusKm::new(-1.0).unwrap_err(),
+            RadiusError::Negative { km: -1.0 }
+        );
+    }
+
+    #[test]
+    fn a_zero_radius_is_a_length() {
+        assert_eq!(RadiusKm::new(0.0).unwrap().km(), 0.0);
+    }
+
+    #[test]
+    fn a_radius_past_the_globe_is_a_length() {
+        // Half the circumference is 20 015.09 km, so this names the whole sphere. Admitting it is what
+        // lets a caller ask for the world without a special case.
+        assert_eq!(RadiusKm::new(20_016.0).unwrap().km(), 20_016.0);
+    }
+
+    #[test]
+    fn the_largest_finite_radius_is_a_length() {
+        // Absurd and legal, and the reason it is pinned: a caller widening a radius by adding to it
+        // overflows here, and the failure it is entitled to is this constructor's rather than a panic.
+        let largest = RadiusKm::new(f64::MAX).unwrap();
+        assert_eq!(largest.km(), f64::MAX);
+        assert_eq!(
+            RadiusKm::new(largest.km() + 1e300).unwrap_err(),
+            RadiusError::NotFinite { km: f64::INFINITY }
+        );
+    }
+
+    #[test]
+    fn widening_a_radius_never_narrows_it_and_never_leaves_the_range() {
+        // The ordinary case, then the three a bound must not be quietly narrowed by. `f64::MAX` widened by
+        // any slack the sphere can produce is `f64::MAX` again — the gap to its neighbour is 2e292 — which
+        // is what makes this total rather than fallible.
+        assert_eq!(
+            RadiusKm::new(3000.0).unwrap().widened_by(300.0).km(),
+            3300.0
+        );
+
+        let largest = RadiusKm::new(f64::MAX).unwrap();
+        assert_eq!(largest.widened_by(60_083.0).km(), f64::MAX);
+        // Past what any grid can produce, so the answer saturates rather than returning something
+        // narrower than asked: for a bound, wider is slower and narrower loses a maximum.
+        assert_eq!(largest.widened_by(1e300).km(), f64::MAX);
+
+        let three = RadiusKm::new(3000.0).unwrap();
+        assert_eq!(three.widened_by(-500.0).km(), 3000.0);
+        assert_eq!(three.widened_by(f64::NAN).km(), f64::MAX);
     }
 
     #[test]

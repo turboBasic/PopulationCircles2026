@@ -5,4 +5,5 @@ pub mod kernel;
 pub mod progress;
 pub mod raster;
 pub mod report;
+pub mod search;
 pub mod table;

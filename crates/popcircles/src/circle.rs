@@ -52,7 +52,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::geodesy::{LatLon, great_circle_km};
+    use crate::geodesy::{LatLon, RadiusKm, great_circle_km};
     use crate::grid::{Grid, Row};
     use crate::kernel::Span;
     use crate::raster::Synthetic;
@@ -78,6 +78,10 @@ mod tests {
             -10.0,
         )
         .expect("a 36 x 18 whole-globe grid is valid")
+    }
+
+    fn radius(km: f64) -> RadiusKm {
+        RadiusKm::new(km).expect("a fixture radius is a length")
     }
 
     /// Distinct at every position, so a cell counted twice or not at all moves the total, and no larger
@@ -133,8 +137,8 @@ mod tests {
         for radius_km in [1500.0, 4000.0, 8000.0, 20_016.0] {
             for centre_row in grid.rows() {
                 // One kernel per row, placed at all 36 columns, which is the reuse the type exists for.
-                let kernel = Kernel::new(grid, centre_row, radius_km)
-                    .expect("a whole-globe grid and a radius that is a length");
+                let kernel =
+                    Kernel::new(grid, centre_row, radius(radius_km)).expect("a whole-globe grid");
                 for centre_col in grid.cols() {
                     assert_eq!(
                         population(&table, &kernel, centre_col),
@@ -182,8 +186,7 @@ mod tests {
             for centre_row in [0u32, 9] {
                 let row = grid.row(centre_row).expect("a row of the fixture");
                 // One kernel for both tables: a shift in longitude is exactly what it is invariant to.
-                let kernel = Kernel::new(grid, row, radius_km)
-                    .expect("a whole-globe grid and a radius that is a length");
+                let kernel = Kernel::new(grid, row, radius(radius_km)).expect("a whole-globe grid");
 
                 for k in [1i64, 17, 35] {
                     let shifted_payload = payload_over(shifted_cells(k));
@@ -211,8 +214,8 @@ mod tests {
         let grid = grid();
         let payload = payload_over(cells());
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
-        let kernel = Kernel::new(grid, grid.middle_row(), 4000.0)
-            .expect("a whole-globe grid and a radius that is a length");
+        let kernel =
+            Kernel::new(grid, grid.middle_row(), radius(4000.0)).expect("a whole-globe grid");
         let centre = grid.col(7).expect("a column of the fixture");
 
         assert_eq!(
@@ -235,8 +238,7 @@ mod tests {
         let (grid, payload) = fixture();
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
         let row = grid.row(0).expect("a row of the fixture");
-        let kernel = Kernel::new(grid, row, 2000.0)
-            .expect("a whole-globe grid and a radius that is a length");
+        let kernel = Kernel::new(grid, row, radius(2000.0)).expect("a whole-globe grid");
 
         assert_eq!(kernel.rows().next(), Some((row, Span::FullTurn)));
         for centre_col in [0u32, 18] {
@@ -257,8 +259,7 @@ mod tests {
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
         let row = grid.row(9).expect("a row of the fixture");
         let centre = grid.col(0).expect("a column of the fixture");
-        let kernel = Kernel::new(grid, row, 1500.0)
-            .expect("a whole-globe grid and a radius that is a length");
+        let kernel = Kernel::new(grid, row, radius(1500.0)).expect("a whole-globe grid");
 
         let (_, cols) = kernel
             .place(centre)
@@ -285,8 +286,8 @@ mod tests {
         // with this.
         let (grid, payload) = fixture();
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
-        let kernel = Kernel::new(grid, grid.middle_row(), 20_016.0)
-            .expect("a whole-globe grid and a radius that is a length");
+        let kernel =
+            Kernel::new(grid, grid.middle_row(), radius(20_016.0)).expect("a whole-globe grid");
         let (rows, cols) = table.whole();
 
         assert_eq!(
@@ -306,7 +307,7 @@ mod tests {
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
         let row = grid.row(4).expect("a row of the fixture");
         let centre = grid.col(29).expect("a column of the fixture");
-        let kernel = Kernel::new(grid, row, 0.0).expect("zero is a length");
+        let kernel = Kernel::new(grid, row, radius(0.0)).expect("zero is a radius");
 
         assert_eq!(
             population(&table, &kernel, centre),
@@ -341,10 +342,8 @@ mod tests {
             let row = grid.row(centre_row).expect("a row of the fixture");
             let centre = grid.col(centre_col).expect("a column of the fixture");
 
-            let inner = Kernel::new(grid, row, radius_km)
-                .expect("a whole-globe grid and a radius that is a length");
-            let outer = Kernel::new(grid, row, radius_km + growth)
-                .expect("a whole-globe grid and a radius that is a length");
+            let inner = Kernel::new(grid, row, radius(radius_km)).expect("a whole-globe grid");
+            let outer = Kernel::new(grid, row, radius(radius_km + growth)).expect("a whole-globe grid");
 
             let (narrow, wide) = (
                 population(&table, &inner, centre),
@@ -375,8 +374,8 @@ mod tests {
         .expect("an 18 x 9 whole-globe grid is valid");
         let payload = payload_over(cells());
         let table = Table::new(grid, &payload).expect("the build emits the padded product");
-        let kernel = Kernel::new(coarser, coarser.middle_row(), 3000.0)
-            .expect("a whole-globe grid has kernels");
+        let kernel =
+            Kernel::new(coarser, coarser.middle_row(), radius(3000.0)).expect("a whole-globe grid");
 
         let _ = population(
             &table,
