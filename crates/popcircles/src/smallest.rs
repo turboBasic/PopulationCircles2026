@@ -3,8 +3,14 @@
 // `search`'s fixed-radius maximum at each probe. What is here is the question — a share, the population it
 // resolves to, and the bracket every probe lives in; the I/O a resumed run needs is `smallest/cache.rs`'s.
 
+use std::num::NonZeroU32;
+
 use crate::geodesy::RadiusKm;
-use crate::search::{Candidate, SearchError};
+use crate::grid::{Col, Grid, Row};
+use crate::kernel::Kernel;
+use crate::progress::Progress;
+use crate::search::{self, Candidate, SearchError};
+use crate::table::Table;
 
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum ShareError {
@@ -147,6 +153,249 @@ pub enum SmallestError<E> {
     Ledger(#[source] E),
 }
 
+/// The smallest circle found, and everything a caller needs to disagree with it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Smallest {
+    /// The answer in whole kilometres, which is the unit the search steps in.
+    pub radius_km: u32,
+    pub radius: RadiusKm,
+    /// The most populous centre at [`Self::radius_km`], by `search`'s tie-break.
+    pub centre: Candidate,
+    pub target: Target,
+    /// `centre.population / target.total`, and zero for a table holding nobody — where every circle
+    /// achieves the same nothing and a quotient would be a `NaN` standing for it.
+    pub share_achieved: f64,
+    /// The radius one kilometre short of the answer and the population it held, or `None` when the answer
+    /// is 0 km and there is nothing below it.
+    ///
+    /// This is the **bracket the search proved**, and it is a stronger statement than the answer alone:
+    /// the pair says this radius reaches the target and the one below it does not, both measured. That the
+    /// answer is also the *minimum* rests on the computed predicate being monotone, which
+    /// [`Self::predicate_slack_persons`] is the width of.
+    pub short_below: Option<(u32, f64)>,
+    /// Whether the answer's circle is the whole table, which every circle at [`CEILING_KM`] is and a
+    /// narrower one on a small grid can be. A rendered circle that is the grid is worth knowing about.
+    pub covers_whole_grid: bool,
+    /// How far apart two radii's populations have to be for the comparison between them to be certain.
+    ///
+    /// See [`predicate_slack_persons`]. Reported rather than applied: inside it the computed predicate can
+    /// invert, so the answer is the true minimum for a target further than this from a plateau in the
+    /// radius, and a caller close to one wants the bracket rather than a comparison this search cannot
+    /// make.
+    pub predicate_slack_persons: f64,
+    /// The population slack the fixed-radius search at the answer's radius pruned with — zero, #6's
+    /// choice, carried up so a caller reads one result rather than this crate's constants.
+    pub tolerance_persons: f64,
+}
+
+/// How far apart two circles' computed populations must be before the comparison between them is certain,
+/// in persons.
+///
+/// **Not ADR 0003's 4 ulp**, which bounds one rectangle query. A circle is a sum of up to one query per
+/// grid row, added in [`crate::circle::population`]'s fixed order, so the error composes: `rows · 4 ulp` of
+/// the total for the terms, plus about `rows · ε · total` for the additions that combine them. At the
+/// registry raster's 21 600 rows and a total near 8e9 that is about 0.12 persons — seven orders of
+/// magnitude below the total, and five orders *above* the per-query figure, which is why quoting the
+/// per-query figure for a circle would be wrong by a factor of 30 000.
+///
+/// Conservative in both terms: no cancellation is assumed, and `4 ulp(total)` is charged to every row
+/// including the ones whose queries are over a fraction of it.
+#[must_use]
+pub fn predicate_slack_persons(grid: &Grid, total: f64) -> f64 {
+    let rows = f64::from(grid.height());
+    let ulp = total.next_up() - total;
+    rows * 4.0 * ulp + rows * f64::EPSILON * total
+}
+
+/// The row `index` names.
+///
+/// A panic rather than a `Result` for [`search`]'s reason: a [`Grid`] has at least one row and one column,
+/// so index 0 is a cell of every grid there is, and a miss would be a wiring mistake in this module rather
+/// than an input a caller could act on.
+fn north_west(grid: &Grid) -> (Row, Col) {
+    match (grid.row(0), grid.col(0)) {
+        (Some(row), Some(col)) => (row, col),
+        _ => panic!("a grid has at least one row and one column"),
+    }
+}
+
+/// `⌈log₂ width⌉`: how many halvings close an interval of `width` candidates.
+fn halvings(width: u32) -> u32 {
+    match width {
+        0 | 1 => 0,
+        _ => u32::BITS - (width - 1).leading_zeros(),
+    }
+}
+
+/// An upper bound on the probes still to come once `km` is the next one the climb will take.
+///
+/// The climb doubles until it reaches the cap, and the bracket it hands the bisection is no wider than the
+/// probe that closed it, so both terms are ceilings of a logarithm rather than counts.
+fn climb_probes_remaining(km: u32) -> u32 {
+    let cap = CEILING_KM - 1;
+    let doublings = 1 + halvings(cap / km.max(1));
+    doublings + halvings(km)
+}
+
+/// Whether a circle of `radius` centred on `centre`'s row spans every row of the grid in full.
+///
+/// Geometric rather than a comparison of populations: two different circles can hold the same people, and
+/// what this field claims is coverage.
+fn spans_whole_grid(grid: &Grid, centre: Row, radius: RadiusKm) -> Result<bool, SearchError> {
+    let kernel = Kernel::new(*grid, centre, radius)?;
+    let mut rows = 0u32;
+    for (_, span) in kernel.rows() {
+        if span != crate::kernel::Span::FullTurn {
+            return Ok(false);
+        }
+        rows += 1;
+    }
+    Ok(rows == grid.height())
+}
+
+/// The maximum at `km`, from the ledger when it holds one and from a search when it does not.
+fn probe<L: RadiusLedger>(
+    table: &Table<'_>,
+    km: u32,
+    spacing: NonZeroU32,
+    ledger: &mut L,
+) -> Result<Candidate, SmallestError<L::Error>> {
+    // Before the search and never after it, which is the whole of what a ledger buys.
+    if let Some(found) = ledger.get(km) {
+        return Ok(found);
+    }
+    // The inner search reports per level of its own refinement; two meters through one sink interleave
+    // into noise, so this one is silent and the caller's sink hears about radii.
+    let found = search::most_populous(table, RadiusKm::from(km), spacing, &mut ())?.centre;
+    ledger.put(km, found).map_err(SmallestError::Ledger)?;
+    Ok(found)
+}
+
+/// The smallest circle whose population reaches `share` of the table's own total, by whole kilometres of
+/// ground radius.
+///
+/// The total is [`Table::whole`]'s query, so it is the figure a build publishes rather than a second
+/// summation of the same cells, and the target is `share × total`.
+///
+/// **The probe order climbs from below**: 1, 2, 4, … kilometres until one reaches the target, then a
+/// bisection of the bracket that closed. Not a bisection of `[0, CEILING_KM]`, and the reason is a
+/// property of the layer below rather than a preference. `search`'s pruning is strict, so a plateau of
+/// centres that all hold the same population is never pruned and refinement runs to single cells across
+/// all of it; at radii covering most of the globe that plateau is most of the grid. Climbing keeps every
+/// probe of an ordinary share inside the regime where the bound bites, and `CEILING_KM` — where every
+/// centre ties and the plateau is the whole grid — is answered by one [`Table::whole`] query instead of
+/// ever being searched.
+///
+/// `spacing` is forwarded to every probe untouched. There is no default here for the reason there is none
+/// there: the useful range is a measured property of the raster and the radius.
+///
+/// `progress` is advanced once per settled radius, `(settled, settled + a bound on what remains)`. The
+/// total is a bound rather than a count because how many probes there are depends on where the answer is,
+/// and it may *rise* while the climb is still discovering how far it has to go — that is the honest shape
+/// of a doubling search. It reaches the settled count exactly, so the last call a sink sees is `(n, n)`.
+///
+/// # Errors
+/// [`SmallestError::Search`] when a probe cannot be searched — a grid whose columns do not close has no
+/// kernels — and [`SmallestError::Ledger`] when the ledger cannot record one. There is no error for an
+/// unreachable target: a [`Share`] is at most one and the ceiling holds the whole total.
+pub fn smallest<L: RadiusLedger, P: Progress>(
+    table: &Table<'_>,
+    share: Share,
+    spacing: NonZeroU32,
+    ledger: &mut L,
+    progress: &mut P,
+) -> Result<Smallest, SmallestError<L::Error>> {
+    let grid = *table.grid();
+    let (whole_rows, whole_cols) = table.whole();
+    let total = table.population(whole_rows, whole_cols);
+    let target = Target::of(share, total);
+
+    let mut settled = 0u64;
+    // The climb. `CEILING_KM - 1` is the cap because the ceiling itself is not a radius this searches.
+    let cap = CEILING_KM - 1;
+    let mut km = 1u32;
+    let mut low = 0u32;
+    let mut short_below: Option<(u32, f64)> = None;
+    let mut reached: Option<(u32, Candidate)> = None;
+
+    loop {
+        progress.advance(settled, settled + u64::from(climb_probes_remaining(km)));
+        let found = probe(table, km, spacing, ledger)?;
+        settled += 1;
+
+        if found.population >= target.persons {
+            reached = Some((km, found));
+            break;
+        }
+        short_below = Some((km, found.population));
+        low = km + 1;
+        if km == cap {
+            break;
+        }
+        km = km.saturating_mul(2).min(cap);
+    }
+
+    let Some((mut high, mut best)) = reached else {
+        // Nothing under the ceiling reaches the target, so the answer is the circle that is the grid. Its
+        // population is the extent's own query, and every cell of the grid is a maximiser of it — so
+        // `Candidate::better`'s rule, ties to the smaller `(row, col)`, names the north-west one.
+        let (row, col) = north_west(&grid);
+        return Ok(Smallest {
+            radius_km: CEILING_KM,
+            radius: ceiling_radius(),
+            centre: Candidate {
+                row,
+                col,
+                population: total,
+            },
+            target,
+            share_achieved: achieved(total, total),
+            short_below,
+            covers_whole_grid: true,
+            predicate_slack_persons: predicate_slack_persons(&grid, total),
+            tolerance_persons: 0.0,
+        });
+    };
+
+    // The bisection. Every radius under `low` has been ruled out by a probe that fell short, and `high`
+    // reaches, so the invariant holds at entry and the loop keeps it.
+    while low < high {
+        progress.advance(settled, settled + u64::from(halvings(high - low)));
+        let mid = low + (high - low) / 2;
+        let found = probe(table, mid, spacing, ledger)?;
+        settled += 1;
+
+        if found.population >= target.persons {
+            high = mid;
+            best = found;
+        } else {
+            short_below = Some((mid, found.population));
+            low = mid + 1;
+        }
+    }
+
+    progress.advance(settled, settled);
+    Ok(Smallest {
+        radius_km: high,
+        radius: RadiusKm::from(high),
+        centre: best,
+        target,
+        share_achieved: achieved(best.population, total),
+        // Only the radius directly below the answer is a witness to its minimality; a short probe further
+        // down is one the bisection has already superseded.
+        short_below: short_below.filter(|(km, _)| Some(*km) == high.checked_sub(1)),
+        covers_whole_grid: spans_whole_grid(&grid, best.row, RadiusKm::from(high))?,
+        predicate_slack_persons: predicate_slack_persons(&grid, total),
+        tolerance_persons: 0.0,
+    })
+}
+
+/// The share a population is of a total, and zero when the total is nothing: every circle over an empty
+/// table achieves the same nothing, and `0 / 0` would publish a `NaN` standing for it.
+fn achieved(population: f64, total: f64) -> f64 {
+    if total > 0.0 { population / total } else { 0.0 }
+}
+
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
 // exemption; docs/ai/code.md allows both in tests. float_cmp is the point rather than a concession: the
 // fixtures below are distinct small integers, so every partial sum is exact and a tolerance would let a
@@ -260,6 +509,40 @@ mod tests {
             col: col_of(grid, col),
             population,
         }
+    }
+
+    fn spacing(cells: u32) -> NonZeroU32 {
+        NonZeroU32::new(cells).expect("a fixture spacing is not zero")
+    }
+
+    fn share(value: f64) -> Share {
+        Share::new(value).expect("a fixture share is a proportion")
+    }
+
+    /// A raster of zeros with `value` planted on each of `patches`, given as inclusive `(rows, cols)`.
+    fn planted(
+        patches: Vec<((u32, u32), (u32, u32))>,
+        value: f32,
+    ) -> impl Fn(u32, u32) -> f32 + use<> {
+        move |row, col| {
+            let inside = patches.iter().any(|((north, south), (first, last))| {
+                (*north..=*south).contains(&row) && (*first..=*last).contains(&col)
+            });
+            if inside { value } else { 0.0 }
+        }
+    }
+
+    /// The maximum at one radius, by the same search a probe runs, for a test that wants to check a
+    /// bracket's other end without going through `smallest` again.
+    fn maximum_at(table: &Table<'_>, km: u32, cells: u32) -> Candidate {
+        search::most_populous(table, RadiusKm::from(km), spacing(cells), &mut ())
+            .expect("a whole-globe fixture has kernels")
+            .centre
+    }
+
+    fn found(table: &Table<'_>, value: f64, cells: u32) -> Smallest {
+        smallest(table, share(value), spacing(cells), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail")
     }
 
     #[test]
@@ -381,5 +664,161 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_answer_reaches_the_target_and_the_kilometre_below_it_does_not() {
+        // The bracket, on two fixtures, with every figure a literal: the answer, the population it holds
+        // and the population the kilometre below it holds. Changing any of the three fails, which is what
+        // makes this a claim about the search rather than a record of what it printed.
+        //
+        // The cluster is #6's: four cells of a hundred at 5 N to 5 S, whose diagonal is 14.13 degrees, or
+        // 1571 km. So no centre reaches all four at 1571 — three of them is 300 people — and 1572 is the
+        // first radius that does.
+        let grid = grid();
+        let cluster = payload_over(&grid, planted(vec![((8, 9), (15, 16))], 100.0));
+        let table = Table::new(grid, &cluster).expect("the build emits the padded product");
+
+        let all = found(&table, 1.0, 4);
+        assert_eq!(all.radius_km, 1572);
+        assert_eq!(all.centre.population, 400.0);
+        assert_eq!(all.short_below, Some((1571, 300.0)));
+        assert_eq!(all.share_achieved, 1.0);
+        assert!(!all.covers_whole_grid);
+        assert_eq!(all.tolerance_persons, 0.0);
+        // The witness is a probe and not an inference: the same radius searched directly is short too.
+        assert_eq!(maximum_at(&table, 1571, 4).population, 300.0);
+
+        // And half of a whole-globe fixture, where the answer is a long way from either end of the
+        // bracket: 210 276 people over 648 distinct cells, half of them inside 5770 km of one centre.
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let half = found(&table, 0.5, 4);
+        assert_eq!(half.radius_km, 5770);
+        assert_eq!(half.target.persons, 105_138.0);
+        assert_eq!(half.centre.population, 105_623.0);
+        assert_eq!(half.short_below, Some((5769, 104_706.0)));
+        assert_eq!(maximum_at(&table, 5769, 4).population, 104_706.0);
+    }
+
+    #[test]
+    fn no_radius_under_the_answer_reaches_the_target() {
+        // The minimality claim by exhaustion rather than by the bracket: every one of the 1572 integer
+        // radii below the answer is searched and every one of them falls short. This is the test the
+        // climb-then-bisect order has to survive — a bracket closed one kilometre too high would pass the
+        // test above and fail here.
+        //
+        // Measured on this tree at 0.98 s in a debug build, which is why the fixture is the cluster and
+        // not the half-share above: the same scan at 5770 km would be nearly four times that.
+        let grid = grid();
+        let payload = payload_over(&grid, planted(vec![((8, 9), (15, 16))], 100.0));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let answer = found(&table, 1.0, 4);
+        assert_eq!(answer.radius_km, 1572);
+        for km in 0..answer.radius_km {
+            let held = maximum_at(&table, km, 4).population;
+            assert!(
+                held < answer.target.persons,
+                "{km} km already holds {held} of the {} wanted",
+                answer.target.persons
+            );
+        }
+    }
+
+    #[test]
+    fn a_share_one_cell_holds_is_answered_at_zero_kilometres() {
+        // Zero is inside the bracket rather than a case beside it: the climb's first reaching radius is
+        // 1 km, the bisection over [0, 1] probes zero, and a circle that is its own centre cell is the
+        // answer. `short_below` is `None` because there is no radius below it to have proved short.
+        let grid = grid();
+        let payload = payload_over(&grid, planted(vec![((4, 4), (7, 7))], 50.0));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let single = found(&table, 1.0, 4);
+        assert_eq!(single.radius_km, 0);
+        assert_eq!(single.radius.km(), 0.0);
+        assert_eq!(single.short_below, None);
+        assert_eq!((single.centre.row.get(), single.centre.col.get()), (4, 7));
+        assert_eq!(single.centre.population, 50.0);
+    }
+
+    #[test]
+    fn a_target_only_the_whole_grid_reaches_is_answered_at_the_ceiling() {
+        // The fixture's own geometry is what makes this case reachable, and it is worth stating: the grid
+        // is symmetric about the equator and the antimeridian, so every cell centre has another cell
+        // centre exactly antipodal to it — (85 N, 175 W) against (85 S, 5 E). Every cell holds people, so
+        // a circle containing all of them spans half the circumference, and no integer kilometre under
+        // 20 016 does. At 20 015 the maximum misses exactly one cell, and on this fixture that cell is the
+        // one holding a single person.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let (rows, cols) = table.whole();
+        let total = table.population(rows, cols);
+
+        let whole = found(&table, 1.0, 4);
+        assert_eq!(whole.radius_km, CEILING_KM);
+        assert!(whole.covers_whole_grid);
+        // The population is the extent's own query, bit for bit, and not a fold that agrees to a
+        // tolerance — which is the whole reason the ceiling is answered the way it is.
+        assert_eq!(whole.centre.population.to_bits(), total.to_bits());
+        assert_eq!(whole.target.persons.to_bits(), total.to_bits());
+        assert_eq!(whole.share_achieved, 1.0);
+        // The north-west cell, by the tie-break the test below pins.
+        assert_eq!((whole.centre.row.get(), whole.centre.col.get()), (0, 0));
+        assert_eq!(whole.short_below, Some((20_015, total - 1.0)));
+    }
+
+    #[test]
+    fn the_tie_break_over_equal_candidates_names_the_north_west_cell() {
+        // What licenses the centre above without re-deriving `search`'s rule here: with every candidate
+        // holding the same population, folding the real rule over every cell of the grid gives cell
+        // (0, 0). Folded in both directions, because the rule is order-independent and a shortcut resting
+        // on a first-seen rule would be wrong the moment the traversal changed.
+        let grid = grid();
+        let every: Vec<Candidate> = grid
+            .rows()
+            .flat_map(|row| {
+                grid.cols().map(move |col| Candidate {
+                    row,
+                    col,
+                    population: 7.0,
+                })
+            })
+            .collect();
+
+        let forwards = every
+            .iter()
+            .copied()
+            .reduce(Candidate::better)
+            .expect("the grid has cells");
+        let backwards = every
+            .iter()
+            .rev()
+            .copied()
+            .reduce(Candidate::better)
+            .expect("the grid has cells");
+
+        assert_eq!((forwards.row.get(), forwards.col.get()), (0, 0));
+        assert_eq!((backwards.row.get(), backwards.col.get()), (0, 0));
+    }
+
+    #[test]
+    fn the_same_search_twice_gives_the_same_bits() {
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let first = found(&table, 0.25, 5);
+        let second = found(&table, 0.25, 5);
+        assert_eq!(first.radius_km, second.radius_km);
+        assert_eq!(
+            first.centre.population.to_bits(),
+            second.centre.population.to_bits()
+        );
+        assert_eq!(first.centre.row, second.centre.row);
+        assert_eq!(first.centre.col, second.centre.col);
+        assert_eq!(first.short_below, second.short_below);
     }
 }
