@@ -10,7 +10,7 @@ use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
 use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
 use crate::search::{MostPopulous, SearchStats};
-use crate::smallest::share_of;
+use crate::smallest::{Smallest, SmallestStats, Target, share_of};
 use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
@@ -400,6 +400,129 @@ impl MostPopulousReport {
     }
 }
 
+/// The share a circle was asked for, resolved against the population it is a share of.
+///
+/// All three, because two of them are derived and a consumer checking the third against the raster's own
+/// total is the check that catches a document answered from the wrong table.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct TargetReport {
+    share: f64,
+    persons: f64,
+    total: f64,
+}
+
+impl From<Target> for TargetReport {
+    fn from(target: Target) -> Self {
+        Self {
+            share: target.share.get(),
+            persons: target.persons,
+            total: target.total,
+        }
+    }
+}
+
+/// The radius one kilometre short of the answer, and what it held.
+///
+/// The other end of the bracket, and the field that makes minimality readable off the document: this
+/// population is under the target and the answer's is not, both measured rather than inferred.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ShortBelowReport {
+    radius_km: u32,
+    population: f64,
+}
+
+/// What a search over radius did beside answering.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SmallestStatsReport {
+    radii_evaluated: u64,
+    /// Radii answered from a previous run's record instead of searched. The two counters sum to the radii
+    /// the run settled, so a resumed run reads as the first falling and this one rising by as much.
+    radii_reused: u64,
+    searched: SearchStatsReport,
+}
+
+impl From<SmallestStats> for SmallestStatsReport {
+    fn from(stats: SmallestStats) -> Self {
+        Self {
+            radii_evaluated: stats.radii_evaluated,
+            radii_reused: stats.radii_reused,
+            searched: stats.searched.into(),
+        }
+    }
+}
+
+/// One smallest circle, as published: the answer, the bracket that proved it, and what the arithmetic
+/// beneath it can and cannot separate.
+///
+/// The radius leads because it is the answer — every other field is what the answer rests on.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SmallestReport {
+    radius_km: u32,
+    centre: Coordinate,
+    row: u32,
+    col: u32,
+    population: f64,
+    target: TargetReport,
+    share_achieved: f64,
+    /// Absent, rather than null, when the answer is 0 km and there is no radius below it to have proved
+    /// short — [`TableQueryReport::window`]'s convention.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    short_below: Option<ShortBelowReport>,
+    covers_whole_grid: bool,
+    predicate_slack_persons: f64,
+    tolerance_persons: f64,
+    stats: SmallestStatsReport,
+}
+
+impl SmallestReport {
+    #[must_use]
+    pub fn new(found: &Smallest, grid: &Grid) -> Self {
+        let centre = found.centre;
+        Self {
+            radius_km: found.radius_km,
+            centre: grid.centre_of(centre.row, centre.col).into(),
+            row: centre.row.get(),
+            col: centre.col.get(),
+            population: centre.population,
+            target: found.target.into(),
+            share_achieved: found.share_achieved,
+            short_below: found
+                .short_below
+                .map(|(radius_km, population)| ShortBelowReport {
+                    radius_km,
+                    population,
+                }),
+            covers_whole_grid: found.covers_whole_grid,
+            predicate_slack_persons: found.predicate_slack_persons,
+            tolerance_persons: found.tolerance_persons,
+            stats: found.stats.into(),
+        }
+    }
+}
+
+/// The record of what every radius a run probed held, and where it sits.
+///
+/// A document-level block rather than a field of [`SmallestReport`], because one run opens one of these
+/// and what it holds is a property of the table rather than of any share: a sweep of ninety shares
+/// shares one, and putting its path in each circle would write the same path ninety times.
+#[derive(Debug, Clone, Serialize)]
+pub struct LedgerReport {
+    path: String,
+    /// How many radii the file holds, which is the only figure that says whether resumption is working.
+    radii: usize,
+}
+
+impl LedgerReport {
+    /// [`CacheFiles::new`]'s treatment of a path, and for its reason.
+    #[must_use]
+    pub fn new(path: &Path, radii: usize) -> Self {
+        Self {
+            path: path.to_string_lossy().into_owned(),
+            radii,
+        }
+    }
+}
+
 /// The one spelling of a digest, so the string a build publishes is the string a query accepts.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
@@ -427,6 +550,7 @@ mod tests {
     use crate::kernel::Kernel;
     use crate::raster::Synthetic;
     use crate::search;
+    use crate::smallest::{self, Share};
     use crate::table::{Decimation, Table, build};
 
     #[test]
@@ -689,6 +813,32 @@ mod tests {
         assert_ne!((found.centre.row.get(), found.centre.col.get()), (0, 0));
 
         insta::assert_json_snapshot!(Envelope::new(MostPopulousReport::new(&found, &grid, total)));
+    }
+
+    fn share(value: f64) -> Share {
+        Share::new(value).expect("a fixture share is a proportion")
+    }
+
+    #[test]
+    fn the_smallest_document_holds_its_shape() {
+        // Over the real search over radius, with no ledger, so the bracket in the document is one a
+        // search proved rather than a pair someone wrote down.
+        //
+        // The two populations are what make it a bracket: the answer's reaches the target and
+        // `short_below`'s does not. An off-by-one in the bisection's reporting — publishing the radius
+        // two below, or the one above — fails here rather than in a renderer.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let found = smallest::smallest(&table, share(0.25), spacing(4), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+        let below = found.short_below.expect("the answer is not 0 km");
+        assert!(below.1 < found.target.persons, "{found:?}");
+        assert!(found.centre.population >= found.target.persons, "{found:?}");
+        assert_eq!(below.0, found.radius_km - 1);
+
+        insta::assert_json_snapshot!(Envelope::new(SmallestReport::new(&found, &grid)));
     }
 
     #[test]
