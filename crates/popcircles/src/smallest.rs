@@ -3,6 +3,8 @@
 // `search`'s fixed-radius maximum at each probe. What is here is the question — a share, the population it
 // resolves to, and the bracket every probe lives in; the I/O a resumed run needs is `smallest/cache.rs`'s.
 
+pub mod cache;
+
 use std::num::NonZeroU32;
 
 use crate::geodesy::RadiusKm;
