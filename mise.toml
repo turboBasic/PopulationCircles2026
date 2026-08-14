@@ -69,6 +69,17 @@ run = [
 description = "Lint Rust with clippy, warnings are errors"
 run = "cargo clippy --all-targets --all-features -- -D warnings"
 
+# FU-10's fix. Three flags, each load-bearing, because the obvious spelling of this task gates nothing:
+# `-D warnings` because rustdoc *warns and exits 0*, so a task reading only the exit status passes a tree
+# with broken links in it — measured before #8, where seven warnings sat under a green `mise run ci`.
+# `--document-private-items` because without it rustdoc never reads a private item's doc comment, and this
+# crate keeps most of its reasoning there; with the plain form, a broken link inside `report.rs`'s own
+# helpers goes unreported. `--workspace` because the CLI has doc comments too.
+[tasks."lint:rustdoc"]
+description = "Lint rustdoc, broken intra-doc links are errors"
+env = { RUSTDOCFLAGS = "-D warnings" }
+run = "cargo doc --workspace --no-deps --document-private-items"
+
 [tasks."lint:python"]
 description = "Lint Python with ruff"
 run = "uv run ruff check ."
@@ -121,6 +132,7 @@ run = "prek run --all-files doc-pointers"
 description = "Run every linter"
 depends = [
   "lint:rust",
+  "lint:rustdoc",
   "lint:python",
   "lint:workflows",
   "lint:lfs",

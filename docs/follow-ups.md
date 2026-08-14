@@ -246,8 +246,9 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-10 - Nothing checks rustdoc
 
-- **Status** — `due` (2026-08-14): no task or job runs rustdoc, and #8 found a `///` line promising a variant
-  the enum no longer has, which every gate had passed over.
+- **Status** — `closed` (2026-08-14): `mise run lint:rustdoc` implements the fix below and `lint` depends on
+  it, so CI runs it. Closed with two departures from the Fix as written, both measured rather than
+  preferred — see the note beneath it.
 - **Condition** — no quality gate runs rustdoc, so a doc comment naming an item that has gone survives the
   whole of `mise run ci`. The sweep is `rg -n 'cargo doc' mise.toml .github/workflows/` coming back empty,
   which is what makes this `due` the day it is written. The evidence that it bites rather than merely could:
@@ -262,6 +263,18 @@ Identifiers are flat, sequential and never reused.
   warns and exits 0: measured on the tree before #8, the command exited 0 with seven warnings, so a task
   reading only the exit status would gate nothing. Measured again after #8: zero warnings, so the task comes
   back clean the day it is added and gates from then on.
+
+  **What landed takes two more flags than that, because the command as written gates less than it looks
+  like it does.** Both were measured on 2026-08-14 by injecting a broken link and checking the exit status.
+  `--document-private-items`: without it rustdoc never reads a private item's doc comment, so a broken link
+  inside `report.rs`'s own helpers exits 0 and reports nothing — and this crate keeps most of its reasoning
+  on private items. `--workspace` rather than `-p popcircles`: the CLI crate has doc comments too, and its
+  own intra-doc links were outside the prescribed command. The flag also retires the lint that produced six
+  of the seven warnings above — "public documentation links to private item" cannot fire once private items
+  are documented — which is the right trade: that lint is about doc visibility, while the defect this entry
+  exists to catch is a link naming something gone. The regression test is the original defect itself,
+  `search.rs`'s `[`SearchError::Radius`]`, which the task reports as "the enum `SearchError` has no variant
+  or associated item named `Radius`".
 
 ### FU-11 - The cache binds no grid geometry
 
