@@ -1,0 +1,48 @@
+---
+source: crates/popcircles/src/report.rs
+expression: "Envelope::new(SmallestReport::new(&found, &grid))"
+---
+{
+  "schema_version": 1,
+  "tool": "popcircles",
+  "tool_version": "0.0.0",
+  "result": {
+    "radius_km": 1572,
+    "centre": {
+      "lat": 5.0,
+      "lon": -25.0
+    },
+    "row": 8,
+    "col": 15,
+    "population": 400.0,
+    "target": {
+      "share": 1.0,
+      "persons": 400.0,
+      "total": 400.0
+    },
+    "share_achieved": 1.0,
+    "short_below": {
+      "radius_km": 1571,
+      "population": 300.0
+    },
+    "covers_whole_grid": false,
+    "predicate_slack_persons": 0.0000000000056914473134384025,
+    "ambiguity": {
+      "lowest_km": 1572,
+      "highest_km": 2048,
+      "radii": 7
+    },
+    "tolerance_persons": 0.0,
+    "stats": {
+      "radii_evaluated": 22,
+      "radii_reused": 0,
+      "searched": {
+        "levels": 66,
+        "blocks_examined": 8214,
+        "blocks_pruned": 6320,
+        "circles_evaluated": 1894,
+        "kernels_built": 792
+      }
+    }
+  }
+}

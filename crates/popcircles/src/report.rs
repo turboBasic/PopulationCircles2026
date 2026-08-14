@@ -61,7 +61,7 @@ use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
 use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
 use crate::search::{MostPopulous, SearchStats};
-use crate::smallest::{Smallest, SmallestStats, Target, share_of};
+use crate::smallest::{Ambiguity, Smallest, SmallestStats, Target, share_of};
 use crate::table::cache::Identity;
 use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 
@@ -482,6 +482,29 @@ pub struct ShortBelowReport {
     population: f64,
 }
 
+/// The probed radii the arithmetic could not separate from the target, as published.
+///
+/// **A floor on the ambiguity rather than the interval**, for the reason [`Ambiguity`] states: the ends are
+/// the widest pair a run measured, and the radii between them mostly were not measured at all. A consumer
+/// reading this as the interval is reading it as a stronger claim than it is.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct AmbiguityReport {
+    lowest_km: u32,
+    highest_km: u32,
+    /// How many probed radii fell inside, which is what separates a wide span from a sparsely probed one.
+    radii: u32,
+}
+
+impl From<Ambiguity> for AmbiguityReport {
+    fn from(span: Ambiguity) -> Self {
+        Self {
+            lowest_km: span.lowest_km,
+            highest_km: span.highest_km,
+            radii: span.radii,
+        }
+    }
+}
+
 /// What a search over radius did beside answering.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct SmallestStatsReport {
@@ -521,6 +544,13 @@ pub struct SmallestReport {
     short_below: Option<ShortBelowReport>,
     covers_whole_grid: bool,
     predicate_slack_persons: f64,
+    /// Absent when every radius the run probed was separated from the target by more than the slack above,
+    /// which is [`Self::short_below`]'s convention and keeps the ordinary document byte-identical.
+    ///
+    /// Present, it says `radius_km` is one radius from a span this arithmetic cannot order, so a consumer
+    /// reporting it as the minimum is reporting more than the search proved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ambiguity: Option<AmbiguityReport>,
     tolerance_persons: f64,
     stats: SmallestStatsReport,
 }
@@ -545,6 +575,7 @@ impl SmallestReport {
                 }),
             covers_whole_grid: found.covers_whole_grid,
             predicate_slack_persons: found.predicate_slack_persons,
+            ambiguity: found.ambiguity.map(Into::into),
             tolerance_persons: found.tolerance_persons,
             stats: found.stats.into(),
         }
@@ -969,6 +1000,31 @@ mod tests {
         assert!(below.1 < found.target.persons, "{found:?}");
         assert!(found.centre.population >= found.target.persons, "{found:?}");
         assert_eq!(below.0, found.radius_km - 1);
+
+        insta::assert_json_snapshot!(Envelope::new(SmallestReport::new(&found, &grid)));
+    }
+
+    #[test]
+    fn an_unseparated_answer_publishes_the_span_and_a_separated_one_omits_it() {
+        // The other document the field has, over the fixture whose answer the arithmetic cannot separate:
+        // four cells of a hundred and nobody else, so every circle holding all four holds the same 400
+        // people and every reaching probe's margin against a target of everyone is zero. The span the
+        // snapshot pins is 1572 to 2048 km over seven probed radii, which is what a change to how it is
+        // accumulated moves; the answer above, over the same document type, has no `ambiguity` key at all.
+        let grid = fixture_grid();
+        let payload = payload_over(&grid, |row, col| {
+            if (8..=9).contains(&row) && (15..=16).contains(&col) {
+                100.0
+            } else {
+                0.0
+            }
+        });
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let found = smallest::smallest(&table, share(1.0), spacing(4), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+        assert_eq!(found.radius_km, 1572);
+        assert!(found.ambiguity.is_some(), "{found:?}");
 
         insta::assert_json_snapshot!(Envelope::new(SmallestReport::new(&found, &grid)));
     }

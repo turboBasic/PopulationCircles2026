@@ -189,7 +189,7 @@ fixture can check is a commit whose whole content is the check.
 
 ## Phase 2 — the wire
 
-- [ ] **2.1 `report` publishes the span, absent when the answer is separated.** An `AmbiguityReport` beside
+- [x] **2.1 `report` publishes the span, absent when the answer is separated.** An `AmbiguityReport` beside
       `ShortBelowReport` in `report.rs`, and `SmallestReport` gains
       `#[serde(skip_serializing_if = "Option::is_none")] ambiguity` — `short_below`'s convention in that file, for its reason. `SCHEMA_VERSION` does not move: the field is additive under ADR 0001
       decision 3, and the measurement that makes that more than a claim is the next line.
