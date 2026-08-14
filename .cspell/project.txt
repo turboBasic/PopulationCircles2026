@@ -23,6 +23,8 @@ taplo
 # --- Domain vocabulary ---
 antimeridian
 arcmin
+binade
+binades
 arcsec
 datasheet
 equirectangular
@@ -68,6 +70,7 @@ miniz
 ndarray
 pread
 proptest
+splitmix
 thiserror
 weezl
 zerocopy

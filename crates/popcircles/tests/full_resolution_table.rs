@@ -27,6 +27,20 @@ const NODATA: f32 = -3.402_823e38;
 /// That is what makes the i128 side a reference rather than a second approximation.
 const SCALE: f64 = (1u64 << 40) as f64;
 
+/// f32 stores this many significand bits, and a generated cell fills all of them.
+const SIGNIFICAND_BITS: u32 = 23;
+const SIGNIFICAND_MASK: u32 = (1 << SIGNIFICAND_BITS) - 1;
+
+/// The smallest exponent field a generated cell carries, which holds every one at or above 2.0 — the
+/// property [`SCALE`] rests on — and the number of binades they spread over above it. Eighteen reaches
+/// 2^20, against the registry raster's largest cell of 602 380.
+const EXPONENT_FLOOR: u32 = 128;
+const BINADES: u32 = 18;
+
+/// The populated share, in thousandths. The registry raster's is about a fifth.
+const POPULATED_PER_MILLE: u64 = 195;
+
+/// splitmix64, so a cell depends on nothing but its position.
 fn mix(value: u64) -> u64 {
     let mut z = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -38,20 +52,18 @@ fn mix(value: u64) -> u64 {
 /// produced instead of sharing a buffer with it: nothing the build touched can reach what it is
 /// checked against.
 ///
-/// Roughly a fifth of the cells are populated, as the registry raster's are. The exponent is geometric
-/// so a cell of a million is about as rare as one is there, and the significand is a full 23 bits so no
-/// cell is a round number the arithmetic could get right by luck. The exponent field starts at 128,
-/// which holds every cell at or above 2.0 — the property `SCALE` rests on — and reaches 2^20 against
-/// the registry's largest cell of 602 380.
+/// The exponent is geometric, so a cell of a million is about as rare as one is in the registry raster,
+/// and the significand is full, so no cell is a round number the arithmetic could get right by luck.
 fn cell(row: u32, col: u32) -> f32 {
     let hash = mix(u64::from(row) * u64::from(WIDTH) + u64::from(col));
-    if hash % 1000 >= 195 {
+    if hash % 1_000 >= POPULATED_PER_MILLE {
         return 0.0;
     }
-    let exponent = 128 + (hash >> 10).trailing_zeros().min(18);
-    // The mask keeps 23 bits, so this is exact.
-    let significand = ((hash >> 32) & 0x7f_ffff) as u32;
-    f32::from_bits((exponent << 23) | significand)
+    // Trailing zeros are geometric, and the shift is past the bits the populated share just read.
+    let exponent = EXPONENT_FLOOR + (hash >> 10).trailing_zeros().min(BINADES);
+    // The mask keeps 23 bits, so the narrowing is exact.
+    let significand = ((hash >> 32) as u32) & SIGNIFICAND_MASK;
+    f32::from_bits((exponent << SIGNIFICAND_BITS) | significand)
 }
 
 /// Exact, per [`SCALE`]: the product is integral and needs 73 bits at the largest total here, which
@@ -60,9 +72,9 @@ fn units(value: f64) -> i128 {
     (value * SCALE) as i128
 }
 
-/// One ulp at `value`'s magnitude, assembled from its exponent rather than computed.
+/// One ulp at `value`'s magnitude.
 fn ulp(value: f64) -> f64 {
-    f64::from_bits((((value.abs().to_bits() >> 52) & 0x7ff) - 52) << 52)
+    value.abs().next_up() - value.abs()
 }
 
 struct Generated {

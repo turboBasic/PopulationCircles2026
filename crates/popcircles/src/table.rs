@@ -548,13 +548,15 @@ mod tests {
 
     /// One ulp at `value`'s magnitude, which is the unit the decimation budget below is in.
     fn ulp(value: f64) -> f64 {
-        f64::from_bits((((value.abs().to_bits() >> 52) & 0x7ff) - 52) << 52)
+        value.abs().next_up() - value.abs()
     }
 
-    /// A cell with a full 23-bit significand, spread over four orders of magnitude, so a tolerance
-    /// asserted against it is about arithmetic rather than about integers f64 adds exactly.
-    fn spread(index: u32) -> f32 {
-        f32::from_bits(((120 + index % 14) << 23) | (index.wrapping_mul(2_654_435_761) & 0x7f_ffff))
+    /// A fixture cell, distinct at every position and mostly a repeating binary fraction, so no partial
+    /// sum of these is exact in f64 and the budget below is a claim about arithmetic rather than about
+    /// integers f64 happens to add exactly. The conversion is through `u16` because f32 holds every one
+    /// of those exactly, so the inexactness is the third and nothing else.
+    fn a_third_of(index: u32) -> f32 {
+        f32::from(u16::try_from(index + 1).unwrap()) / 3.0
     }
 
     /// 3 and 4 both divide 12; only 3 divides 6.
@@ -627,7 +629,7 @@ mod tests {
         let cells: Vec<Vec<f32>> = (0..grid.height())
             .map(|row| {
                 (0..grid.width())
-                    .map(|col| spread(row * 12 + col))
+                    .map(|col| a_third_of(row * grid.width() + col))
                     .collect()
             })
             .collect();
