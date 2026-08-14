@@ -46,6 +46,16 @@ pub fn great_circle_km(from: LatLon, to: LatLon) -> f64 {
     EARTH_RADIUS_KM * angular_distance_rad(from, to)
 }
 
+/// The central angle an arc of `km` subtends: [`great_circle_km`]'s inverse.
+///
+/// It lives here for the reason [`zone_area_km2`] does. Dividing by the radius names the earth model as
+/// much as multiplying by it does, and a circle's radius arrives in kilometres while the angle a
+/// spherical cap is compared against is in radians.
+#[must_use]
+pub fn central_angle_rad(km: f64) -> f64 {
+    km / EARTH_RADIUS_KM
+}
+
 /// The band of latitude between two parallels: what a spherical zone stands on, and what a grid row
 /// occupies.
 ///
@@ -164,6 +174,27 @@ mod tests {
             half,
             "pole to pole",
         );
+    }
+
+    #[test]
+    fn a_distance_converts_back_to_the_angle_it_came_from() {
+        // The pairs that make this more than an algebraic identity are the last two: pole to pole is
+        // where the clamp above holds the angle at pi, and the antipodal pair is where haversine's
+        // precision is worst. A cap radius is turned into an angle exactly this way.
+        for (from, to) in [
+            (at(0.0, 0.0), at(0.0, 1.0)),
+            (at(51.5, -0.12), at(48.858, 2.294)),
+            (at(0.0, 0.0), at(0.0, 180.0)),
+            (at(90.0, 0.0), at(-90.0, 0.0)),
+        ] {
+            assert_rel(
+                central_angle_rad(great_circle_km(from, to)),
+                angular_distance_rad(from, to),
+                "round trip",
+            );
+        }
+        // The degenerate cap: no radius, no angle, and no division that turns one into the other.
+        assert_eq!(central_angle_rad(0.0), 0.0);
     }
 
     // Published worked examples, each stating its own earth model. The assertion is on the central

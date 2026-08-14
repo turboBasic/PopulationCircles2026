@@ -257,11 +257,32 @@ impl Grid {
             self.width,
             self.height
         );
-        // u32 -> f64 is exact below 2^53, so these carry no rounding of their own.
+        // u32 -> f64 is exact below 2^53, so this carries no rounding of its own.
         LatLon {
-            lat: self.origin.lat + (f64::from(row.0) + 0.5) * self.lat_step,
+            lat: self.centre_lat(row),
             lon: self.origin.lon + (f64::from(col.0) + 0.5) * self.lon_step,
         }
+    }
+
+    /// The latitude every cell centre in a row shares.
+    ///
+    /// It takes no column for the reason [`Grid::cell_area_km2`] takes none, and it exists because a
+    /// circular kernel is built from a row's latitude alone: without it such a caller has to name a
+    /// column it has no use for, and a column it invented is a column it could invent wrongly.
+    /// [`Grid::centre_of`] reads it rather than recomputing it, so a row has one latitude and not two
+    /// that agree.
+    ///
+    /// # Panics
+    /// If `row` was minted by a larger grid; [`Row`] says why that is a stop.
+    #[must_use]
+    pub fn centre_lat(&self, row: Row) -> f64 {
+        assert!(
+            row.0 < self.height,
+            "row {} is not a row of a {}-row grid",
+            row.0,
+            self.height
+        );
+        self.origin.lat + (f64::from(row.0) + 0.5) * self.lat_step
     }
 
     /// # Panics
@@ -299,6 +320,34 @@ impl Grid {
             west: a.min(b),
             east: a.max(b),
         }
+    }
+
+    /// The column `cells` along from `col`, counting round the seam: through rising indices when
+    /// `cells` is positive, falling when it is negative.
+    ///
+    /// Total rather than fallible, because the offset is reduced modulo the width and so always names a
+    /// column this grid has. Whether that column also sits `cells` steps *east on the ground* turns on
+    /// [`Grid::spans_full_turn`] and on `lon_step`'s sign, and this asks neither: the caller for which
+    /// the ground matters is [`crate::kernel::Kernel`], which settles both before it places a span.
+    ///
+    /// # Panics
+    /// If `col` was minted by a larger grid; [`Row`] says why that is a stop.
+    #[must_use]
+    pub fn col_along(&self, col: Col, cells: i64) -> Col {
+        assert!(
+            col.0 < self.width,
+            "column {} is not a column of a {}-column grid",
+            col.0,
+            self.width
+        );
+        let width = i64::from(self.width);
+        // The offset is reduced before it is added rather than after, so both terms stay below 2^32 and
+        // no offset a caller can pass overflows the sum.
+        let index = (i64::from(col.0) + cells.rem_euclid(width)).rem_euclid(width);
+        // rem_euclid by a positive modulus lands in [0, width), and the width came from a u32, so this
+        // conversion is exact. std offers no fallible i64 -> u32, which is why it is a cast.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Col(index as u32)
     }
 
     /// The cell containing a coordinate, or `None` when it falls outside the grid.
@@ -660,6 +709,46 @@ mod tests {
     }
 
     #[test]
+    fn stepping_along_the_columns_wraps_at_the_seam() {
+        let grid = decimated();
+        let (_, first) = cell(&grid, 0, 0);
+        let (_, last) = cell(&grid, 0, grid.width() - 1);
+
+        // No step is no move, and whole turns are the same: an offset is a position on a ring.
+        for col in grid.cols() {
+            assert_eq!(grid.col_along(col, 0), col);
+            for turns in [-2i64, -1, 1, 2] {
+                assert_eq!(grid.col_along(col, turns * i64::from(grid.width())), col);
+            }
+        }
+
+        // The seam in both directions, which is the case an index clamped instead of wrapped would get
+        // wrong: there is no column before the first or after the last, only the other end.
+        assert_eq!(grid.col_along(first, -1), last);
+        assert_eq!(grid.col_along(last, 1), first);
+        assert_eq!(grid.col_along(first, -359), grid.col(1).expect("a column"));
+
+        // An offset far past a turn is still a column, so a caller needs no reduction of its own.
+        assert_eq!(
+            grid.col_along(first, 3 * 360 + 5),
+            grid.col(5).expect("a column")
+        );
+        // The extreme the reduction order exists for: reducing after the addition would overflow here,
+        // and i64::MIN is 352 columns along a 360-column ring.
+        assert_eq!(
+            grid.col_along(first, i64::MIN),
+            grid.col(352).expect("a column")
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "is not a column of a 360-column grid")]
+    fn a_finer_grids_column_cannot_be_stepped_along_this_one() {
+        let (_, col) = cell(&gpw(), 0, 43199);
+        let _ = decimated().col_along(col, 1);
+    }
+
+    #[test]
     fn the_iterators_cover_the_grid_exactly_once_in_order() {
         let grid = decimated();
         let rows: Vec<u32> = grid.rows().map(Row::get).collect();
@@ -712,6 +801,20 @@ mod tests {
         let (row, col) = cell(&grid, 21599, 43199);
         let se = grid.centre_of(row, col);
         assert!(close(se.lat, -90.0 + half) && close(se.lon, 180.0 - half));
+    }
+
+    #[test]
+    fn a_rows_latitude_is_the_one_every_cell_in_it_has() {
+        // Bit for bit, over every cell of the grid: what this pins is that the row latitude has one
+        // definition rather than two that agree to within a rounding, which is the whole reason
+        // centre_of reads centre_lat instead of repeating the expression.
+        let grid = decimated();
+        for row in grid.rows() {
+            let lat = grid.centre_lat(row);
+            for col in grid.cols() {
+                assert_eq!(grid.centre_of(row, col).lat, lat, "row {}", row.get());
+            }
+        }
     }
 
     #[test]

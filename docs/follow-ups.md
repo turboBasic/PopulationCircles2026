@@ -150,3 +150,22 @@ Identifiers are flat, sequential and never reused.
   in the same diff and the second touching neither the block nor the constant, so the sweep is clean. Like
   `FU-03` it cannot judge whether a change was breaking, which makes it a tripwire of the same kind as
   `geo-data-lfs` rather than a lint of its own.
+
+### FU-07 - A radius in kilometres is a bare f64 in more than one signature
+
+- **Status** — `dormant`.
+- **Condition** — more than one **public** library signature takes a radius in kilometres as a bare
+  `f64`. The sweep is `rg -n 'pub fn [a-z_]+\([^)]*radius_km: f64' crates/popcircles/src`, which names
+  exactly one on 2026-08-14: `Kernel::new`. Three near misses the wording excludes deliberately —
+  `Cap::over` beside it is private, `Kernel::radius_km` returns a radius rather than taking one, and
+  `report.rs`'s `great_circle_km` parameter is a distance and not a radius. #5's circle evaluation and
+  #7's binary search over radius are each expected to add one, so this fires on the second of them and
+  not on a refactor.
+- **Fix** — a `RadiusKm` newtype in `geodesy`, beside the radius and the conversion it would wrap, whose
+  constructor holds what `Kernel::new` checks inline today — finite, not negative — so
+  `KernelError::RadiusNotFinite` and `KernelError::RadiusNegative` move into it and no later caller
+  revalidates. That is `application.md` "Architecture": prefer a type whose invalid states do not
+  construct over a check repeated at every use. It waits for the second caller because introducing it for
+  one trades one inconsistency for another — no scalar in this crate is wrapped, and `great_circle_km`,
+  `cell_area_km2` and the CLI's `distance` all pass kilometres as `f64` — and with two callers the
+  newtype is the cheaper side of that trade rather than merely the more principled one.
