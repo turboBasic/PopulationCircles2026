@@ -90,6 +90,13 @@ run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
 description = "Check Rust, TOML and Python are formatted"
 run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 
+# Puts the prek hook in CI; see `lint:lfs` for why. It matters more here than for the others: the hook
+# is what stands in for `unsafe_code = "forbid"` (ADR 0003 decision 5), so a branch pushed from a clone
+# where `prek install` never ran has to meet it too.
+[tasks."lint:unsafe"]
+description = "Check the one #[allow(unsafe_code)] is where ADR 0003 put it"
+run = "prek run --all-files single-unsafe-allow"
+
 # Puts the prek hook in CI; see `lint:lfs` for why.
 [tasks."lint:markdown"]
 description = "Lint Markdown with markdownlint-cli2"
@@ -113,6 +120,7 @@ depends = [
   "lint:workflows",
   "lint:lfs",
   "lint:format",
+  "lint:unsafe",
   "lint:markdown",
   "lint:cspell",
   "lint:docs",

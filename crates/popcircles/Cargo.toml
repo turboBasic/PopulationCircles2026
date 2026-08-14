@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 bytemuck.workspace = true
+memmap2.workspace = true
 serde.workspace = true
 # A normal dependency from ADR 0003 decision 4 on: the cache header is JSON, so the library writes and
 # reads it rather than only serialising documents a caller prints.

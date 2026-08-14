@@ -7,6 +7,7 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 
 use super::{BuiltTable, Decimation, padded_len};
@@ -301,12 +302,40 @@ impl Cache {
         })
     }
 
-    /// The payload behind a header that describes the table `wanted`, read into memory.
+    /// The payload behind a header that describes the table `wanted`, mapped rather than read.
+    ///
+    /// The path for a table that does not fit in memory, which at full resolution is every table:
+    /// [`read`](Self::read) materialises 8 bytes a cell and this does not.
     ///
     /// # Errors
     /// [`CacheError::Absent`] when no header is there, and one variant per ground when what is there
     /// is not this table: see [`CacheError`].
+    pub fn open(&self, wanted: &Identity) -> Result<Mapped, CacheError> {
+        let cells = self.checked_header(wanted)?;
+        Mapped::open(&self.payload, cells)
+    }
+
+    /// The payload behind a header that describes the table `wanted`, read into memory.
+    ///
+    /// # Errors
+    /// As [`open`](Self::open).
     pub fn read(&self, wanted: &Identity) -> Result<Payload, CacheError> {
+        let cells = self.checked_header(wanted)?;
+        let bytes = fs::read(&self.payload).map_err(|source| CacheError::PayloadRead {
+            path: self.payload.clone(),
+            source,
+        })?;
+        let payload = Payload { bytes, cells };
+        // The cast here and not only in the accessor: a payload the header does not describe is a
+        // refusal a caller can act on at the point it asked for a table, rather than one arriving at
+        // whichever query first looked.
+        payload.cells()?;
+        Ok(payload)
+    }
+
+    /// The header, checked against what the caller wants, and the payload length it therefore implies.
+    /// Both read paths go through here, so neither can be the lenient one.
+    fn checked_header(&self, wanted: &Identity) -> Result<usize, CacheError> {
         let document = fs::read(&self.header).map_err(|source| {
             if source.kind() == io::ErrorKind::NotFound {
                 CacheError::Absent {
@@ -325,20 +354,7 @@ impl Cache {
                 source,
             })?;
         header.check(wanted)?;
-
-        let bytes = fs::read(&self.payload).map_err(|source| CacheError::PayloadRead {
-            path: self.payload.clone(),
-            source,
-        })?;
-        let payload = Payload {
-            bytes,
-            cells: padded_len(wanted.decimation.grid()),
-        };
-        // The cast here and not only in the accessor: a payload the header does not describe is a
-        // refusal a caller can act on at the point it asked for a table, rather than one arriving at
-        // whichever query first looked.
-        payload.cells()?;
-        Ok(payload)
+        Ok(padded_len(wanted.decimation.grid()))
     }
 
     /// The commit record, and the last thing publication does: a reader that finds a header finds a
@@ -435,6 +451,56 @@ impl Writer<'_> {
     }
 }
 
+/// A payload mapped into the address space, and the cell count [`Cache::open`] validated.
+///
+/// It keeps the mapping and not the [`File`]: a mapping outlives the descriptor that created it, so a
+/// held descriptor would be a resource nothing reads. It hands out `&[f64]` for
+/// [`Table`](super::Table) to borrow, which ties the lifetime of every query to the mapping through the
+/// compiler rather than through a rule someone has to remember.
+#[derive(Debug)]
+pub struct Mapped {
+    map: Mmap,
+    cells: usize,
+}
+
+impl Mapped {
+    // The one exception in this workspace: `Cargo.toml` says why `unsafe_code` is `deny` rather than
+    // `forbid`, and the `single-unsafe-allow` hook is what asserts this is still the only one. The hook
+    // counts the attribute below as text, so naming it a second time anywhere under `crates/` fires it.
+    #[allow(unsafe_code)]
+    fn open(path: &Path, cells: usize) -> Result<Self, CacheError> {
+        let read = |source| CacheError::PayloadRead {
+            path: path.to_path_buf(),
+            source,
+        };
+        let file = File::open(path).map_err(read)?;
+
+        // What makes this sound is [`Writer::publish`]'s immutable publication, not this crate's
+        // authorship of the file. A rename replaces a directory entry rather than an inode, and no
+        // payload is ever written into one already in place, so a fresh build publishing over this path
+        // leaves the bytes a mapping already holds untouched. The residual is a third party truncating
+        // the cache directory by hand: mmap has no defence against it, the failure is a fault on access
+        // rather than a wrong number taken for a right one, and the payload is a derived artefact a
+        // build replaces from the raster in about fifteen seconds.
+        // SAFETY: no writer this project contains can shrink or rewrite a payload already in place.
+        let map = unsafe { Mmap::map(&file) }.map_err(read)?;
+        drop(file);
+
+        let mapped = Self { map, cells };
+        // The checked cast at open, once, for [`Cache::read`]'s reason.
+        mapped.cells()?;
+        Ok(mapped)
+    }
+
+    /// The mapping as cells, for [`Table::new`](super::Table::new) to borrow.
+    ///
+    /// # Errors
+    /// As [`Payload::cells`], and unreachable for the same reason.
+    pub fn cells(&self) -> Result<&[f64], CacheError> {
+        view(&self.map, self.cells)
+    }
+}
+
 /// A payload read into memory, and the cell count the header said it would be.
 ///
 /// It owns bytes rather than cells because the cast is what checks them: an owner of `Vec<f64>` would
@@ -457,7 +523,7 @@ impl Payload {
     }
 }
 
-/// The one place bytes become cells, so the mmap path and this one refuse the same files.
+/// The one place bytes become cells, so the mapped path and the resident one refuse the same files.
 fn view(bytes: &[u8], cells: usize) -> Result<&[f64], CacheError> {
     let expected = payload_bytes(cells);
     if bytes.len() < expected {
@@ -574,6 +640,29 @@ mod tests {
         fs::write(cache.header_path(), serde_json::to_vec(header).unwrap()).unwrap();
     }
 
+    /// Every rectangle of a table, in one order: two of these are equal only if the tables agree over
+    /// the whole grid, wrapped spans and full turns included.
+    fn every_rectangle(table: &Table<'_>) -> Vec<f64> {
+        let grid = *table.grid();
+        let mut sums = Vec::new();
+        for north in 0..grid.height() {
+            for south in north..grid.height() {
+                let band = RowBand::new(grid.row(north).unwrap(), grid.row(south).unwrap());
+                sums.push(table.population(band, ColSpan::FullTurn));
+                for west in 0..grid.width() {
+                    for east in 0..grid.width() {
+                        let span = ColSpan::Through {
+                            west: grid.col(west).unwrap(),
+                            east: grid.col(east).unwrap(),
+                        };
+                        sums.push(table.population(band, span));
+                    }
+                }
+            }
+        }
+        sums
+    }
+
     fn other_order() -> ByteOrder {
         match ByteOrder::HOST {
             ByteOrder::Little => ByteOrder::Big,
@@ -617,28 +706,25 @@ mod tests {
 
         // Bit-identical, not close: a payload is bytes this host wrote and bytes this host read, so
         // anything but equality is a byte that moved.
-        let grid = decimation.grid();
-        for north in 0..grid.height() {
-            for south in north..grid.height() {
-                let band = RowBand::new(grid.row(north).unwrap(), grid.row(south).unwrap());
-                assert_eq!(
-                    reloaded.population(band, ColSpan::FullTurn),
-                    original.population(band, ColSpan::FullTurn)
-                );
-                for west in 0..grid.width() {
-                    for east in 0..grid.width() {
-                        let span = ColSpan::Through {
-                            west: grid.col(west).unwrap(),
-                            east: grid.col(east).unwrap(),
-                        };
-                        assert_eq!(
-                            reloaded.population(band, span),
-                            original.population(band, span)
-                        );
-                    }
-                }
-            }
-        }
+        assert_eq!(every_rectangle(&reloaded), every_rectangle(&original));
+    }
+
+    #[test]
+    fn the_mapped_payload_and_the_resident_one_are_the_same_table() {
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let decimation = Decimation::none(grid(5, 4));
+        let built = publish(&cache, decimation);
+        let wanted = Identity::from(&built);
+
+        let resident = cache.read(&wanted).unwrap();
+        let mapped = cache.open(&wanted).unwrap();
+        // The claim the `unsafe` has to earn: the two differ in how the bytes reach the query and in
+        // nothing else, over the same pair of files.
+        assert_eq!(
+            every_rectangle(&Table::new(*decimation.grid(), mapped.cells().unwrap()).unwrap()),
+            every_rectangle(&Table::new(*decimation.grid(), resident.cells().unwrap()).unwrap())
+        );
     }
 
     #[test]

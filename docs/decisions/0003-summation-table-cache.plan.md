@@ -148,7 +148,7 @@ it, where the `// SAFETY:` argument is the part worth an expensive reading.
       is what makes this task's greenness independent of the lint change; `cargo tree -p popcircles -e
       normal | rg 'memmap|libc'` returns nothing.
 
-- [ ] **2.2 The mmap read path, its lint exception, and the gate that bounds it.** One commit, because
+- [x] **2.2 The mmap read path, its lint exception, and the gate that bounds it.** One commit, because
       none of the three is green alone: `unsafe_code` in `Cargo.toml` goes from `forbid` to `deny` with a
       comment naming ADR 0003 as the reason and this hook as the replacement guarantee; `memmap2` joins
       `[workspace.dependencies]` and the library's; `table/cache.rs` gains one `unsafe` block on
