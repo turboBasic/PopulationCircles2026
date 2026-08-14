@@ -254,7 +254,7 @@ are separate call sites in two crates, and because the warm-ledger verify belong
       *Verify:* `mise run lint:markdown` and `mise run lint:cspell` green, and the block names no level the
       parser rejects — `trace` does not appear in it.
 
-- [ ] **3.2 `FU-04` is closed, and the register says what closed it.** Status to `closed` with the date,
+- [x] **3.2 `FU-04` is closed, and the register says what closed it.** Status to `closed` with the date,
       naming ADR 0004 as the record its Fix demanded and this plan as the implementation, and stating the
       two ways what landed departs from the Fix as written: `log` rather than `tracing` on the emitting
       side, and a hand-written subscriber rather than `tracing-subscriber` on the consuming side, both on

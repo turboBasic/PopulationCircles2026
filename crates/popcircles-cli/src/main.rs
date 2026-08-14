@@ -35,9 +35,9 @@ struct Cli {
     command: Command,
 }
 
-/// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. No
-/// `--verbose` and no `--quiet`: two booleans standing in for a threshold is the shape `FU-04` was
-/// watching for.
+/// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. There
+/// is no boolean pair beside it: two flags standing in for a threshold is the shape `FU-04` names, and its
+/// condition is a sweep over this directory, so spelling those two flags out here would fire it.
 ///
 /// `global` sits on the argument rather than on the `#[command(flatten)]` above, because the attribute is
 /// the argument's: that is what lets every subcommand take the flag after its own name without declaring

@@ -82,11 +82,19 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-04 - Diagnostics have no facade
 
-- **Status** — `dormant`.
+- **Status** — `closed` (2026-08-14): [ADR 0004](decisions/0004-diagnostics-through-log.md) is the record
+  the Fix below demanded, and its [plan](decisions/0004-diagnostics-through-log.plan.md) is the
+  implementation. Two departures from that Fix as written, both on measurements in that record's Context:
+  `log` on the emitting side rather than `tracing`, and a hand-written `log::Log` in the CLI rather than
+  `tracing-subscriber`. The cost table below is left as it was measured — ADR 0004 carries its correction.
 - **Condition** — either signal that ad-hoc printing has outgrown itself. `rg -n 'print!|println!|eprintln!' crates/popcircles/src`
   matches anything: the library is printing, which is an `application.md` "Architecture" violation
-  before it is a logging question. Or `rg -n 'verbose|quiet' crates/popcircles-cli/src` matches: the CLI
-  is hand-rolling the level filtering `EnvFilter` exists for. Progress reporting is **not** this
+  before it is a logging question. Or the CLI grows the flag shape that hand-rolls level filtering out of
+  two booleans — a `--verbose` or `--quiet` long name, a field of either name in an args struct, or
+  `short = 'v'` or `short = 'q'` aliasing one:
+  `rg -n "^\s*(verbose|quiet)\s*:|--verbose|--quiet|short = '[vq]'" crates/popcircles-cli/src`. The two
+  letters are spelled out rather than matching `short =` at large, because a condition firing on any short
+  alias the CLI ever grows would ban a mechanism instead of a flag. Progress reporting is **not** this
   condition — ADR 0001 decision 4 routes progress through a sink the caller supplies, and a sink is not
   a log.
 - **Fix** — a record **extending** ADR 0001's `tracing` clause rather than a fresh decision. That clause
