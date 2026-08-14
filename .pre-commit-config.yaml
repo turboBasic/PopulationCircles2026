@@ -73,15 +73,34 @@ repos:
           echo "  fix: git lfs install && git rm --cached \"$f\" && git add \"$f\"";
           rc=1; done; exit $rc' --
 
+      # No filenames: `cargo fmt --all` already covers every target in the workspace, and appending
+      # the staged paths reaches rustfmt as extra inputs to a command that has already formatted them.
+      #
+      # An empty .rs file cannot get past this hook and end-of-file-fixer together: the fixer strips
+      # the lone newline, rustfmt puts it back, and neither yields. A placeholder module needs a line
+      # of content — a comment naming what the module will hold does.
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt --all --
+        entry: cargo fmt --all
         language: system
         types: [rust]
+        pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
         language: system
         types: [rust]
+        pass_filenames: false
+
+      # `platform.md` says TOML is formatted with taplo, and until this hook existed nothing enforced
+      # it: `mise run fmt` was the only caller, so drift surfaced as a diff nobody had authored. Local
+      # and `language: system` so it is the mise-pinned binary rather than a second copy a remote hook
+      # would install, and no filenames because `.taplo.toml`'s include list is what decides which TOML
+      # is ours — passing paths bypasses it.
+      - id: taplo-fmt
+        name: taplo fmt
+        entry: taplo fmt
+        language: system
+        types: [toml]
         pass_filenames: false
