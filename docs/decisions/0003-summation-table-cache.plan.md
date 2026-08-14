@@ -67,7 +67,7 @@ in this phase touches a file or adds a crate.
       counting implementation and asserts the final `(done, total)` pair; `cargo tree -p popcircles -e
       normal` lists no crate it did not before.
 
-- [ ] **1.2 The rectangle query exists, over a borrowed payload.** `crates/popcircles/src/table.rs`,
+- [x] **1.2 The rectangle query exists, over a borrowed payload.** `crates/popcircles/src/table.rs`,
       declared in `lib.rs`: `Table<'a>` over a `&'a [f64]` — no storage generic and no trait, per ADR
       0003 decision 1 — holding the padded `(height + 1) × (width + 1)` layout decision 4 fixes, with a
       constructor that rejects a payload whose length is not that product. The query takes a row band and
