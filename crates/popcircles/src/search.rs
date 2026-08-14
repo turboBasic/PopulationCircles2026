@@ -227,14 +227,24 @@ pub fn slack_km(grid: &Grid, block: Block) -> f64 {
 // exemption; docs/ai/code.md allows both in tests. float_cmp is for the exactly-zero and tightness
 // assertions, where the value being exactly what it is is the property.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp,
+    clippy::cast_precision_loss
+)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::convert::Infallible;
 
     use proptest::prelude::*;
 
     use super::*;
-    use crate::geodesy::{LatLon, great_circle_km};
+    use crate::circle;
+    use crate::geodesy::{LatLon, RadiusKm, great_circle_km};
+    use crate::kernel::Kernel;
+    use crate::raster::Synthetic;
+    use crate::table::{Decimation, Table, build};
 
     const WIDTH: u32 = 36;
     const HEIGHT: u32 = 18;
@@ -543,6 +553,105 @@ mod tests {
                 slack,
                 furthest_km(&grid, block)
             );
+        }
+    }
+
+    /// Closing in longitude, thirty degrees of latitude: `kernel.rs:539`'s shape, where a cap is clipped
+    /// at the grid's edge rather than refused. It is here to exercise the clipping step of the bound's
+    /// argument below.
+    fn band_grid() -> Grid {
+        Grid::new(
+            360,
+            30,
+            LatLon {
+                lat: 60.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a band grid that closes in longitude is valid")
+    }
+
+    /// The registry raster's sentinel, so a fixture reaches the table by the path a real raster takes.
+    const NODATA: f32 = -3.402_823e38;
+
+    fn radius(km: f64) -> RadiusKm {
+        RadiusKm::new(km).expect("a fixture radius is a length")
+    }
+
+    /// The padded payload a real build emits over a grid whose cells are distinct small integers, so a
+    /// cell counted twice or not at all moves a total and every partial sum stays exact in f64.
+    fn payload_over(grid: &Grid) -> Vec<f64> {
+        let rows: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| {
+                (0..grid.width())
+                    .map(|col| (row * grid.width() + col + 1) as f32)
+                    .collect()
+            })
+            .collect();
+        let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        build(source, Decimation::none(*grid), &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        payload
+    }
+
+    #[test]
+    fn no_centre_in_a_block_beats_its_probes_widened_circle() {
+        // Box 1 of issue #6, and the claim the whole search rests on. It is separate from the slack's own
+        // test rather than folded into it so that a failure localises: that one is a claim about distance,
+        // this one adds containment and the monotonicity #5's proptest pinned, and one test covering all
+        // three would not say which had moved.
+        //
+        // The band grid is here for the step the two-hop proof does not cover. `Kernel` clips a cap at a
+        // grid's northern or southern edge rather than refusing it, so on that grid both circles in the
+        // inequality are intersections with the grid — and intersecting both sides of a containment with
+        // the same set preserves it. Which is why the bound holds on every grid `Kernel` accepts, and not
+        // only on a whole globe.
+        for (grid, spacings) in [(grid(), vec![4u32, 18]), (band_grid(), vec![90u32])] {
+            let payload = payload_over(&grid);
+            let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+            for radius_km in [1500.0, 8000.0] {
+                // One kernel per row, which is the reuse the type exists for and what keeps this
+                // exhaustive test to seconds rather than minutes.
+                let row_kernels: Vec<Kernel> = grid
+                    .rows()
+                    .map(|row| {
+                        Kernel::new(grid, row, radius(radius_km)).expect("a grid that closes")
+                    })
+                    .collect();
+
+                for cells in &spacings {
+                    for block in Block::tile(&grid, spacing(*cells)) {
+                        let (probe_row, probe_col) = block.probe(&grid);
+                        let widened = radius(radius_km + slack_km(&grid, block));
+                        let bound_kernel =
+                            Kernel::new(grid, probe_row, widened).expect("a grid that closes");
+                        let bound = circle::population(&table, &bound_kernel, probe_col);
+
+                        for (row, col) in cells_of(block) {
+                            let here = circle::population(
+                                &table,
+                                &row_kernels[row as usize],
+                                col_of(&grid, col),
+                            );
+                            assert!(
+                                here <= bound,
+                                "{}x{} grid, spacing {cells}, radius {radius_km} km, block \
+                                 {block:?}, cell {:?}: {here} beats the bound {bound}",
+                                grid.width(),
+                                grid.height(),
+                                (row, col)
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 
