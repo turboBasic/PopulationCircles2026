@@ -232,6 +232,14 @@ impl Kernel {
         self.radius_km
     }
 
+    /// The grid this kernel was built over — the whole of it, not the band the cap reaches. A cap
+    /// clipped at the grid's edge still belongs to the grid, and an evaluation checking a table against
+    /// this needs the grid the table's own would have to equal.
+    #[must_use]
+    pub const fn grid(&self) -> &Grid {
+        &self.grid
+    }
+
     /// Every row the cap reaches, north to south, with the columns it covers there.
     pub fn rows(&self) -> impl Iterator<Item = (Row, Span)> + '_ {
         self.grid
@@ -549,6 +557,27 @@ mod tests {
         // the first is the grid's first and not the cap's.
         assert_eq!(rows.first(), Some(&row(&band, 0)));
         assert_eq!(rows.len(), 27);
+    }
+
+    #[test]
+    fn a_kernels_grid_is_the_one_it_was_built_over_and_not_the_band_it_covers() {
+        let band = Grid::new(
+            360,
+            30,
+            LatLon {
+                lat: 60.0,
+                lon: -180.0,
+            },
+            1.0,
+            -1.0,
+        )
+        .expect("a band grid that closes in longitude is valid");
+        let kernel = Kernel::new(band, row(&band, 0), 3000.0).expect("a band grid has kernels");
+
+        assert_eq!(*kernel.grid(), band);
+        // Twenty-seven of the grid's thirty rows, so an accessor answering with the band the cap
+        // reaches would fail the line above rather than agree with it.
+        assert_eq!(kernel.rows().count(), 27);
     }
 
     #[test]

@@ -158,9 +158,10 @@ Identifiers are flat, sequential and never reused.
   `f64`. The sweep is `rg -n 'pub fn [a-z_]+\([^)]*radius_km: f64' crates/popcircles/src`, which names
   exactly one on 2026-08-14: `Kernel::new`. Three near misses the wording excludes deliberately —
   `Cap::over` beside it is private, `Kernel::radius_km` returns a radius rather than taking one, and
-  `report.rs`'s `great_circle_km` parameter is a distance and not a radius. #5's circle evaluation and
-  #7's binary search over radius are each expected to add one, so this fires on the second of them and
-  not on a refactor.
+  `report.rs`'s `great_circle_km` parameter is a distance and not a radius. #5's circle evaluation adds
+  none of its own: it takes a kernel, which carries the radius it was built for, so the radius reaches it
+  through a type rather than through a second parameter. The second signature is expected to be #7's
+  binary search over radius, which is where this fires rather than on a refactor.
 - **Fix** — a `RadiusKm` newtype in `geodesy`, beside the radius and the conversion it would wrap, whose
   constructor holds what `Kernel::new` checks inline today — finite, not negative — so
   `KernelError::RadiusNotFinite` and `KernelError::RadiusNegative` move into it and no later caller
