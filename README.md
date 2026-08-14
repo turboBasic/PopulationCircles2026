@@ -146,6 +146,11 @@ radius was measured too and falls short of the target, so minimality is readable
 than taken on trust. The share is given in **whole percent**, because a fraction stepped in f64 publishes
 `0.30000000000000004` as a third share and a renderer then labels a chart with it.
 
+This answer is separated by 174 088 people against a `predicate_slack_persons` of 0.012, so it carries no
+`ambiguity` block. A share whose target sits on a flat stretch — anything near everyone, or a plateau of
+ocean — grows one, naming the probed radii the arithmetic cannot tell apart, and the run says so once on
+stderr as well.
+
 Every radius tried goes in the ledger, so a sweep of several shares pays for each radius once. Here the
 50% record costs no search at all, because the run above already settled its radii:
 

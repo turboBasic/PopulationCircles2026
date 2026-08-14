@@ -195,6 +195,25 @@ impl SmallestStats {
     }
 }
 
+/// The widest pair of probed radii whose populations the summation slack cannot separate from the target,
+/// and how many of them fell inside it.
+///
+/// **A floor on the ambiguity rather than the interval.** The radii a search visits are sparse — the climb
+/// doubles — so the ends are the widest pair *measured* and the true interval runs past both: at a share of
+/// one no radius above the answer can catch anyone new, so it reaches [`CEILING_KM`].
+///
+/// Accumulated over the radii one search visited, which makes it a property of the table, the share and the
+/// spacing together rather than of the table alone. A warm ledger reports what a cold one did, because a
+/// resumed run visits the same radii.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ambiguity {
+    pub lowest_km: u32,
+    pub highest_km: u32,
+    /// How many probed radii fell inside, so a reader can tell seven radii spread over 477 km from 477 of
+    /// them.
+    pub radii: u32,
+}
+
 /// The smallest circle found, and everything a caller needs to disagree with it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Smallest {
@@ -225,6 +244,13 @@ pub struct Smallest {
     /// radius, and a caller close to one wants the bracket rather than a comparison this search cannot
     /// make.
     pub predicate_slack_persons: f64,
+    /// The probed radii [`Self::predicate_slack_persons`] cannot separate from the target, or `None` when
+    /// every probe's margin was outside it.
+    ///
+    /// Presence is the whole statement: inside that slack the comparison the search runs can invert, so
+    /// [`Self::radius_km`] is *a* radius from this span and not a demonstrated minimum. Absent rather than
+    /// empty in the ordinary case, which is [`Self::short_below`]'s convention.
+    pub ambiguity: Option<Ambiguity>,
     /// The population slack the fixed-radius search at the answer's radius pruned with — zero, #6's
     /// choice, carried up so a caller reads one result rather than this crate's constants.
     pub tolerance_persons: f64,
@@ -248,6 +274,22 @@ pub fn predicate_slack_persons(grid: &Grid, total: f64) -> f64 {
     let rows = f64::from(grid.height());
     let ulp = total.next_up() - total;
     rows * 4.0 * ulp + rows * f64::EPSILON * total
+}
+
+/// Whether a margin is inside the slack, so the comparison that produced it could have gone either way.
+///
+/// A margin rather than a population and a target, because the two sides are one question: the reaching
+/// margin is `population - target` and the short margin is its negation, and the absolute value is what
+/// makes them the same test.
+///
+/// **Equal to the slack counts as inside.** The slack is a bound on the error, so a margin that is exactly
+/// it is exactly the case the bound was derived to cover.
+///
+/// `pub` beside [`predicate_slack_persons`], which is what supplies the second argument: a caller reading
+/// that figure off a published result has this comparison to make and no way to make it otherwise.
+#[must_use]
+pub fn within_slack(margin: f64, slack: f64) -> bool {
+    margin.abs() <= slack
 }
 
 /// The row `index` names.
@@ -294,6 +336,48 @@ fn spans_whole_grid(grid: &Grid, centre: Row, radius: RadiusKm) -> Result<bool, 
         rows += 1;
     }
     Ok(rows == grid.height())
+}
+
+/// `span` widened to hold `km` when its margin is inside the slack, and unchanged when it is not.
+///
+/// The flag and the ends are this one scan: a span exists exactly when some probed radius was inside, so
+/// there is no second comparison to agree with. Restricting it to the answer and the radius below would
+/// give the same flag and a span three orders of magnitude narrower.
+fn widen(span: Option<Ambiguity>, km: u32, margin: f64, slack: f64) -> Option<Ambiguity> {
+    if !within_slack(margin, slack) {
+        return span;
+    }
+    Some(match span {
+        Some(span) => Ambiguity {
+            lowest_km: span.lowest_km.min(km),
+            highest_km: span.highest_km.max(km),
+            radii: span.radii + 1,
+        },
+        None => Ambiguity {
+            lowest_km: km,
+            highest_km: km,
+            radii: 1,
+        },
+    })
+}
+
+/// The one record that says an answer is weaker than it looks, emitted where the field is set so the two
+/// cannot disagree.
+///
+/// `warn` rather than `info`: everything else this library reports is what it did, and this is the only
+/// thing it says about what a caller should not conclude. One per answer, so a sweep says it per share.
+///
+/// The slack is rounded to three figures here and exact on the wire, because a person reading a line of
+/// stderr wants the order of magnitude and a program comparing margins wants the field.
+fn warn_unseparated(span: Option<Ambiguity>, answer_km: u32, slack: f64) {
+    if let Some(span) = span {
+        log::warn!(
+            "{answer_km} km is not separated: {} probed radii from {} to {} km hold the target to within {slack:.3e} persons, so it is one of them rather than demonstrably the least",
+            span.radii,
+            span.lowest_km,
+            span.highest_km
+        );
+    }
 }
 
 /// The maximum at `km`, from the ledger when it holds one and from a search when it does not, with the
@@ -383,17 +467,23 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     );
 
     let mut stats = SmallestStats::default();
+    let slack = predicate_slack_persons(&grid, total);
     // The climb. `CEILING_KM - 1` is the cap because the ceiling itself is not a radius this searches.
     let cap = CEILING_KM - 1;
     let mut km = 1u32;
     let mut low = 0u32;
     let mut short_below: Option<(u32, f64)> = None;
     let mut reached: Option<(u32, Candidate)> = None;
+    // Over the radii that go through `probe`, and the ceiling is not one of them: at a share of one its
+    // population is the target bit for bit, so sweeping in the answer instead would call every ceiling
+    // result unseparated including the ones whose short radius is measurably below the target.
+    let mut ambiguity: Option<Ambiguity> = None;
 
     loop {
         let settled = stats.radii_settled();
         progress.advance(settled, settled + u64::from(climb_probes_remaining(km)));
         let found = probe(table, km, spacing, ledger, &mut stats)?;
+        ambiguity = widen(ambiguity, km, found.population - target.persons, slack);
 
         if found.population >= target.persons {
             reached = Some((km, found));
@@ -416,6 +506,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
             "nothing under the ceiling reaches it: {CEILING_KM} km, {} radii settled",
             stats.radii_settled()
         );
+        warn_unseparated(ambiguity, CEILING_KM, slack);
         return Ok(Smallest {
             radius_km: CEILING_KM,
             radius: ceiling_radius(),
@@ -428,7 +519,8 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
             share_achieved: share_of(total, total),
             short_below,
             covers_whole_grid: true,
-            predicate_slack_persons: predicate_slack_persons(&grid, total),
+            predicate_slack_persons: slack,
+            ambiguity,
             tolerance_persons: 0.0,
             stats,
         });
@@ -444,6 +536,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         progress.advance(settled, settled + u64::from(halvings(high - low + 1)));
         let mid = low + (high - low) / 2;
         let found = probe(table, mid, spacing, ledger, &mut stats)?;
+        ambiguity = widen(ambiguity, mid, found.population - target.persons, slack);
 
         if found.population >= target.persons {
             high = mid;
@@ -459,6 +552,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         "reached at {high} km, {} radii settled",
         stats.radii_settled()
     );
+    warn_unseparated(ambiguity, high, slack);
     Ok(Smallest {
         radius_km: high,
         radius: RadiusKm::from(high),
@@ -469,7 +563,8 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         // down is one the bisection has already superseded.
         short_below: short_below.filter(|(km, _)| Some(*km) == high.checked_sub(1)),
         covers_whole_grid: spans_whole_grid(&grid, best.row, RadiusKm::from(high))?,
-        predicate_slack_persons: predicate_slack_persons(&grid, total),
+        predicate_slack_persons: slack,
+        ambiguity,
         tolerance_persons: 0.0,
         stats,
     })
@@ -508,6 +603,45 @@ mod tests {
     use crate::kernel::{Kernel, Span};
     use crate::raster::Synthetic;
     use crate::table::{Decimation, Table, build};
+
+    /// The boundary of [`within_slack`], as two literals at a time.
+    ///
+    /// It is tested here rather than through a search because no fixture small enough to commit can reach
+    /// it: every synthetic table that is ambiguous at all is ambiguous by a margin of **exactly zero** — a
+    /// handful of populated rows gives the fold nothing to reorder — so `margin == 0.0` would satisfy every
+    /// fixture case in this module. The registry raster's own residue appears below as a literal for that
+    /// reason, and ADR 0005's Context is where it was measured.
+    #[test]
+    fn the_slack_is_inside_itself_and_the_bit_above_it_is_not() {
+        let slack = 0.011_960_601_365_319_32;
+
+        // `<=`, pinned at the bit rather than at a rounding: the slack bounds the error, so a margin equal
+        // to it is the case the bound exists to cover.
+        assert!(within_slack(slack, slack));
+        assert!(within_slack(slack.next_down(), slack));
+        assert!(!within_slack(slack.next_up(), slack));
+
+        // Both zeroes, because a margin of zero is what an exact tie between two summation orders gives and
+        // `-0.0 <= x` needs no special case to hold.
+        assert!(within_slack(0.0, slack));
+        assert!(within_slack(-0.0, slack));
+
+        // The registry raster at a share of one, both ways round: 1.34e-5 of residue is inside the slack
+        // that table carries, and outside a slack eleven thousand times smaller. This pair is the whole
+        // reason the comparison is a function — no fixture produces a margin between the two.
+        assert!(within_slack(1.34e-5, slack));
+        assert!(!within_slack(1.34e-5, 1e-9));
+
+        // The 50% run, seven orders of magnitude out, which is the ordinary answer staying separated.
+        assert!(!within_slack(121_814.0, slack));
+        // Sign does not matter: the short margin is the reaching margin's negation.
+        assert!(!within_slack(-121_814.0, slack));
+
+        // Stated rather than relied on. `search` documents that a population which is not a number cannot
+        // arise from a sanitised raster; if one ever did, every comparison against it is false, so this
+        // reports separated rather than claiming an ambiguity it cannot describe.
+        assert!(!within_slack(f64::NAN, slack));
+    }
 
     /// A ledger in a map, which is what the tests here drive a search with: the seam without the
     /// filesystem, so what a resumed run does is pinned before `cache.rs` exists.
@@ -849,6 +983,33 @@ mod tests {
     }
 
     #[test]
+    fn a_warm_ledger_reports_the_span_the_cold_run_measured() {
+        // What accumulating over the visit buys, and what reading the ledger back would have cost: the span
+        // is a function of the table, the share and the spacing, so a run that searched nothing at all
+        // reports what the run that searched everything measured.
+        let grid = grid();
+        let payload = payload_over(&grid, planted(vec![((8, 9), (15, 16))], 100.0));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let cold = smallest(&table, share(1.0), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+        let warm = smallest(&table, share(1.0), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+
+        assert_eq!(warm.stats.radii_evaluated, 0);
+        assert_eq!(
+            cold.ambiguity,
+            Some(Ambiguity {
+                lowest_km: 1572,
+                highest_km: 2048,
+                radii: 7,
+            })
+        );
+        assert_eq!(warm.ambiguity, cold.ambiguity);
+    }
+
+    #[test]
     fn an_interrupted_run_resumes_and_answers_what_an_uninterrupted_one_does() {
         // Issue #7's second box at the seam, before a file is involved. The run stops on the ledger's
         // third put; the entries it kept are what a killed process would have left behind; and a fresh run
@@ -922,6 +1083,17 @@ mod tests {
         assert_eq!(all.tolerance_persons, 0.0);
         // The witness is a probe and not an inference: the same radius searched directly is short too.
         assert_eq!(maximum_at(&table, 1571, 4).population, 300.0);
+        // Everyone is 400 people whatever radius holds them, so every reaching probe's margin is zero and
+        // the answer is one of seven radii this arithmetic cannot tell apart: 1572, 1576, 1584, 1600, 1664,
+        // 1792 and the climb's 2048. The ends are 477 km apart where `short_below` is 1 km away.
+        assert_eq!(
+            all.ambiguity,
+            Some(Ambiguity {
+                lowest_km: 1572,
+                highest_km: 2048,
+                radii: 7,
+            })
+        );
 
         // And half of a whole-globe fixture, where the answer is a long way from either end of the
         // bracket: 210 276 people over 648 distinct cells, half of them inside 5770 km of one centre.
@@ -933,6 +1105,9 @@ mod tests {
         assert_eq!(half.centre.population, 105_623.0);
         assert_eq!(half.short_below, Some((5769, 104_706.0)));
         assert_eq!(maximum_at(&table, 5769, 4).population, 104_706.0);
+        // And the ordinary answer beside the ambiguous one: 485 people over the target and 432 under it,
+        // against a slack of 2.94e-9, so nothing is unseparated and the field is absent.
+        assert_eq!(half.ambiguity, None);
     }
 
     #[test]
@@ -950,6 +1125,16 @@ mod tests {
 
         let answer = found(&table, 1.0, 4);
         assert_eq!(answer.radius_km, 1572);
+        // Minimality by exhaustion and what the result claims about it, side by side: every radius below is
+        // short, and the answer still cannot be separated from the six above it that hold the same people.
+        assert_eq!(
+            answer.ambiguity,
+            Some(Ambiguity {
+                lowest_km: 1572,
+                highest_km: 2048,
+                radii: 7,
+            })
+        );
         for km in 0..answer.radius_km {
             let held = maximum_at(&table, km, 4).population;
             assert!(
@@ -975,6 +1160,16 @@ mod tests {
         assert_eq!(single.short_below, None);
         assert_eq!((single.centre.row.get(), single.centre.col.get()), (4, 7));
         assert_eq!(single.centre.population, 50.0);
+        // The degenerate span, and the case that says an answer of 0 km is scanned like any other: both
+        // probed radii hold the one cell, so both margins are zero.
+        assert_eq!(
+            single.ambiguity,
+            Some(Ambiguity {
+                lowest_km: 0,
+                highest_km: 1,
+                radii: 2,
+            })
+        );
     }
 
     #[test]
@@ -1002,6 +1197,11 @@ mod tests {
         // The north-west cell, by the tie-break the test below pins.
         assert_eq!((whole.centre.row.get(), whole.centre.col.get()), (0, 0));
         assert_eq!(whole.short_below, Some((20_015, total - 1.0)));
+        // The exclusion the scan rests on. The ceiling's own margin is exactly zero every time the ceiling
+        // fires — a whole-population target *is* the extent's query — but the ceiling is answered rather
+        // than probed, and the widest radius that was probed falls a whole person short. A scan sweeping in
+        // the returned answer would report a span here, over a result that is decided.
+        assert_eq!(whole.ambiguity, None);
     }
 
     #[test]

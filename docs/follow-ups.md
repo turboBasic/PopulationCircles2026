@@ -228,8 +228,10 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-09 - The predicate slack is reported and nothing acts on it
 
-- **Status** — `due` (2026-08-14): #8's `SmallestDocument` and `SweepDocument` both publish
-  `predicate_slack_persons`, so the condition is met by every smallest-circle document the CLI writes.
+- **Status** — `closed` (2026-08-14): [ADR 0005](decisions/0005-ambiguous-minimality-is-reported.md) is the
+  record and [its plan](decisions/0005-ambiguous-minimality-is-reported.plan.md) the implementation. Closed
+  with one departure from the Fix as written, measured rather than preferred — see the note beneath it. The
+  condition keeps standing and stays checkable: the field is still published, and now something acts on it.
 - **Condition** — a surface publishes `predicate_slack_persons` while the search still answers an ambiguous
   comparison with a single radius. The sweep is `rg -n 'predicate_slack_persons'
   crates/popcircles/src/report.rs crates/popcircles-cli/src scripts` — widened to `report.rs` because that
@@ -251,6 +253,14 @@ Identifiers are flat, sequential and never reused.
   The two surfaces are the ones #8 added, and the figure has to be on them: #9 puts it on a map and #10
   validates against a share sitting on an ocean plateau. So publishing it was right and the bracket is what
   is owed — its own PR, because it changes `smallest`'s result shape and every document carrying it.
+
+  **What landed reports a wider span than `[short, reaching]`, because that pair is not where the ambiguity
+  is.** Measured against the 5 arcmin table at a share of one on 2026-08-14: nine of the run's 28 probed
+  radii sit inside the slack, spanning 14 960 to 16 384 km, where the pair this Fix names is 2 km wide. So
+  the field is accumulated over every radius the search probed rather than derived from the final pair, and
+  it is published as a floor on the ambiguity — the climb doubles, so the radii between two probes were
+  never measured and the true interval runs past both ends. ADR 0005's Context holds the measurement and
+  decision 2 the reason it is not read back from the ledger.
 
 ### FU-10 - Nothing checks rustdoc
 

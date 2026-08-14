@@ -102,8 +102,11 @@ names what is inside it.
    — because step 3's strict prune makes a radius covering most of the globe a plateau it refines cell by
    cell. The radius at which a circle is the whole grid is answered by step 1's whole-extent query rather
    than searched, which is what makes a target of the entire population exact rather than a rounding away.
-   The answer is the smallest radius reaching the target, reported with the radius below it that did not;
-   minimality holds for a target further from a plateau than the summation slack the result carries.
+   The answer is the smallest radius reaching the target, reported with the radius below it that did not.
+   Where the summation slack cannot separate a probed radius from the target, the result names the span of
+   probed radii it cannot separate rather than asserting a minimality it has not proved — a floor on that
+   span, since the climb doubles and the radii between two probes were never measured
+   ([ADR 0005](../decisions/0005-ambiguous-minimality-is-reported.md)).
 5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
 
 A module per subject, and two crates: the library `crates/popcircles/` and the binary
