@@ -25,14 +25,17 @@ hyphenated, and put the grid resolution in the filename when a dataset comes in 
 | Extent | whole globe, origin (−180°, 90°) |
 | CRS | EPSG:4326 (WGS 84) |
 | Pixel type | Float32, LZW compressed |
-| Nodata | −3.40282306073709653e+38 (Float32 −max) |
+| Nodata | −3.40282306073709653e+38 (Float32, two ulps above −max) |
 | Size | 409 MiB |
 | SHA-256 | `956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d` |
 | Land cells | 222 669 928 of 933 120 000 (182 358 616 populated, 40 311 312 zero) |
 | World total | 7 757 982 599.32 persons |
 | Largest cell | 602 380.375 persons |
 
-Every value above was measured from the file, not copied from a datasheet.
+Every value above was measured from the file, not copied from a datasheet. The total is a compensated
+(Neumaier) sum: over 933 120 000 additions into a running 7.8e9, where one ulp is 1.9e-6, a naive f64
+accumulator lands 0.15 low. Reproducing it that way gives 7 757 982 599.17, and the file is not what
+changed.
 
 #### Provenance
 

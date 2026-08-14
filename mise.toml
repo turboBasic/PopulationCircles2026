@@ -95,6 +95,13 @@ run = "uv run pyright"
 description = "Run the Rust test suite"
 run = "cargo test --all-features"
 
+# Never in `lint` or `ci`, and not on a condition that could later be satisfied: CI clones with
+# GIT_LFS_SKIP_SMUDGE=1, so data/ there holds pointers and this test would have nothing to read.
+# --release because the pass is 933 120 000 cells and a debug build spends minutes on it.
+[tasks."test:raster"]
+description = "Read the real population raster end to end (needs mise run data:pull)"
+run = "cargo test --release --all-features -- --ignored"
+
 # Wire into `ci` once tests/ exists: pytest exits 5 on an empty suite.
 [tasks."test:python"]
 description = "Run the Python test suite (needs tests/ to exist)"

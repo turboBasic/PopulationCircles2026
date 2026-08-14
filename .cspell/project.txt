@@ -29,11 +29,14 @@ geotiff
 geotransform
 gridding
 kernels
+Neumaier
 nodata
 Quah
 raster
 rasters
+reprojection
 Sinnott
+tiepoint
 ulps
 Valeriepieris
 
@@ -41,18 +44,27 @@ Valeriepieris
 EPSG
 GDAL
 grib
+IEEEFP
 IUGG
+libgdal
 mbtiles
 pmtiles
 tiffinfo
 
 # --- Library and API identifiers ---
 bpaf
+colortype
+flate
 indicatif
 insta
 mangen
+miniz
+ndarray
 proptest
 thiserror
+weezl
+zerocopy
+zune
 
 # --- Repository jargon ---
 backticked

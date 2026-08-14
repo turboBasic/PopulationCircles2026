@@ -8,7 +8,13 @@ use crate::geodesy::{LatBand, LatLon, wrap_lon, zone_area_km2};
 // past -90 for a grid that in fact ends at the pole, short of 360 for one that in fact closes on
 // itself. The size is what keeps this from swallowing a real discrepancy: being out by one cell
 // costs 1/120° on the finest grid here, eight orders of magnitude above this.
-const BOUNDARY_TOLERANCE_DEG: f64 = 1e-9;
+//
+// The registry raster is what fixes the scale rather than a guess: its step is 1/120 + 5.4e-16 and
+// its origin latitude 90 + 1.16e-11, so the width times the step overshoots a full turn by 2.3e-11.
+// pub(crate) because the raster reader compares a file's geotransform against a declared grid and
+// has to allow exactly the same rounding this does — a second constant there would be two answers to
+// one question.
+pub(crate) const BOUNDARY_TOLERANCE_DEG: f64 = 1e-9;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridError {

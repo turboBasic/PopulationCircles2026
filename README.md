@@ -6,8 +6,8 @@ Finds the smallest circle on Earth containing a given share of the world's popul
 ~1 km resolution population raster — smallest measured on the globe, not on a projected map, which
 is what makes the answer differ from the familiar viral versions. Also renders the results as maps.
 
-**Status: early.** Grid geometry and spherical geodesy are implemented and tested; raster ingest,
-the summation table, the kernels and the search itself are not.
+**Status: early.** Grid geometry, spherical geodesy and raster ingest are implemented and tested; the
+summation table, the kernels and the search itself are not.
 
 ## Getting started
 
