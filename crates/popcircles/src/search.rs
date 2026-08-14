@@ -471,8 +471,9 @@ mod tests {
 
     use super::*;
     use crate::geodesy::{LatLon, great_circle_km};
+    use crate::kernel::Span;
     use crate::raster::Synthetic;
-    use crate::table::{Decimation, build};
+    use crate::table::{ColSpan, Decimation, build};
 
     const WIDTH: u32 = 36;
     const HEIGHT: u32 = 18;
@@ -1103,6 +1104,168 @@ mod tests {
         let result = search(&table, 3000.0, 4);
         assert_eq!(result.tolerance_persons, 0.0);
         assert_eq!(result.radius.km(), 3000.0);
+    }
+
+    /// A raster of zeros with `value` planted on each of `patches`, given as inclusive `(rows, cols)`.
+    fn planted(patches: Vec<((u32, u32), (u32, u32))>, value: f32) -> impl Fn(u32, u32) -> f32 {
+        move |row, col| {
+            let inside = patches.iter().any(|((north, south), (first, last))| {
+                (*north..=*south).contains(&row) && (*first..=*last).contains(&col)
+            });
+            if inside { value } else { 0.0 }
+        }
+    }
+
+    /// The span the winning circle covers in its own centre row, which is what the seam and pole cases
+    /// assert alongside the answer.
+    fn centre_span(grid: &Grid, found: Candidate, radius_km: f64) -> (Span, ColSpan) {
+        let kernel = Kernel::new(*grid, found.row, radius(radius_km)).expect("a grid that closes");
+        let span = kernel
+            .rows()
+            .find(|(row, _)| *row == found.row)
+            .map(|(_, span)| span)
+            .expect("the centre row is in the band");
+        let cols = kernel
+            .place(found.col)
+            .find(|(row, _)| *row == found.row)
+            .map(|(_, cols)| cols)
+            .expect("the centre row is in the band");
+        (span, cols)
+    }
+
+    #[test]
+    fn a_planted_maximum_in_the_interior_is_found() {
+        // Four cells of a hundred at 5 N to 5 S. The radius has to clear the cluster's diagonal for the
+        // answer to be the whole cluster rather than part of it: those corners are 14.13 degrees apart,
+        // which is 1571 km, so 1500 would hold three cells and 1800 holds four.
+        let grid = grid();
+        let payload = payload_over(&grid, planted(vec![((8, 9), (15, 16))], 100.0));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let expected = brute_force(&table, &grid, 1800.0);
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 1800.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                (expected.row.get(), expected.col.get(), expected.population),
+                "spacing {cells}"
+            );
+        }
+        assert_eq!(expected.population, 400.0);
+    }
+
+    #[test]
+    fn a_planted_maximum_across_the_antimeridian_is_found() {
+        // The cluster straddles the seam — column 35 and column 0 — so the winning circle has to run off
+        // one end of a row and back on at the other. The wrapped span is asserted as well as the answer:
+        // a search that found this centre while its kernel clipped at the seam would report a smaller
+        // population, and a search whose span had stopped wrapping would pass on a case it no longer
+        // covers.
+        let grid = grid();
+        let payload = payload_over(
+            &grid,
+            planted(vec![((9, 9), (35, 35)), ((9, 9), (0, 0))], 100.0),
+        );
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let expected = brute_force(&table, &grid, 1500.0);
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 1500.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                (expected.row.get(), expected.col.get(), expected.population),
+                "spacing {cells}"
+            );
+        }
+        // Both planted cells, which only a wrapping traversal reaches from one centre.
+        assert_eq!(expected.population, 200.0);
+
+        let (_, cols) = centre_span(&grid, expected, 1500.0);
+        match cols {
+            ColSpan::Through { west, east } => {
+                assert!(west.get() > east.get(), "{west:?} to {east:?}");
+            }
+            ColSpan::FullTurn => panic!("a 1500 km cap does not close a row at 5 S on this grid"),
+        }
+    }
+
+    #[test]
+    fn a_planted_maximum_over_the_pole_is_found() {
+        // Row 0 is 85 N and a 2000 km cap is 17.99 degrees, so the far side of that parallel is 10 degrees
+        // away and the whole row is inside the circle. That is the case a traversal assembling a closed
+        // row from two pieces double-counts, so the `FullTurn` is asserted beside the answer.
+        let grid = grid();
+        let payload = payload_over(&grid, planted(vec![((0, 0), (0, 1))], 100.0));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let expected = brute_force(&table, &grid, 2000.0);
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 2000.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                (expected.row.get(), expected.col.get(), expected.population),
+                "spacing {cells}"
+            );
+        }
+        assert_eq!(expected.row.get(), 0);
+        assert_eq!(expected.population, 200.0);
+        assert_eq!(centre_span(&grid, expected, 2000.0).0, Span::FullTurn);
+    }
+
+    #[test]
+    fn two_equal_maxima_resolve_to_the_north_western_one() {
+        // Identical clusters, one in the northern hemisphere and one in the southern, so the maximum is
+        // genuinely tied and the tie-break alone decides. The three spacings are the point: a prune that
+        // dropped a tying block would answer the southern cluster at one spacing and the northern at
+        // another, and each answer would look perfectly plausible on its own.
+        let grid = grid();
+        let payload = payload_over(
+            &grid,
+            planted(vec![((3, 4), (10, 11)), ((13, 14), (25, 26))], 100.0),
+        );
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let expected = brute_force(&table, &grid, 1500.0);
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 1500.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                (expected.row.get(), expected.col.get(), expected.population),
+                "spacing {cells}"
+            );
+        }
+        // The northern cluster, which is what "north-west wins" means on this fixture.
+        assert!(expected.row.get() <= 4, "row {}", expected.row.get());
+        assert_eq!(expected.population, 400.0);
+    }
+
+    #[test]
+    fn a_zero_radius_answers_the_single_most_populous_cell() {
+        // Degenerate and legal: each circle is its own centre cell, so the answer is the largest cell of
+        // the fixture. Checked against a direct scan of the cells rather than against another search.
+        let grid = grid();
+        let cell = distinct(&grid);
+        let payload = payload_over(&grid, &cell);
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut heaviest = (0u32, 0u32, 0.0f64);
+        for row in 0..HEIGHT {
+            for col in 0..WIDTH {
+                let value = f64::from(cell(row, col));
+                if value > heaviest.2 {
+                    heaviest = (row, col, value);
+                }
+            }
+        }
+
+        for cells in [1u32, 4, 18] {
+            let found = search(&table, 0.0, cells).centre;
+            assert_eq!(
+                (found.row.get(), found.col.get(), found.population),
+                heaviest,
+                "spacing {cells}"
+            );
+        }
     }
 
     #[test]
