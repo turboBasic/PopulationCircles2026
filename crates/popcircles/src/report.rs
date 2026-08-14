@@ -1,7 +1,58 @@
-// The published shape of a result, and the only place in this crate a serde derive appears. ADR 0001
-// decision 3: the domain types change when the search changes, so what is serialised is a separate
-// representation with its own version, and a field here is a promise to two renderers and two
-// command surfaces.
+//! The published shape of a result, and the only place in this crate a serde derive appears. ADR 0001
+//! decision 3: the domain types change when the search changes, so what is serialised is a separate
+//! representation with its own version, and a field here is a promise to two renderers and two command
+//! surfaces.
+//!
+//! # The envelope
+//!
+//! Every document is an [`Envelope`], whose keys come in declaration order because that is the order serde
+//! emits them in. `schema_version` is first so a consumer reads the version before anything it might not
+//! understand, and `provenance` precedes `result` for the same reason one step out: what produced a
+//! document is read before the document.
+//!
+//! # Provenance, and what it does not attest
+//!
+//! [`Provenance`] is where a document's **identity** lives: which table it was answered from, and where
+//! that table sits. It is absent — the key omitted, not null — from a document whose command read no
+//! cached table.
+//!
+//! A payload's own `digest` or `grid` is a different thing and not a second answer to the same question.
+//! [`TableQueryReport`] is the one place the distinction is visible: it carries both in its payload and
+//! carries no provenance, because there the table is what the command is *about* rather than what it was
+//! answered from.
+//!
+//! **The `grid` in provenance is the grid the caller declared, not one the cache attested to.** A cache
+//! header binds a digest, a width, a height and a decimation factor — and no origin and no steps. So a
+//! table built over one geometry opens cleanly for a command declaring another, at which point every
+//! coordinate resolves to the wrong cell while the digest agrees. `digest` and `decimation` are the two
+//! fields a cache did compare. `FU-11` is the gap; closing it is a record's call.
+//!
+//! # The documents
+//!
+//! | Payload | What it answers |
+//! | --- | --- |
+//! | [`DistanceReport`] | a great-circle distance between two coordinates |
+//! | [`GridSummary`] | the geometry of a declared grid |
+//! | [`TableBuildReport`] | what a summation table build settled, and where it went |
+//! | [`TableQueryReport`] | the population of one rectangle of a table |
+//! | [`CircleReport`] | the population inside one circle a caller named |
+//! | [`MostPopulousReport`] | the most populous circle of a fixed radius |
+//! | [`SmallestDocument`] | the smallest circle reaching one share |
+//! | [`SweepDocument`] | the smallest circle for each of a range of shares |
+//!
+//! The last two are documents rather than bare payloads because a ledger belongs to the run and not to any
+//! one circle, and because a payload meaning either "a circle" or "some circles" would leave a consumer
+//! branching on which it got.
+//!
+//! **A [`SweepDocument`]'s `records` ascend by `target.share`.** That is part of the contract and held by
+//! construction, so a renderer plotting share against radius may read them in the order it gets them.
+//!
+//! # Growth
+//!
+//! The format grows **additively**: a new field or a new payload type owes no version bump, and
+//! [`SCHEMA_VERSION`] rises only for a change an existing consumer would misread — a renamed or removed
+//! field, or one whose meaning moved. A consumer should therefore ignore keys it does not know rather than
+//! refuse a document carrying them.
 use std::path::Path;
 
 use serde::Serialize;
@@ -513,7 +564,7 @@ pub struct LedgerReport {
 }
 
 impl LedgerReport {
-    /// [`CacheFiles::new`]'s treatment of a path, and for its reason.
+    /// `CacheFiles::new`'s treatment of a path, and for its reason.
     #[must_use]
     pub fn new(path: &Path, radii: usize) -> Self {
         Self {

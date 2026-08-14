@@ -121,7 +121,7 @@ pub fn ceiling_radius() -> RadiusKm {
 ///
 /// A trait rather than a type for [`crate::raster::RasterSource`]'s reason: what the search needs of a
 /// ledger is these two operations, and a fixture, an in-memory map and the JSON document
-/// [`cache`](crate::smallest::cache) publishes are then the same seam. The error is associated because a
+/// [`cache`] publishes are then the same seam. The error is associated because a
 /// ledger's failures are its own — this module has no vocabulary for a filesystem — which is the shape
 /// [`crate::table::build`] takes with its sink.
 ///

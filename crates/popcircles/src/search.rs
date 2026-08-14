@@ -109,7 +109,7 @@ impl Block {
     ///
     /// # Panics
     /// If `grid` is not the grid the returned blocks are read against — it is, by construction here, and
-    /// the panic is [`row_of`]'s.
+    /// the panic is `row_of`'s.
     #[must_use]
     pub fn tile(grid: &Grid, spacing: NonZeroU32) -> Vec<Self> {
         // Saturating, because a spacing larger than the grid is a legal way to ask for one block and
@@ -140,7 +140,7 @@ impl Block {
     /// Which one is arbitrary; that it is the same one every run is not.
     ///
     /// # Panics
-    /// If `grid` is not the grid this block's indices were minted by; [`row_of`] says why that is a stop.
+    /// If `grid` is not the grid this block's indices were minted by; `row_of` says why that is a stop.
     #[must_use]
     pub fn probe(self, grid: &Grid) -> (Row, Col) {
         let (north, south) = (self.rows.north().get(), self.rows.south().get());
@@ -158,7 +158,7 @@ impl Block {
     /// extent, so a block reaches one cell in a bounded number of rounds and then stops producing work.
     ///
     /// # Panics
-    /// If `grid` is not the grid this block's indices were minted by; [`row_of`] says why that is a stop.
+    /// If `grid` is not the grid this block's indices were minted by; `row_of` says why that is a stop.
     pub fn split(self, grid: &Grid) -> impl Iterator<Item = Self> {
         let halves = |low: u32, high: u32| {
             if low == high {
@@ -240,7 +240,7 @@ impl Candidate {
 /// Offsets are between **cell centres**, not out to the block's outer boundary: the candidates a bound
 /// speaks for are cell centres, so measuring to a cell edge would loosen it for nothing.
 ///
-/// The answer is inflated by [`SLACK_MARGIN`], and the reason is that the inequality above is not strict
+/// The answer is inflated by `SLACK_MARGIN`, and the reason is that the inequality above is not strict
 /// in two configurations. A block one column wide has `Δλ = 0`, so the two-hop path *is* the meridian
 /// geodesic; a block one row tall on the equator has `Δφ = 0` and the parallel *is* a great circle. In
 /// both the mathematical margin is zero, so a figure computed one ulp light would exclude a cell that is
@@ -251,7 +251,7 @@ impl Candidate {
 /// the ceiling on a useful initial spacing rather than a correctness limit.
 ///
 /// # Panics
-/// If `grid` is not the grid `block`'s indices were minted by; [`row_of`] says why that is a stop.
+/// If `grid` is not the grid `block`'s indices were minted by; `row_of` says why that is a stop.
 #[must_use]
 pub fn slack_km(grid: &Grid, block: Block) -> f64 {
     let (probe_row, probe_col) = block.probe(grid);
