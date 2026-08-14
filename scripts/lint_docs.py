@@ -141,6 +141,38 @@ def fragment_exists(target: Path, fragment: str) -> bool:
     return any(slugify(h) == fragment.lower() for h in headings_of(target))
 
 
+@functools.cache
+def is_ignored(rel: str) -> bool:
+    # Unlike the call above, this one passes a path read out of a scanned document, which is what
+    # S603 is about. It reaches git as one argv element and never a shell, so the worst a crafted
+    # value can do is make check-ignore answer about some other path.
+    return (
+        subprocess.run(  # noqa: S603 — argv, not a shell
+            ["git", "check-ignore", "-q", rel],  # noqa: S607 — trusted, repo-local
+            cwd=REPO_ROOT,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+# A document may name a file no clone has: `.claude/settings.local.json` is per-developer by
+# design, and the housekeeping sweep's stale-allowlist check has to name it to be readable.
+# Resolving against the filesystem alone made this lint answer differently per machine — present
+# for whoever created the file, absent in CI — so a path a committed ignore rule covers counts as
+# a deliberate absence. That rule has to be in .gitignore rather than in a contributor's global
+# excludes for the two answers to agree. Residual: a file untracked, unignored and present only
+# locally still resolves here and fails in CI.
+def deliberately_absent(source: Path, target: str) -> bool:
+    for base in (source.parent, REPO_ROOT):
+        candidate = (base / target).resolve()
+        if candidate.is_relative_to(REPO_ROOT) and is_ignored(
+            str(candidate.relative_to(REPO_ROOT))
+        ):
+            return True
+    return False
+
+
 def resolve_relative(source: Path, target: str) -> Path | None:
     # Convention in this repo is mixed: usually file-relative (standard Markdown), occasionally
     # a bare repo-root-relative path in prose (e.g. `docs/ai/platform.md` cited from
@@ -175,7 +207,8 @@ def check_links(source: Path, lineno: int, line: str) -> list[Finding]:
         link_path, _, fragment = href.partition("#")
         target = source if link_path == "" else (source.parent / link_path).resolve()
         if not target.exists():
-            findings.append(Finding(source, lineno, f"link target does not resolve: {href}"))
+            if not deliberately_absent(source, link_path):
+                findings.append(Finding(source, lineno, f"link target does not resolve: {href}"))
             continue
         if fragment and not fragment_exists(target, fragment):
             findings.append(
@@ -206,7 +239,8 @@ def check_backtick_paths(source: Path, lineno: int, line: str) -> list[Finding]:
             continue
         target = resolve_relative(source, content)
         if target is None:
-            findings.append(Finding(source, lineno, f"path does not resolve: `{content}`"))
+            if not deliberately_absent(source, content):
+                findings.append(Finding(source, lineno, f"path does not resolve: `{content}`"))
             continue
         adjacency = check_quote_adjacency(line, m.end(), source, target, lineno)
         if adjacency:
