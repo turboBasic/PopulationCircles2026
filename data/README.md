@@ -32,7 +32,10 @@ hyphenated, and put the grid resolution in the filename when a dataset comes in 
 | World total | 7 757 982 599.32 persons |
 | Largest cell | 602 380.375 persons |
 
-Every value above was measured from the file, not copied from a datasheet.
+Every value above was measured from the file, not copied from a datasheet. The total is a compensated
+(Neumaier) sum: over 933 120 000 additions into a running 7.8e9, where one ulp is 1.9e-6, a naive f64
+accumulator lands 0.15 low. Reproducing it that way gives 7 757 982 599.17, and the file is not what
+changed.
 
 #### Provenance
 
