@@ -8,8 +8,9 @@ is what makes the answer differ from the familiar viral versions. Also renders t
 
 **Status: early.** Grid geometry, spherical geodesy, raster ingest, the summation table with its
 on-disk cache, the circular kernels a circle is measured through, the population inside one such
-circle, and the most populous circle of a fixed radius are implemented and tested. What is left is the
-search for the smallest circle holding a given share, the command line over it, and the maps.
+circle, the most populous circle of a fixed radius, and the smallest circle holding a given share of a
+population — resumable across runs — are implemented and tested. What is left is the command line over
+that search, and the maps.
 
 ## Getting started
 

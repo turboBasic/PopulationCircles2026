@@ -1,0 +1,775 @@
+// The I/O half of the search over radius: one JSON document holding what every probe found, so an
+// interrupted run resumes instead of paying for its radii twice. ADR 0003 decision 1's split, at a tenth of
+// the size — `smallest.rs` stays a computation whose tests need no filesystem, and every path, every
+// `serde` derive and every write in this work is here.
+//
+// One document rather than the header-and-payload pair `table/cache.rs` publishes. That shape exists so a
+// 7.5 GB payload can be mapped with its cells aligned; a ledger holds a few dozen rows, is read once at
+// startup, and is something a person debugging a resumed run wants to be able to `cat`. What it keeps from
+// that record is the two things that make a cache safe rather than fast: the identity it is checked
+// against, and publication by rename so a reader never sees a half-written document.
+use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use super::RadiusLedger;
+use crate::grid::Grid;
+use crate::search::Candidate;
+use crate::table::cache::Identity;
+
+/// Bumped when a change to the document's fields is one an older reader would misread rather than refuse.
+///
+/// Additive growth bumps it too, unlike a wire format's version: `serde` ignores keys it does not know, so
+/// a build reading a later document would accept it and resume from radii it has half understood. That is
+/// `FU-06`'s reasoning for the table's header, and a ledger is the same kind of file.
+pub const FORMAT_VERSION: u32 = 1;
+
+/// One suffix, so an interrupted publication leaves a name the next one can name back.
+const TEMPORARY_SUFFIX: &str = ".tmp";
+
+/// Every way a ledger can fail to be the one a caller asked for.
+///
+/// One variant per ground, [`CacheError`](crate::table::cache::CacheError)'s reasoning: a caller that
+/// starts afresh on a digest mismatch and reports a broken file as an error has to be able to tell the two
+/// apart, and a message reading only "stale ledger" sends its reader to a hex editor.
+#[derive(Debug, thiserror::Error)]
+pub enum LedgerError {
+    #[error("the ledger at {} could not be read", path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("the ledger at {} could not be written", path.display())]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("the ledger at {} is not the JSON document this format is", path.display())]
+    Syntax {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("this build reads format version {expected}; the ledger declares {found}")]
+    FormatVersion { expected: u32, found: u32 },
+
+    #[error(
+        "wanted the radii of the table whose cells digest to {expected:#018x}; the ledger declares \
+         {found:#018x}"
+    )]
+    Digest { expected: u64, found: u64 },
+
+    #[error("wanted a {expected}-column table; the ledger declares {found}")]
+    Width { expected: u32, found: u32 },
+
+    #[error("wanted a {expected}-row table; the ledger declares {found}")]
+    Height { expected: u32, found: u32 },
+
+    #[error("wanted a table decimated by {expected}; the ledger declares {found}")]
+    DecimationFactor { expected: u32, found: u32 },
+
+    #[error(
+        "the ledger records a maximum at ({row}, {col}), which is not a cell of a {width} x {height} grid"
+    )]
+    CentreOffGrid {
+        row: u32,
+        col: u32,
+        width: u32,
+        height: u32,
+    },
+
+    #[error("the ledger records {km} km twice, with maxima of {first} and {second}")]
+    DuplicateRadius { km: u32, first: f64, second: f64 },
+}
+
+/// One probe, as published.
+///
+/// The centre is a pair of indices rather than a [`Candidate`]: a [`Row`](crate::grid::Row) is only ever
+/// minted by the grid that contains it, so the indices are checked back into cells at open time and no
+/// later reader has to wonder whether they are on the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+struct Probe {
+    km: u32,
+    population: f64,
+    row: u32,
+    col: u32,
+}
+
+/// The document.
+///
+/// `format_version` is declared first because serde emits struct fields in declaration order, so the field
+/// a reader needs before it can trust any other is the first one it meets — the table's header and the
+/// report envelope both lead with theirs for the same reason. The digest, the dimensions and the factor are
+/// [`Identity`]'s, spelled out rather than nested so a mismatch in any one of them is reported as itself.
+///
+/// **The share is not here, and neither is the spacing.** What a row records is the maximum over the
+/// table's cell centres at a radius, which is a property of the table alone: keying on the spacing would
+/// evict a ledger a different spacing filled, and keying on the share would stop a rerun at 25% reusing
+/// what a 50% run paid for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Document {
+    format_version: u32,
+    digest: u64,
+    width: u32,
+    height: u32,
+    decimation: u32,
+    radii: Vec<Probe>,
+}
+
+impl Document {
+    fn new(identity: &Identity) -> Self {
+        Self {
+            format_version: FORMAT_VERSION,
+            digest: identity.digest,
+            width: identity.decimation.grid().width(),
+            height: identity.decimation.grid().height(),
+            decimation: identity.decimation.factor(),
+            radii: Vec::new(),
+        }
+    }
+
+    /// The version comes first, and for the table header's reason: a document of another version may mean
+    /// every field after it differently, so nothing else is compared until it agrees.
+    fn check(&self, wanted: &Identity) -> Result<(), LedgerError> {
+        if self.format_version != FORMAT_VERSION {
+            return Err(LedgerError::FormatVersion {
+                expected: FORMAT_VERSION,
+                found: self.format_version,
+            });
+        }
+        if self.digest != wanted.digest {
+            return Err(LedgerError::Digest {
+                expected: wanted.digest,
+                found: self.digest,
+            });
+        }
+
+        let grid = wanted.decimation.grid();
+        if self.width != grid.width() {
+            return Err(LedgerError::Width {
+                expected: grid.width(),
+                found: self.width,
+            });
+        }
+        if self.height != grid.height() {
+            return Err(LedgerError::Height {
+                expected: grid.height(),
+                found: self.height,
+            });
+        }
+        if self.decimation != wanted.decimation.factor() {
+            return Err(LedgerError::DecimationFactor {
+                expected: wanted.decimation.factor(),
+                found: self.decimation,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// What every probe of a search over radius found, kept in a file between runs.
+///
+/// The entries are held resident and the file is rewritten whole on every `put`. Both follow from the size:
+/// a search settles a few dozen radii, so the map is kilobytes and the rewrite is one small write against a
+/// probe that costs a search over the globe.
+#[derive(Debug)]
+pub struct Ledger {
+    path: PathBuf,
+    temporary: PathBuf,
+    identity: Identity,
+    grid: Grid,
+    entries: BTreeMap<u32, Candidate>,
+}
+
+impl Ledger {
+    /// The ledger at `path` for the table `wanted` describes, or an empty one when nothing is there.
+    ///
+    /// Absent is not an error — a first run has nothing to resume, and making a caller distinguish "no file
+    /// yet" from "wrong file" at every call site is how one of the two ends up handled wrongly. Every other
+    /// disagreement is refused by ground: see [`LedgerError`].
+    ///
+    /// # Errors
+    /// [`LedgerError::Read`] when the file is there and cannot be read, [`LedgerError::Syntax`] when it is
+    /// not this document, and one variant per ground when it describes another table.
+    pub fn open_or_empty(path: impl AsRef<Path>, wanted: &Identity) -> Result<Self, LedgerError> {
+        let path = path.as_ref().to_path_buf();
+        let mut temporary = path.clone().into_os_string();
+        temporary.push(TEMPORARY_SUFFIX);
+        let grid = *wanted.decimation.grid();
+
+        let mut ledger = Self {
+            temporary: PathBuf::from(temporary),
+            path,
+            identity: *wanted,
+            grid,
+            entries: BTreeMap::new(),
+        };
+
+        let bytes = match fs::read(&ledger.path) {
+            Ok(bytes) => bytes,
+            Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(ledger),
+            Err(source) => {
+                return Err(LedgerError::Read {
+                    path: ledger.path,
+                    source,
+                });
+            }
+        };
+
+        let document: Document =
+            serde_json::from_slice(&bytes).map_err(|source| LedgerError::Syntax {
+                path: ledger.path.clone(),
+                source,
+            })?;
+        document.check(wanted)?;
+
+        for probe in document.radii {
+            let cell = ledger.grid.row(probe.row).zip(ledger.grid.col(probe.col));
+            let (row, col) = cell.ok_or(LedgerError::CentreOffGrid {
+                row: probe.row,
+                col: probe.col,
+                width: ledger.grid.width(),
+                height: ledger.grid.height(),
+            })?;
+            let found = Candidate {
+                row,
+                col,
+                population: probe.population,
+            };
+            // A radius has one maximum. Two rows for it are two answers to the same question, and a reader
+            // that took the last would resume from whichever the writer happened to append second.
+            if let Some(first) = ledger.entries.insert(probe.km, found) {
+                return Err(LedgerError::DuplicateRadius {
+                    km: probe.km,
+                    first: first.population,
+                    second: probe.population,
+                });
+            }
+        }
+        Ok(ledger)
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// How many radii the file holds, which is what a resumed run reuses.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Writes the whole document to a temporary, syncs it, and renames it into place.
+    ///
+    /// ADR 0003 decision 5's publication, and the reason is the same: a rename replaces a directory entry
+    /// rather than an inode, so a reader either sees the document that was there before or the one this
+    /// call finished, never the half-written middle. The temporary's name is deterministic, so an
+    /// interrupted run leaves at most one and the next `put` names it back rather than accumulating.
+    fn publish(&self) -> Result<(), LedgerError> {
+        let mut document = Document::new(&self.identity);
+        document.radii = self
+            .entries
+            .iter()
+            .map(|(&km, found)| Probe {
+                km,
+                population: found.population,
+                row: found.row.get(),
+                col: found.col.get(),
+            })
+            .collect();
+
+        let write = |path: &Path, source| LedgerError::Write {
+            path: path.to_path_buf(),
+            source,
+        };
+        let bytes = serde_json::to_vec(&document)
+            .map_err(|source| write(&self.path, io::Error::other(source)))?;
+
+        let mut file =
+            File::create(&self.temporary).map_err(|source| write(&self.temporary, source))?;
+        file.write_all(&bytes)
+            .map_err(|source| write(&self.temporary, source))?;
+        file.sync_all()
+            .map_err(|source| write(&self.temporary, source))?;
+        drop(file);
+        fs::rename(&self.temporary, &self.path).map_err(|source| write(&self.path, source))
+    }
+}
+
+impl RadiusLedger for Ledger {
+    type Error = LedgerError;
+
+    fn get(&self, km: u32) -> Option<Candidate> {
+        self.entries.get(&km).copied()
+    }
+
+    /// The entry is added and the document republished before this returns, which is what
+    /// [`RadiusLedger::put`] promises and what makes an interrupted run resumable: a probe that has been
+    /// paid for is on disk before the next one starts.
+    fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+        self.entries.insert(km, found);
+        self.publish()
+    }
+}
+
+// unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
+// exemption; docs/ai/code.md allows both in tests. float_cmp is here because the round trip's claim is
+// bit-identity, which a tolerance would not check.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+mod tests {
+    use std::convert::Infallible;
+    use std::num::NonZeroU32;
+
+    use tempfile::TempDir;
+
+    use super::super::{Share, smallest};
+    use super::*;
+    use crate::geodesy::LatLon;
+    use crate::raster::Synthetic;
+    use crate::table::{Decimation, Table, build};
+
+    fn grid(width: u32, height: u32) -> Grid {
+        Grid::new(
+            width,
+            height,
+            LatLon {
+                lat: 90.0,
+                lon: -180.0,
+            },
+            360.0 / f64::from(width),
+            -180.0 / f64::from(height),
+        )
+        .expect("a whole-globe grid of any shape is valid")
+    }
+
+    const DIGEST: u64 = 0x3a5d_5e3b_082f_2fb7;
+
+    fn identity(width: u32, height: u32) -> Identity {
+        Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(grid(width, height)),
+        }
+    }
+
+    fn candidate(identity: &Identity, row: u32, col: u32, population: f64) -> Candidate {
+        let grid = identity.decimation.grid();
+        Candidate {
+            row: grid.row(row).expect("a row of the fixture"),
+            col: grid.col(col).expect("a column of the fixture"),
+            population,
+        }
+    }
+
+    fn ledger_in(directory: &TempDir, identity: &Identity) -> Ledger {
+        Ledger::open_or_empty(directory.path().join("radii.json"), identity).unwrap()
+    }
+
+    /// Three probes with distinct populations, so a row read back at the wrong offset shows up as a wrong
+    /// maximum rather than as a coincidence.
+    fn fill(ledger: &mut Ledger, identity: &Identity) {
+        for (km, row, col, population) in [
+            (0u32, 0u32, 0u32, 1.5f64),
+            (1571, 2, 3, 300.25),
+            (1572, 2, 3, 400.5),
+        ] {
+            ledger
+                .put(km, candidate(identity, row, col, population))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_ledger_where_nothing_exists_is_empty_and_its_first_put_creates_the_file() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let mut ledger = ledger_in(&directory, &identity);
+
+        // Absent rather than an error, because a first run has nothing to resume.
+        assert!(ledger.is_empty());
+        assert_eq!(ledger.len(), 0);
+        assert!(!ledger.path().exists());
+
+        ledger.put(500, candidate(&identity, 1, 2, 42.0)).unwrap();
+        assert!(ledger.path().exists());
+        assert_eq!(ledger.len(), 1);
+    }
+
+    #[test]
+    fn the_document_leads_with_its_format_version() {
+        // On the text rather than on a parsed value, for `table/cache.rs`'s reason: what needs pinning is
+        // that a reader streaming the document meets the version before anything it might not understand.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let mut ledger = ledger_in(&directory, &identity);
+        ledger.put(500, candidate(&identity, 1, 2, 42.0)).unwrap();
+
+        let document = fs::read_to_string(ledger.path()).unwrap();
+        assert!(
+            document.starts_with(r#"{"format_version":1,"#),
+            "{document}"
+        );
+    }
+
+    #[test]
+    fn every_probe_survives_the_round_trip() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(8, 6);
+        let mut written = ledger_in(&directory, &identity);
+        fill(&mut written, &identity);
+
+        let reopened = ledger_in(&directory, &identity);
+        assert_eq!(reopened.len(), 3);
+        for km in [0u32, 1571, 1572] {
+            let before = written.get(km).expect("a radius that was put");
+            let after = reopened.get(km).expect("a radius that was written");
+            // Bit-identical, not close: these are bytes this host wrote and bytes this host read, so
+            // anything but equality is a figure that moved.
+            assert_eq!(after.population.to_bits(), before.population.to_bits());
+            assert_eq!(after.row, before.row);
+            assert_eq!(after.col, before.col);
+        }
+        // And a radius nobody probed is still absent after a reopen.
+        assert_eq!(reopened.get(1570), None);
+    }
+
+    /// The document as text, so a test can plant exactly the disagreement it means.
+    fn write_document(ledger: &Ledger, document: &Document) {
+        fs::write(ledger.path(), serde_json::to_vec(document).unwrap()).unwrap();
+    }
+
+    fn document_of(identity: &Identity, radii: Vec<Probe>) -> Document {
+        let mut document = Document::new(identity);
+        document.radii = radii;
+        document
+    }
+
+    fn reopen(ledger: &Ledger, identity: &Identity) -> Result<Ledger, LedgerError> {
+        Ledger::open_or_empty(ledger.path(), identity)
+    }
+
+    #[test]
+    fn a_format_version_from_another_release_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.format_version = FORMAT_VERSION + 1;
+        // The digest goes too, and the refusal still names the version: a document of another version is
+        // not one whose other fields this build knows how to compare.
+        document.digest ^= 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::FormatVersion { expected, found })
+                if expected == FORMAT_VERSION && found == FORMAT_VERSION + 1
+        ));
+    }
+
+    #[test]
+    fn a_digest_from_other_cells_is_refused() {
+        // Issue #7's own requirement, and it reuses ADR 0003's mechanism rather than inventing a second
+        // notion of which raster a file belongs to.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.digest ^= 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Digest { expected, found })
+                if expected == DIGEST && found == DIGEST ^ 1
+        ));
+    }
+
+    #[test]
+    fn a_width_that_is_not_the_tables_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.width += 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Width {
+                expected: 4,
+                found: 5
+            })
+        ));
+    }
+
+    #[test]
+    fn a_height_that_is_not_the_tables_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.height += 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Height {
+                expected: 3,
+                found: 4
+            })
+        ));
+    }
+
+    #[test]
+    fn a_decimation_factor_that_is_not_the_tables_is_refused() {
+        // The dimensions agree and the digest agrees — a decimated table carries the source's digest, by
+        // ADR 0003 decision 3 — so this is the only field that can tell the two tables apart.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.decimation = 2;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::DecimationFactor {
+                expected: 1,
+                found: 2
+            })
+        ));
+    }
+
+    #[test]
+    fn a_document_that_is_not_json_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+        fs::write(ledger.path(), b"{\"format_version\": ").unwrap();
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Syntax { .. })
+        ));
+    }
+
+    #[test]
+    fn a_centre_that_is_not_a_cell_of_the_grid_is_refused() {
+        // The one thing a row can be wrong about that the header cannot catch: the dimensions agree, so a
+        // row naming column 9 of a four-column table is a file this build must refuse rather than resume
+        // from — and refuse at open, not at whichever query first looked.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let document = document_of(
+            &identity,
+            vec![Probe {
+                km: 500,
+                population: 12.0,
+                row: 1,
+                col: 9,
+            }],
+        );
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::CentreOffGrid {
+                row: 1,
+                col: 9,
+                width: 4,
+                height: 3
+            })
+        ));
+    }
+
+    #[test]
+    fn the_same_radius_recorded_twice_is_refused() {
+        // A radius has one maximum. Two rows for it are two answers to the same question, and a reader
+        // that took the last would resume from whichever the writer happened to append second.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let document = document_of(
+            &identity,
+            vec![
+                Probe {
+                    km: 500,
+                    population: 12.0,
+                    row: 1,
+                    col: 2,
+                },
+                Probe {
+                    km: 500,
+                    population: 13.0,
+                    row: 1,
+                    col: 2,
+                },
+            ],
+        );
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::DuplicateRadius {
+                km: 500,
+                first,
+                second
+            }) if first == 12.0 && second == 13.0
+        ));
+    }
+
+    #[test]
+    fn an_interrupted_publication_leaves_the_document_before_it_and_no_orphan() {
+        // The rename's whole point, from the other side: a temporary a crashed run left behind is neither
+        // read nor accumulated, and the document a reader finds is the last one a `put` finished.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(8, 6);
+        let mut ledger = ledger_in(&directory, &identity);
+        fill(&mut ledger, &identity);
+        let published = fs::read(ledger.path()).unwrap();
+
+        let orphan = ledger.temporary.clone();
+        fs::write(&orphan, b"a document a crashed run was part way through").unwrap();
+        assert_eq!(fs::read(ledger.path()).unwrap(), published);
+        assert_eq!(reopen(&ledger, &identity).unwrap().len(), 3);
+
+        // And the next put names it back rather than leaving it there.
+        ledger.put(2000, candidate(&identity, 3, 4, 900.0)).unwrap();
+        assert!(!orphan.exists());
+        assert_eq!(reopen(&ledger, &identity).unwrap().len(), 4);
+    }
+
+    /// The registry raster's sentinel, so a fixture reaches the table by the path a real raster takes.
+    const NODATA: f32 = -3.402_823e38;
+
+    /// The whole-globe fixture the module's own tests use, with cells distinct so a maximum read back at
+    /// the wrong radius shows up as a wrong figure rather than as a coincidence.
+    fn payload_over(grid: &Grid) -> Vec<f64> {
+        let rows: Vec<Vec<f32>> = (0..grid.height())
+            .map(|row| {
+                (0..grid.width())
+                    .map(|col| f32::from(u16::try_from(row * grid.width() + col + 1).unwrap()))
+                    .collect()
+            })
+            .collect();
+        let source = Synthetic::new(*grid, NODATA, rows).expect("the rows are the grid's shape");
+        let mut payload = Vec::new();
+        build(source, Decimation::none(*grid), &mut (), |row| {
+            payload.extend_from_slice(row);
+            Ok::<(), Infallible>(())
+        })
+        .expect("neither a synthetic source nor this sink can fail");
+        payload
+    }
+
+    /// A real ledger that stops recording after `budget` probes: the first ones reach the file, and then it
+    /// refuses. A process killed mid-run leaves exactly what this leaves.
+    #[derive(Debug)]
+    struct StopsAfter<'a> {
+        inner: &'a mut Ledger,
+        budget: usize,
+    }
+
+    impl RadiusLedger for StopsAfter<'_> {
+        type Error = LedgerError;
+
+        fn get(&self, km: u32) -> Option<Candidate> {
+            self.inner.get(km)
+        }
+
+        fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            if self.budget == 0 {
+                return Err(LedgerError::Write {
+                    path: self.inner.path().to_path_buf(),
+                    source: io::Error::other("the run was interrupted"),
+                });
+            }
+            self.budget -= 1;
+            self.inner.put(km, found)
+        }
+    }
+
+    #[test]
+    fn an_interrupted_run_resumes_from_the_file_and_answers_what_an_uninterrupted_one_does() {
+        // Issue #7's second box, end to end: through a real document in a real directory, with the entry
+        // count read back off the disk rather than from the decorator's own tally.
+        let fixture = grid(36, 18);
+        let payload = payload_over(&fixture);
+        let table = Table::new(fixture, &payload).expect("the build emits the padded product");
+        let identity = Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(fixture),
+        };
+        let share = Share::new(0.25).expect("a fixture share is a proportion");
+        let spacing = NonZeroU32::new(4).expect("a fixture spacing is not zero");
+
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("radii.json");
+
+        // What the answer is when nothing is interrupted, for the resumed run to be held to.
+        let uninterrupted = smallest(&table, share, spacing, &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+
+        // The run that dies on its fourth probe, having banked three.
+        let mut interrupted = Ledger::open_or_empty(&path, &identity).unwrap();
+        let mut stopping = StopsAfter {
+            inner: &mut interrupted,
+            budget: 3,
+        };
+        assert!(matches!(
+            smallest(&table, share, spacing, &mut stopping, &mut ()),
+            Err(crate::smallest::SmallestError::Ledger(
+                LedgerError::Write { .. }
+            ))
+        ));
+
+        // The next process, which knows nothing but the path: three radii are on disk.
+        let mut resumed_ledger = Ledger::open_or_empty(&path, &identity).unwrap();
+        assert_eq!(resumed_ledger.len(), 3);
+
+        let resumed = smallest(&table, share, spacing, &mut resumed_ledger, &mut ())
+            .expect("the ledger is this table's and the directory is writable");
+        assert_eq!(resumed.stats.radii_reused, 3);
+        assert_eq!(
+            resumed.stats.radii_settled(),
+            uninterrupted.stats.radii_settled()
+        );
+        assert_eq!(resumed.radius_km, uninterrupted.radius_km);
+        assert_eq!(
+            resumed.centre.population.to_bits(),
+            uninterrupted.centre.population.to_bits()
+        );
+        assert_eq!(resumed.centre.row, uninterrupted.centre.row);
+        assert_eq!(resumed.centre.col, uninterrupted.centre.col);
+        assert_eq!(resumed.short_below, uninterrupted.short_below);
+
+        // Every radius the finished run settled is on disk, so a third run would search nothing at all.
+        assert_eq!(
+            Ledger::open_or_empty(&path, &identity).unwrap().len() as u64,
+            uninterrupted.stats.radii_settled()
+        );
+    }
+}

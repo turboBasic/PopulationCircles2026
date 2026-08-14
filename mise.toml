@@ -170,6 +170,16 @@ run = "cargo test --release --all-features --test full_resolution_table -- --ign
 description = "Search the decimated grid's shape and check the bound prunes most of the globe"
 run = "cargo test --release --all-features --test decimated_search -- --ignored"
 
+# Not in `test` or `ci` for `test:slow`'s reason at a smaller scale: 74.7 MB of payload and 9 331 200 cells
+# streamed through the build, which is seconds of every run for a figure that moves only when the fold or
+# the bound does. What it pins that the unit tests cannot is that `smallest`'s predicate slack bounds the
+# fold's real error at a world's magnitude, where the sums round; on a fixture small enough for the default
+# suite every partial sum is exact and there is nothing to measure. Selected by target, so a second test in
+# the file needs no change here.
+[tasks."test:fold"]
+description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
+run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
+
 [tasks."test:python"]
 description = "Run the Python test suite"
 run = "uv run pytest"

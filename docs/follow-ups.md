@@ -142,14 +142,20 @@ Identifiers are flat, sequential and never reused.
   too, which is where this differs from `FU-03`: serde ignores keys it does not know, so a build reading a
   header from a later one accepts the document and then maps a payload whose layout it has no reason to
   doubt. The wire format may grow a field additively; a cache header cannot.
-- **Fix** — `FU-03`'s hook with a second pair, so one `repo: local` hook discharges both: a table of
-  trigger and constant — files under `crates/popcircles/src/snapshots/` with `SCHEMA_VERSION`, and the
-  `struct Header` block in `crates/popcircles/src/table/cache.rs` with `FORMAT_VERSION` — failing when
-  `git diff --cached` touches a trigger while carrying no line naming that trigger's constant. Run against
-  this tree on 2026-08-14: two commits touch `table/cache.rs`, the first adding the file with the constant
-  in the same diff and the second touching neither the block nor the constant, so the sweep is clean. Like
-  `FU-03` it cannot judge whether a change was breaking, which makes it a tripwire of the same kind as
-  `geo-data-lfs` rather than a lint of its own.
+- **Fix** — `FU-03`'s hook with two more pairs, so one `repo: local` hook discharges all of them: a table of
+  trigger and constant — files under `crates/popcircles/src/snapshots/` with `SCHEMA_VERSION`, the
+  `struct Header` block in `crates/popcircles/src/table/cache.rs` with `FORMAT_VERSION`, and the
+  `struct Document` and `struct Probe` blocks in `crates/popcircles/src/smallest/cache.rs` with that file's
+  own `FORMAT_VERSION` — failing when `git diff --cached` touches a trigger while carrying no line naming
+  that trigger's constant. Run against this tree on 2026-08-14: two commits touch `table/cache.rs`, the
+  first adding the file with the constant in the same diff and the second touching neither the block nor the
+  constant, and one commit adds `smallest/cache.rs` with its constant in the same diff, so the sweep is
+  clean. Like `FU-03` it cannot judge whether a change was breaking, which makes it a tripwire of the same
+  kind as `geo-data-lfs` rather than a lint of its own.
+
+  The radius ledger is the same kind of file as the table header rather than the same kind as a snapshot,
+  which is why it joins this entry: a run that resumes reads the document *back*, so a field added to it
+  without a bump leaves an older build resuming from radii it has half understood.
 
 ### FU-07 - A radius in kilometres is a bare f64 in more than one signature
 
@@ -178,15 +184,23 @@ Identifiers are flat, sequential and never reused.
 ### FU-08 - Nothing couples the search's initial spacing to a measured figure
 
 - **Status** — `dormant`.
-- **Condition** — a caller outside `search.rs` itself chooses the search's initial spacing. Two sweeps, both
-  empty on 2026-08-14: `rg -n 'most_populous\(' crates/popcircles-cli/src`, which fires when #8 wires a
-  search command, and `rg -n 'most_populous\(' crates/popcircles/src --glob '!search.rs'`, which fires when
-  #7 drives the search from a module of its own. Whichever lands first, that caller's literal becomes the
-  number every later one inherits without knowing it was a guess.
+- **Condition** — a caller outside `search.rs` itself **chooses** the search's initial spacing. Choosing is
+  what fires it, not calling: a caller that takes a spacing as a parameter and forwards it has made no
+  choice, and the number it passes on is still its own caller's. The sweep is therefore two-part —
+  `rg -n 'most_populous\(' crates/popcircles-cli/src crates/popcircles/src --glob '!search.rs'` for the call
+  sites, and for each one, whether the spacing it passes is a literal or a constant rather than something it
+  was given.
 
-  `crates/popcircles/tests/decimated_search.rs` is deliberately outside both sweeps. It picks 32, but a
+  On 2026-08-14 that names exactly one call site, `crates/popcircles/src/smallest.rs`, and it forwards: the
+  parameter arrives from its own caller untouched, and `smallest.rs` declares no spacing of its own —
+  `rg -n 'NonZeroU32::new' crates/popcircles/src/smallest.rs` matches only inside its tests. So #7 came and
+  went without firing this. #8 is where it fires, when a command surface has to put a number in a flag's
+  default or in a help string.
+
+  `crates/popcircles/tests/decimated_search.rs` is deliberately outside the sweep. It picks 32, but a
   deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
-  sweep to catch it would leave this entry permanently `due` with nothing to do about it.
+  sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
+  `smallest.rs` are outside it for the same reason.
 - **Fix** — a derivation of the initial spacing from the radius and the grid, in `search` beside the loop
   that consumes it, bounded above by the ceiling `slack_km` already documents: once `radius + slack` reaches
   half the circumference the widened circle is the whole sphere, every bound equals the raster's total and
@@ -195,3 +209,22 @@ Identifiers are flat, sequential and never reused.
   point and not a curve. The entry exists so the first caller does not silently become the default, and it
   cannot be discharged by a benchmark alone: what it wants is a function of the two inputs, not a constant
   that happened to measure well once.
+
+### FU-09 - The predicate slack is reported and nothing acts on it
+
+- **Status** — `dormant`.
+- **Condition** — a surface publishes `predicate_slack_persons` while the search still answers an ambiguous
+  comparison with a single radius. The sweep is `rg -n 'predicate_slack_persons' crates/popcircles-cli/src
+  scripts`, empty on 2026-08-14 and firing when #8 puts the figure in a document or #9 puts it on a map. What
+  makes it a real obligation rather than a tidy-up is the two pieces of work that can land on a target inside
+  it: #10 validates against the published 3300 km result, where the interesting shares sit on a plateau of
+  ocean, and #18 sweeps every country, where a small country's own total is close to one.
+- **Fix** — report the two radii around an ambiguous comparison rather than one: where a probe's population is
+  within the slack of the target, the honest answer is the bracket `[short, reaching]` and a statement that
+  the arithmetic cannot separate them, which is a wider bracket and not a tolerance. `smallest` already
+  carries the pieces — the slack, the answer and the radius below it — so the change is a comparison and a
+  field rather than a new search. It cannot be discharged by shrinking the slack: `mise run test:fold`
+  measures the fold's real error at a world's magnitude as **exactly zero** against a bound of 0.0218 persons
+  on 2026-08-14, so the bound is conservative by orders of magnitude and tightening it would be a claim about
+  cancellation rather than about the arithmetic. Nor by a compensated fold in `circle::population`: that
+  changes the answer's bits, which `search`'s determinism tests pin, and is a record's call.
