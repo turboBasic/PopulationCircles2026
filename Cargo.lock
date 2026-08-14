@@ -354,6 +354,7 @@ dependencies = [
  "clap",
  "popcircles",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

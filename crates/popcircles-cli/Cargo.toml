@@ -16,3 +16,9 @@ anyhow.workspace = true
 clap.workspace = true
 popcircles = { path = "../popcircles" }
 serde_json.workspace = true
+
+# The one dev-dependency: `tests/commands.rs` builds a real cache to run the binary against, and a
+# temporary directory is what keeps that out of the working tree. The binary itself is reached through
+# `CARGO_BIN_EXE_*`, which is std, so no command runner is needed.
+[dev-dependencies]
+tempfile.workspace = true
