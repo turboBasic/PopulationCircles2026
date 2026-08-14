@@ -523,6 +523,86 @@ impl LedgerReport {
     }
 }
 
+/// What one command asking for one smallest circle publishes.
+///
+/// A document of its own rather than a bare [`SmallestReport`], because the ledger belongs at this level
+/// and not inside the circle. And a document of its own rather than one shared with [`SweepDocument`]: the
+/// two differ in how many circles they carry, so a single payload meaning either "a circle" or "some
+/// circles" would leave a consumer branching on which it got.
+#[derive(Debug, Clone, Serialize)]
+pub struct SmallestDocument {
+    ledger: LedgerReport,
+    circle: SmallestReport,
+}
+
+impl SmallestDocument {
+    #[must_use]
+    pub const fn new(ledger: LedgerReport, circle: SmallestReport) -> Self {
+        Self { ledger, circle }
+    }
+}
+
+/// The shares a sweep walked, in whole percent, which is the unit the flags take.
+///
+/// Whole percent rather than the fractions the records carry: a step of a tenth accumulated in f64 makes
+/// the third share `0.30000000000000004`, and this block is what a consumer reads to know the walk was
+/// over integers.
+// The shared suffix is the unit, and these are published field names: `from`, `to` and `step` beside a
+// `target.share` that is a fraction is exactly the ambiguity this block exists to remove.
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SweepShares {
+    from_percent: u32,
+    to_percent: u32,
+    step_percent: u32,
+}
+
+impl SweepShares {
+    #[must_use]
+    pub const fn new(from_percent: u32, to_percent: u32, step_percent: u32) -> Self {
+        Self {
+            from_percent,
+            to_percent,
+            step_percent,
+        }
+    }
+}
+
+/// What one command sweeping a range of shares publishes.
+///
+/// One `ledger` block for the whole document, because one run opens one: what a ledger records is the
+/// maximum at a radius, a property of the table alone, so every share in the sweep reuses what the
+/// others paid for.
+///
+/// **`records` ascends by `target.share`**, and that is part of the contract rather than an accident of
+/// how a caller iterated — [`Self::new`] orders them, so a renderer plotting share against radius may
+/// read them in the order it gets them.
+#[derive(Debug, Clone, Serialize)]
+pub struct SweepDocument {
+    ledger: LedgerReport,
+    shares: SweepShares,
+    records: Vec<SmallestReport>,
+}
+
+impl SweepDocument {
+    /// Ordering here rather than asking a caller for it, so the contract above holds by construction.
+    /// `total_cmp` because a share is an ordinary finite proportion and a total order needs no case for
+    /// the `NaN` [`Share`](crate::smallest::Share) refuses.
+    #[must_use]
+    pub fn new(
+        ledger: LedgerReport,
+        shares: SweepShares,
+        mut records: Vec<SmallestReport>,
+    ) -> Self {
+        records.sort_by(|a, b| a.target.share.total_cmp(&b.target.share));
+        Self {
+            ledger,
+            shares,
+            records,
+        }
+    }
+}
+
 /// The one spelling of a digest, so the string a build publishes is the string a query accepts.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
@@ -541,6 +621,7 @@ fn hexadecimal(digest: u64) -> String {
     clippy::cast_precision_loss
 )]
 mod tests {
+    use std::collections::BTreeMap;
     use std::convert::Infallible;
     use std::num::NonZeroU32;
 
@@ -549,8 +630,8 @@ mod tests {
     use crate::geodesy::great_circle_km;
     use crate::kernel::Kernel;
     use crate::raster::Synthetic;
-    use crate::search;
-    use crate::smallest::{self, Share};
+    use crate::search::{self, Candidate};
+    use crate::smallest::{self, RadiusLedger, Share};
     use crate::table::{Decimation, Table, build};
 
     #[test]
@@ -839,6 +920,115 @@ mod tests {
         assert_eq!(below.0, found.radius_km - 1);
 
         insta::assert_json_snapshot!(Envelope::new(SmallestReport::new(&found, &grid)));
+    }
+
+    /// A ledger in a map, so the `radii` a document publishes is a real count and not a figure written
+    /// down beside one. `smallest.rs` drives its own tests through the same seam.
+    #[derive(Debug, Default)]
+    struct Recorded {
+        entries: BTreeMap<u32, Candidate>,
+    }
+
+    impl RadiusLedger for Recorded {
+        type Error = Infallible;
+
+        fn get(&self, km: u32) -> Option<Candidate> {
+            self.entries.get(&km).copied()
+        }
+
+        fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            self.entries.insert(km, found);
+            Ok(())
+        }
+    }
+
+    /// Where a run would put its ledger, which is `smallest-for-share`'s default. Fabricated because a
+    /// map has no path, and it is the shape of the block that a snapshot pins rather than the location.
+    fn ledger_path() -> &'static Path {
+        Path::new("out/radii.json")
+    }
+
+    #[test]
+    fn the_smallest_circle_document_holds_its_shape() {
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let found = smallest::smallest(&table, share(0.25), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+        // The count is the run's own, which is what makes the block worth publishing at all.
+        assert_eq!(ledger.entries.len() as u64, found.stats.radii_evaluated);
+
+        insta::assert_json_snapshot!(Envelope::new(SmallestDocument::new(
+            LedgerReport::new(ledger_path(), ledger.entries.len()),
+            SmallestReport::new(&found, &grid),
+        )));
+    }
+
+    #[test]
+    fn the_sweep_document_holds_its_shape_and_ascends_by_share() {
+        // Ten, twenty and thirty percent through `Share::new` on the exact fractions a percent walk
+        // produces, so the published shares are `0.1`, `0.2` and `0.3` and not the residue accumulating a
+        // step of a tenth would leave. That is the whole reason the flags are percent.
+        //
+        // Handed to the constructor in descending order, because what is being pinned is that the type
+        // orders them: passing them already sorted would let a constructor that does nothing pass.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let mut records: Vec<SmallestReport> = [0.3, 0.2, 0.1]
+            .into_iter()
+            .map(|value| {
+                let found =
+                    smallest::smallest(&table, share(value), spacing(4), &mut ledger, &mut ())
+                        .expect("a whole-globe fixture and a map cannot fail");
+                SmallestReport::new(&found, &grid)
+            })
+            .collect();
+        assert_eq!(records.len(), 3);
+
+        let document = SweepDocument::new(
+            LedgerReport::new(ledger_path(), ledger.entries.len()),
+            SweepShares::new(10, 30, 10),
+            std::mem::take(&mut records),
+        );
+        let shares: Vec<f64> = document
+            .records
+            .iter()
+            .map(|record| record.target.share)
+            .collect();
+        assert_eq!(shares, vec![0.1, 0.2, 0.3]);
+
+        insta::assert_json_snapshot!(Envelope::new(document));
+    }
+
+    #[test]
+    fn a_document_wrapping_a_circle_carries_exactly_one_ledger_block() {
+        // One run opens one, so a ledger block per record would write the same path once per share. The
+        // count is over the serialised text, which is where a field moved into `SmallestReport` would
+        // show up as three keys in a sweep of three.
+        let grid = fixture_grid();
+        let payload = fixture_payload();
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+        let found = smallest::smallest(&table, share(0.2), spacing(4), &mut (), &mut ())
+            .expect("a whole-globe fixture and a no-op ledger cannot fail");
+        let record = SmallestReport::new(&found, &grid);
+        let block = || LedgerReport::new(ledger_path(), 0);
+
+        let one =
+            serde_json::to_string(&Envelope::new(SmallestDocument::new(block(), record))).unwrap();
+        let swept = serde_json::to_string(&Envelope::new(SweepDocument::new(
+            block(),
+            SweepShares::new(20, 20, 10),
+            vec![record, record, record],
+        )))
+        .unwrap();
+
+        assert_eq!(one.matches(r#""ledger":"#).count(), 1, "{one}");
+        assert_eq!(swept.matches(r#""ledger":"#).count(), 1, "{swept}");
     }
 
     #[test]
