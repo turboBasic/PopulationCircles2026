@@ -22,6 +22,7 @@ taplo
 
 # --- Domain vocabulary ---
 antimeridian
+arcmin
 arcsec
 datasheet
 equirectangular
@@ -53,14 +54,18 @@ tiffinfo
 
 # --- Library and API identifiers ---
 bpaf
+bytemuck
 colortype
 flate
 indicatif
 insta
 keepends
+libc
 mangen
+memmap
 miniz
 ndarray
+pread
 proptest
 thiserror
 weezl
