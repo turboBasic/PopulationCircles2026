@@ -88,7 +88,7 @@ These add to the normal task loop; they do not replace it.
 The plumbing, and nothing narrates yet. Both tasks leave observable output unchanged, which is what makes
 them separately verifiable: after 1.2 the flag exists, is honoured, and has nothing to say.
 
-- [ ] **1.1 `log` is a workspace dependency and both crates take it.**
+- [x] **1.1 `log` is a workspace dependency and both crates take it.**
       `log = { version = "0.4", features = ["std"] }` in the root
       `Cargo.toml`'s `[workspace.dependencies]` — the feature because the shape 1.2 installs needs it:
       `set_boxed_logger` and `impl Error for SetLoggerError` are both behind `std` and `log` enables no

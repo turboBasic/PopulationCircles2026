@@ -13,6 +13,8 @@ workspace = true
 
 [dependencies]
 bytemuck.workspace = true
+# ADR 0004 decision 1: the library emits diagnostics through the facade and never to a stream.
+log.workspace = true
 memmap2.workspace = true
 serde.workspace = true
 # A normal dependency from ADR 0003 decision 4 on: the cache header is JSON, so the library writes and

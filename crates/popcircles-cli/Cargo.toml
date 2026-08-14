@@ -14,6 +14,9 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+# Both ends of ADR 0004: this crate emits its own records and implements the `log::Log` that consumes
+# every crate's.
+log.workspace = true
 popcircles = { path = "../popcircles" }
 serde_json.workspace = true
 
