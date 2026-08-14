@@ -441,4 +441,219 @@ mod tests {
         // And a radius nobody probed is still absent after a reopen.
         assert_eq!(reopened.get(1570), None);
     }
+
+    /// The document as text, so a test can plant exactly the disagreement it means.
+    fn write_document(ledger: &Ledger, document: &Document) {
+        fs::write(ledger.path(), serde_json::to_vec(document).unwrap()).unwrap();
+    }
+
+    fn document_of(identity: &Identity, radii: Vec<Probe>) -> Document {
+        let mut document = Document::new(identity);
+        document.radii = radii;
+        document
+    }
+
+    fn reopen(ledger: &Ledger, identity: &Identity) -> Result<Ledger, LedgerError> {
+        Ledger::open_or_empty(ledger.path(), identity)
+    }
+
+    #[test]
+    fn a_format_version_from_another_release_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.format_version = FORMAT_VERSION + 1;
+        // The digest goes too, and the refusal still names the version: a document of another version is
+        // not one whose other fields this build knows how to compare.
+        document.digest ^= 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::FormatVersion { expected, found })
+                if expected == FORMAT_VERSION && found == FORMAT_VERSION + 1
+        ));
+    }
+
+    #[test]
+    fn a_digest_from_other_cells_is_refused() {
+        // Issue #7's own requirement, and it reuses ADR 0003's mechanism rather than inventing a second
+        // notion of which raster a file belongs to.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.digest ^= 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Digest { expected, found })
+                if expected == DIGEST && found == DIGEST ^ 1
+        ));
+    }
+
+    #[test]
+    fn a_width_that_is_not_the_tables_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.width += 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Width {
+                expected: 4,
+                found: 5
+            })
+        ));
+    }
+
+    #[test]
+    fn a_height_that_is_not_the_tables_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.height += 1;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Height {
+                expected: 3,
+                found: 4
+            })
+        ));
+    }
+
+    #[test]
+    fn a_decimation_factor_that_is_not_the_tables_is_refused() {
+        // The dimensions agree and the digest agrees — a decimated table carries the source's digest, by
+        // ADR 0003 decision 3 — so this is the only field that can tell the two tables apart.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let mut document = document_of(&identity, Vec::new());
+        document.decimation = 2;
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::DecimationFactor {
+                expected: 1,
+                found: 2
+            })
+        ));
+    }
+
+    #[test]
+    fn a_document_that_is_not_json_is_refused() {
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+        fs::write(ledger.path(), b"{\"format_version\": ").unwrap();
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::Syntax { .. })
+        ));
+    }
+
+    #[test]
+    fn a_centre_that_is_not_a_cell_of_the_grid_is_refused() {
+        // The one thing a row can be wrong about that the header cannot catch: the dimensions agree, so a
+        // row naming column 9 of a four-column table is a file this build must refuse rather than resume
+        // from — and refuse at open, not at whichever query first looked.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let document = document_of(
+            &identity,
+            vec![Probe {
+                km: 500,
+                population: 12.0,
+                row: 1,
+                col: 9,
+            }],
+        );
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::CentreOffGrid {
+                row: 1,
+                col: 9,
+                width: 4,
+                height: 3
+            })
+        ));
+    }
+
+    #[test]
+    fn the_same_radius_recorded_twice_is_refused() {
+        // A radius has one maximum. Two rows for it are two answers to the same question, and a reader
+        // that took the last would resume from whichever the writer happened to append second.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let document = document_of(
+            &identity,
+            vec![
+                Probe {
+                    km: 500,
+                    population: 12.0,
+                    row: 1,
+                    col: 2,
+                },
+                Probe {
+                    km: 500,
+                    population: 13.0,
+                    row: 1,
+                    col: 2,
+                },
+            ],
+        );
+        write_document(&ledger, &document);
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::DuplicateRadius {
+                km: 500,
+                first,
+                second
+            }) if first == 12.0 && second == 13.0
+        ));
+    }
+
+    #[test]
+    fn an_interrupted_publication_leaves_the_document_before_it_and_no_orphan() {
+        // The rename's whole point, from the other side: a temporary a crashed run left behind is neither
+        // read nor accumulated, and the document a reader finds is the last one a `put` finished.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(8, 6);
+        let mut ledger = ledger_in(&directory, &identity);
+        fill(&mut ledger, &identity);
+        let published = fs::read(ledger.path()).unwrap();
+
+        let orphan = ledger.temporary.clone();
+        fs::write(&orphan, b"a document a crashed run was part way through").unwrap();
+        assert_eq!(fs::read(ledger.path()).unwrap(), published);
+        assert_eq!(reopen(&ledger, &identity).unwrap().len(), 3);
+
+        // And the next put names it back rather than leaving it there.
+        ledger.put(2000, candidate(&identity, 3, 4, 900.0)).unwrap();
+        assert!(!orphan.exists());
+        assert_eq!(reopen(&ledger, &identity).unwrap().len(), 4);
+    }
 }
