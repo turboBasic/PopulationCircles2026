@@ -13,10 +13,12 @@ use popcircles::kernel::{Kernel, KernelError};
 use popcircles::progress::Progress;
 use popcircles::raster::{PixelType, RasterError, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
-    CircleReport, DistanceReport, Envelope, GridSummary, MostPopulousReport, Provenance,
-    TableBuildReport, TableQueryReport,
+    CircleReport, DistanceReport, Envelope, GridSummary, LedgerReport, MostPopulousReport,
+    Provenance, SmallestDocument, SmallestReport, TableBuildReport, TableQueryReport,
 };
 use popcircles::search::{self, SearchError};
+use popcircles::smallest::cache::{Ledger, LedgerError};
+use popcircles::smallest::{self, Share, SmallestError};
 use popcircles::table::cache::{Cache, CacheError, Identity, Mapped};
 use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build};
 
@@ -74,6 +76,31 @@ enum Command {
         #[command(flatten)]
         search: SearchArgs,
     },
+    /// The smallest circle whose population reaches a share of the table's own total.
+    SmallestForShare {
+        #[command(flatten)]
+        cached: CachedTableArgs,
+        /// The share to reach, in whole percent. A hundred is everyone the table holds.
+        #[arg(long, value_parser = parse_share)]
+        share: Share,
+        #[command(flatten)]
+        search: SearchArgs,
+        #[command(flatten)]
+        ledger: LedgerArgs,
+    },
+}
+
+/// Where the radii a run settles are kept, so an interrupted run resumes instead of paying for them
+/// twice.
+///
+/// On by default and with no way to turn it off: a ledger describing another table is refused rather than
+/// resumed from, so there is nothing an opt-out would protect against.
+#[derive(Args, Debug, Clone)]
+struct LedgerArgs {
+    /// The JSON document every probe's maximum is recorded in. Under `out/` beside the cache, which is
+    /// gitignored.
+    #[arg(long, default_value = "out/radii.json")]
+    ledger: PathBuf,
 }
 
 /// What the branch and bound needs beyond the circle it is looking for.
@@ -278,6 +305,14 @@ impl Failure {
         Self::new(exit_code_for_search_error(error), &error)
     }
 
+    fn ledger(error: &LedgerError) -> Self {
+        Self::new(exit_code_for_ledger_error(error), error)
+    }
+
+    fn smallest(error: &SmallestError<LedgerError>) -> Self {
+        Self::new(exit_code_for_smallest_error(error), error)
+    }
+
     /// The whole source chain, because a `thiserror` message is one link and the sentence naming the
     /// file or the syscall is usually the one beneath it.
     fn new(code: u8, error: &dyn std::error::Error) -> Self {
@@ -329,6 +364,12 @@ fn run(command: Command) -> Result<String, Failure> {
             radius_km,
             search,
         } => most_populous(&cached, radius_km, search),
+        Command::SmallestForShare {
+            cached,
+            share,
+            search,
+            ledger,
+        } => smallest_for_share(&cached, share, search, &ledger),
     }
 }
 
@@ -369,20 +410,8 @@ fn build_table(
     };
     let source = GeoTiffSource::open(raster, &spec).map_err(|error| Failure::raster(&error))?;
 
-    // Resolving where the cache goes, and making room for it, is the shell's work — the library is
-    // handed a path and never asked where one should be.
     let cache = Cache::new(&table.cache);
-    if let Some(parent) = table.cache.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|error| Failure {
-            code: EXIT_FAILURE,
-            message: format!(
-                "the cache directory {} could not be made: {error}",
-                parent.display()
-            ),
-        })?;
-    }
+    make_room_for(&table.cache)?;
 
     let mut writer = cache.writer().map_err(|error| Failure::cache(&error))?;
     let mut progress = StderrProgress::new();
@@ -520,6 +549,35 @@ fn most_populous(
     )))
 }
 
+fn smallest_for_share(
+    cached: &CachedTableArgs,
+    share: Share,
+    search: SearchArgs,
+    ledger: &LedgerArgs,
+) -> Result<String, Failure> {
+    let cached = CachedTable::open(cached)?;
+    let view = cached.table()?;
+
+    // Against the same identity the table was opened with, so a ledger of some other table is refused
+    // rather than resumed from — which is what makes an opt-out unnecessary.
+    make_room_for(&ledger.ledger)?;
+    let mut ledger = Ledger::open_or_empty(&ledger.ledger, &cached.identity)
+        .map_err(|error| Failure::ledger(&error))?;
+
+    let mut progress = StderrProgress::new();
+    let found = smallest::smallest(&view, share, search.spacing, &mut ledger, &mut progress)
+        .map_err(|error| Failure::smallest(&error))?;
+    progress.finish();
+
+    serialised(serde_json::to_string(&Envelope::with_provenance(
+        SmallestDocument::new(
+            LedgerReport::new(ledger.path(), ledger.len()),
+            SmallestReport::new(&found, &cached.grid),
+        ),
+        cached.provenance(),
+    )))
+}
+
 fn query_table(cached: &CachedTableArgs, window: Option<Window>) -> Result<String, Failure> {
     let cached = CachedTable::open(cached)?;
     let view = cached.table()?;
@@ -563,6 +621,27 @@ fn parse_digest(value: &str) -> Result<u64, String> {
     let digits = value.strip_prefix("0x").unwrap_or(value);
     u64::from_str_radix(digits, 16)
         .map_err(|error| format!("`{value}` is not a 64-bit hexadecimal digest: {error}"))
+}
+
+/// Makes the directory a file this crate is about to write will live in.
+///
+/// Resolving where a generated file goes, and making room for it, is the shell's work — the library is
+/// handed a path and never asked where one should be. Both the cache and the ledger want it, which is why
+/// it is a function rather than a step inside either.
+fn make_room_for(file: &Path) -> Result<(), Failure> {
+    let Some(parent) = file
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    else {
+        return Ok(());
+    };
+    fs::create_dir_all(parent).map_err(|error| Failure {
+        code: EXIT_FAILURE,
+        message: format!(
+            "the directory {} could not be made: {error}",
+            parent.display()
+        ),
+    })
 }
 
 /// A radius through [`RadiusKm::new`], so a negative or non-finite one is a usage error the parser
@@ -728,6 +807,47 @@ const fn exit_code_for_search_error(error: SearchError) -> u8 {
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
 // narrow exemption; docs/ai/code.md allows both in tests.
+/// A ledger's grounds split the way [`exit_code_for_cache_error`] splits a cache's, and for that reason: a
+/// document describing another table, or one this build reads a different version of, is answered by
+/// starting afresh, so it shares the class that names a rebuild. A document that is there and does not
+/// hold together — unreadable, not this JSON, or recording two maxima for one radius — is neither the
+/// caller's doing nor a rebuild away from being trusted.
+///
+/// Absent has no arm because it is not an error: [`Ledger::open_or_empty`] answers a first run with an
+/// empty one.
+fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
+    match error {
+        LedgerError::FormatVersion { .. }
+        | LedgerError::Digest { .. }
+        | LedgerError::Width { .. }
+        | LedgerError::Height { .. }
+        | LedgerError::DecimationFactor { .. } => EXIT_MISSING_DATA,
+
+        LedgerError::Read { .. }
+        | LedgerError::Write { .. }
+        | LedgerError::Syntax { .. }
+        | LedgerError::CentreOffGrid { .. }
+        | LedgerError::DuplicateRadius { .. } => EXIT_FAILURE,
+    }
+}
+
+/// Two arms onto the two layers beneath, so the search over radius invents no class of its own.
+fn exit_code_for_smallest_error(error: &SmallestError<LedgerError>) -> u8 {
+    match error {
+        SmallestError::Search(error) => exit_code_for_search_error(*error),
+        SmallestError::Ledger(error) => exit_code_for_ledger_error(error),
+    }
+}
+
+/// A share through [`Share::from_percent`], so the conversion from percent to fraction is the domain's and
+/// this crate divides nothing.
+fn parse_share(value: &str) -> Result<Share, String> {
+    let percent: u32 = value
+        .parse()
+        .map_err(|error| format!("`{value}` is not a whole percent: {error}"))?;
+    Share::from_percent(percent).map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -931,6 +1051,59 @@ mod tests {
             exit_code_for_search_error(SearchError::Kernel(KernelError::ColumnsDoNotClose {
                 lon_span: 90.0
             })),
+            EXIT_BAD_INPUT
+        );
+    }
+
+    #[test]
+    fn a_share_outside_a_proportion_is_refused_by_the_parser() {
+        // `Share::from_percent` holds the two grounds, so this crate performs no division and no range
+        // check of its own — and the message a caller sees is the domain's.
+        assert!(parse_share("0").is_err());
+        assert!(parse_share("101").is_err());
+        assert!(parse_share("-1").is_err());
+        assert!(parse_share("12.5").is_err());
+    }
+
+    #[test]
+    fn a_share_in_whole_percent_is_the_fraction_a_document_publishes() {
+        // Exactly, which is the whole reason the flag is percent rather than a fraction: no accumulated
+        // residue reaches a published share.
+        assert_eq!(parse_share("50").map(Share::get), Ok(0.5));
+        assert_eq!(parse_share("100").map(Share::get), Ok(1.0));
+        assert_eq!(parse_share("10").map(Share::get), Ok(0.1));
+    }
+
+    #[test]
+    fn a_stale_ledger_is_missing_data_and_a_broken_one_is_a_failure() {
+        // The split `exit_code_for_cache_error` makes, for its reason: a ledger of another table is
+        // answered by starting afresh, and one that does not hold together is not.
+        assert_eq!(
+            exit_code_for_ledger_error(&LedgerError::Digest {
+                expected: 1,
+                found: 2
+            }),
+            EXIT_MISSING_DATA
+        );
+        assert_eq!(
+            exit_code_for_ledger_error(&LedgerError::Syntax {
+                path: PathBuf::from("out/radii.json"),
+                source: serde_json::from_str::<u32>("nonsense").expect_err("that is not a number"),
+            }),
+            EXIT_FAILURE
+        );
+        // Through the search over radius, where a ledger's failure keeps its own class.
+        assert_eq!(
+            exit_code_for_smallest_error(&SmallestError::Ledger(LedgerError::DecimationFactor {
+                expected: 10,
+                found: 1
+            })),
+            EXIT_MISSING_DATA
+        );
+        assert_eq!(
+            exit_code_for_smallest_error(&SmallestError::Search(SearchError::Kernel(
+                KernelError::ColumnsDoNotClose { lon_span: 90.0 }
+            ))),
             EXIT_BAD_INPUT
         );
     }
