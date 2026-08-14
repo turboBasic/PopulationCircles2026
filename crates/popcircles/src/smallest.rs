@@ -9,7 +9,7 @@ use crate::geodesy::RadiusKm;
 use crate::grid::{Col, Grid, Row};
 use crate::kernel::Kernel;
 use crate::progress::Progress;
-use crate::search::{self, Candidate, SearchError};
+use crate::search::{self, Candidate, SearchError, SearchStats};
 use crate::table::Table;
 
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
@@ -153,6 +153,27 @@ pub enum SmallestError<E> {
     Ledger(#[source] E),
 }
 
+/// What a search over radius did beside answering, and the only window onto whether the ledger is working.
+///
+/// The two radius counters sum to the settled count, so a warm ledger shows up as the first falling and the
+/// second rising by the same amount rather than as a run that merely felt faster. `searched` is the sum
+/// over the probes that ran, which is what makes a reused radius visibly free: it contributes to none of
+/// those figures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SmallestStats {
+    pub radii_evaluated: u64,
+    pub radii_reused: u64,
+    pub searched: SearchStats,
+}
+
+impl SmallestStats {
+    /// Radii the run settled, however it settled them.
+    #[must_use]
+    pub const fn radii_settled(self) -> u64 {
+        self.radii_evaluated + self.radii_reused
+    }
+}
+
 /// The smallest circle found, and everything a caller needs to disagree with it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Smallest {
@@ -186,6 +207,7 @@ pub struct Smallest {
     /// The population slack the fixed-radius search at the answer's radius pruned with — zero, #6's
     /// choice, carried up so a caller reads one result rather than this crate's constants.
     pub tolerance_persons: f64,
+    pub stats: SmallestStats,
 }
 
 /// How far apart two circles' computed populations must be before the comparison between them is certain,
@@ -253,22 +275,36 @@ fn spans_whole_grid(grid: &Grid, centre: Row, radius: RadiusKm) -> Result<bool, 
     Ok(rows == grid.height())
 }
 
-/// The maximum at `km`, from the ledger when it holds one and from a search when it does not.
+/// The maximum at `km`, from the ledger when it holds one and from a search when it does not, with the
+/// tally of which it was.
+///
+/// The ledger is read before the search and never after it, which is the whole of what one buys, and
+/// [`SmallestStats`] is what says so from outside: a reused radius adds nothing to any of the search
+/// counters, because no search ran.
 fn probe<L: RadiusLedger>(
     table: &Table<'_>,
     km: u32,
     spacing: NonZeroU32,
     ledger: &mut L,
+    stats: &mut SmallestStats,
 ) -> Result<Candidate, SmallestError<L::Error>> {
-    // Before the search and never after it, which is the whole of what a ledger buys.
     if let Some(found) = ledger.get(km) {
+        stats.radii_reused += 1;
         return Ok(found);
     }
     // The inner search reports per level of its own refinement; two meters through one sink interleave
     // into noise, so this one is silent and the caller's sink hears about radii.
-    let found = search::most_populous(table, RadiusKm::from(km), spacing, &mut ())?.centre;
-    ledger.put(km, found).map_err(SmallestError::Ledger)?;
-    Ok(found)
+    let searched = search::most_populous(table, RadiusKm::from(km), spacing, &mut ())?;
+    ledger
+        .put(km, searched.centre)
+        .map_err(SmallestError::Ledger)?;
+    stats.radii_evaluated += 1;
+    stats.searched.levels += searched.stats.levels;
+    stats.searched.blocks_examined += searched.stats.blocks_examined;
+    stats.searched.blocks_pruned += searched.stats.blocks_pruned;
+    stats.searched.circles_evaluated += searched.stats.circles_evaluated;
+    stats.searched.kernels_built += searched.stats.kernels_built;
+    Ok(searched.centre)
 }
 
 /// The smallest circle whose population reaches `share` of the table's own total, by whole kilometres of
@@ -310,7 +346,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     let total = table.population(whole_rows, whole_cols);
     let target = Target::of(share, total);
 
-    let mut settled = 0u64;
+    let mut stats = SmallestStats::default();
     // The climb. `CEILING_KM - 1` is the cap because the ceiling itself is not a radius this searches.
     let cap = CEILING_KM - 1;
     let mut km = 1u32;
@@ -319,9 +355,9 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
     let mut reached: Option<(u32, Candidate)> = None;
 
     loop {
+        let settled = stats.radii_settled();
         progress.advance(settled, settled + u64::from(climb_probes_remaining(km)));
-        let found = probe(table, km, spacing, ledger)?;
-        settled += 1;
+        let found = probe(table, km, spacing, ledger, &mut stats)?;
 
         if found.population >= target.persons {
             reached = Some((km, found));
@@ -354,16 +390,17 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
             covers_whole_grid: true,
             predicate_slack_persons: predicate_slack_persons(&grid, total),
             tolerance_persons: 0.0,
+            stats,
         });
     };
 
     // The bisection. Every radius under `low` has been ruled out by a probe that fell short, and `high`
     // reaches, so the invariant holds at entry and the loop keeps it.
     while low < high {
+        let settled = stats.radii_settled();
         progress.advance(settled, settled + u64::from(halvings(high - low)));
         let mid = low + (high - low) / 2;
-        let found = probe(table, mid, spacing, ledger)?;
-        settled += 1;
+        let found = probe(table, mid, spacing, ledger, &mut stats)?;
 
         if found.population >= target.persons {
             high = mid;
@@ -374,7 +411,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         }
     }
 
-    progress.advance(settled, settled);
+    progress.advance(stats.radii_settled(), stats.radii_settled());
     Ok(Smallest {
         radius_km: high,
         radius: RadiusKm::from(high),
@@ -387,6 +424,7 @@ pub fn smallest<L: RadiusLedger, P: Progress>(
         covers_whole_grid: spans_whole_grid(&grid, best.row, RadiusKm::from(high))?,
         predicate_slack_persons: predicate_slack_persons(&grid, total),
         tolerance_persons: 0.0,
+        stats,
     })
 }
 
@@ -434,6 +472,44 @@ mod tests {
         }
 
         fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            self.entries.insert(km, found);
+            Ok(())
+        }
+    }
+
+    /// The interruption, in the one shape a test can hold still: a ledger that records `stop_after` probes
+    /// and then fails. What survives in `entries` is what a killed process would have left behind.
+    #[derive(Debug)]
+    struct FailsAfter {
+        entries: BTreeMap<u32, Candidate>,
+        stop_after: usize,
+    }
+
+    impl FailsAfter {
+        fn new(stop_after: usize) -> Self {
+            Self {
+                entries: BTreeMap::new(),
+                stop_after,
+            }
+        }
+    }
+
+    /// A ledger that has stopped recording, which is what the search refuses to continue past.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+    #[error("the ledger stopped recording")]
+    struct Stopped;
+
+    impl RadiusLedger for FailsAfter {
+        type Error = Stopped;
+
+        fn get(&self, km: u32) -> Option<Candidate> {
+            self.entries.get(&km).copied()
+        }
+
+        fn put(&mut self, km: u32, found: Candidate) -> Result<(), Self::Error> {
+            if self.entries.len() >= self.stop_after {
+                return Err(Stopped);
+            }
             self.entries.insert(km, found);
             Ok(())
         }
@@ -664,6 +740,89 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_warm_ledger_is_read_and_no_radius_is_searched_twice() {
+        // The reuse claim in the only terms that can fail: the counts. A second run over the ledger the
+        // first one filled searches nothing at all, settles the same radii, and lands on the same answer
+        // bit for bit — so the ledger is being read before the search rather than beside it.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let mut ledger = Recorded::default();
+        let cold = smallest(&table, share(0.25), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+        assert_eq!(cold.stats.radii_reused, 0);
+        assert!(cold.stats.radii_evaluated > 1);
+        assert_eq!(cold.stats.radii_evaluated, ledger.entries.len() as u64);
+
+        let warm = smallest(&table, share(0.25), spacing(4), &mut ledger, &mut ())
+            .expect("a whole-globe fixture and a map cannot fail");
+        assert_eq!(warm.stats.radii_evaluated, 0);
+        assert_eq!(warm.stats.radii_reused, cold.stats.radii_settled());
+        // Nothing searched means none of the search's own work happened, which is the half of the claim a
+        // radius counter alone would not carry.
+        assert_eq!(warm.stats.searched, SearchStats::default());
+        assert_eq!(warm.radius_km, cold.radius_km);
+        assert_eq!(
+            warm.centre.population.to_bits(),
+            cold.centre.population.to_bits()
+        );
+        assert_eq!(warm.short_below, cold.short_below);
+    }
+
+    #[test]
+    fn an_interrupted_run_resumes_and_answers_what_an_uninterrupted_one_does() {
+        // Issue #7's second box at the seam, before a file is involved. The run stops on the ledger's
+        // third put; the entries it kept are what a killed process would have left behind; and a fresh run
+        // reading them reaches the same answer, reusing exactly those three and searching exactly the rest.
+        let grid = grid();
+        let payload = payload_over(&grid, distinct(&grid));
+        let table = Table::new(grid, &payload).expect("the build emits the padded product");
+
+        let uninterrupted = found(&table, 0.25, 4);
+
+        let mut interrupted = FailsAfter::new(3);
+        assert_eq!(
+            smallest(&table, share(0.25), spacing(4), &mut interrupted, &mut ()),
+            Err(SmallestError::Ledger(Stopped))
+        );
+        assert_eq!(interrupted.entries.len(), 3);
+
+        // The next process reads the file the last one left and records over it, which is why the resumed
+        // ledger is an ordinary one seeded with those entries rather than the failing one reused.
+        let mut resumed_ledger = Recorded {
+            entries: interrupted.entries,
+        };
+        let resumed = smallest(
+            &table,
+            share(0.25),
+            spacing(4),
+            &mut resumed_ledger,
+            &mut (),
+        )
+        .expect("a whole-globe fixture and a map cannot fail");
+
+        assert_eq!(resumed.stats.radii_reused, 3);
+        assert_eq!(
+            resumed.stats.radii_evaluated,
+            uninterrupted.stats.radii_settled() - 3
+        );
+        assert_eq!(
+            resumed.stats.radii_settled(),
+            uninterrupted.stats.radii_settled()
+        );
+        // The answer, down to the bits: an interruption costs time and nothing else.
+        assert_eq!(resumed.radius_km, uninterrupted.radius_km);
+        assert_eq!(
+            resumed.centre.population.to_bits(),
+            uninterrupted.centre.population.to_bits()
+        );
+        assert_eq!(resumed.centre.row, uninterrupted.centre.row);
+        assert_eq!(resumed.centre.col, uninterrupted.centre.col);
+        assert_eq!(resumed.short_below, uninterrupted.short_below);
     }
 
     #[test]
