@@ -142,7 +142,7 @@ fixture can check is a commit whose whole content is the check.
       from a sanitised raster, so the arm exists to be stated rather than relied on, and a test is where it
       is stated.
 
-- [ ] **1.2 `Ambiguity` exists, and `Smallest` carries it accumulated over the radii the search probed.**
+- [x] **1.2 `Ambiguity` exists, and `Smallest` carries it accumulated over the radii the search probed.**
       A `pub struct Ambiguity` in `smallest.rs` beside `Smallest`, deriving
       `Debug, Clone, Copy, PartialEq, Eq` — `Copy` and `PartialEq` because `Smallest` derives them and this
       becomes one of its fields, `Eq` because all three fields are integers. Three `pub` fields:
