@@ -76,3 +76,7 @@ executor act on this without asking the author what was meant?
 - **The sections are platform.md's, not yours to vary.** Adding one, renaming one, or copying a
   filled-in template into this file are all the same defect: a second owner for a fact that already
   has one.
+- **A close-out task ticks the issue's checkboxes; it does not close the issue.** Tick `- [ ]` items
+  in the issue body and the roadmap box; leave the close itself to the PR's `Closes #N`, per
+  platform.md "Git" — closing it here is exactly the ambiguity that let #2 get closed by hand hours
+  before the PR carrying its work existed.

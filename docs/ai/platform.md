@@ -152,6 +152,10 @@ moment. The failure to avoid is not a wrong answer but a quiet third convention.
   gate, and describing it as one would promise something nobody is holding. Never resolve a divergence
   by merging `main` in.
 - Never commit a secret, a generated artefact, or a raster.
+- An issue this work closes is closed by the PR that carries it — a `Closes #N` (or `Fixes`/
+  `Resolves`) line in the PR body, merged into the default branch — not by a direct close run before
+  the PR exists. GitHub links and closes an issue against its state at merge time, so closing it by
+  hand first leaves nothing for the PR to attach to.
 
 ## CI
 
