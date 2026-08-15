@@ -52,6 +52,7 @@ ulps
 Valeriepieris
 
 # --- Geospatial tooling and standards ---
+AEQD
 Carree
 EPSG
 GDAL

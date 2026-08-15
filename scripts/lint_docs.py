@@ -22,8 +22,8 @@ def top_level_roots() -> frozenset[str]:
 
 # The scope of the housekeeping sweep's "Duplication" check (.claude/skills/housekeeping/SKILL.md):
 # the instruction layer, .claude/skills/, the two documents in .github/, and the human layer.
-# docs/decisions/ is a valid *target* for a pointer but is never itself scanned: it is frozen once
-# accepted or complete, so a pointer it contains cannot be fixed to satisfy this lint.
+# docs/decisions/ is a valid *target* for a pointer but is never itself scanned: a record is frozen
+# once accepted, so a pointer it contains cannot be fixed to satisfy this lint.
 def scope_files() -> list[Path]:
     fixed = [
         REPO_ROOT / "CLAUDE.md",
@@ -255,13 +255,7 @@ def check_adr_refs(source: Path, lineno: int, line: str) -> list[Finding]:
     findings: list[Finding] = []
     for m in _ADR_RE.finditer(line):
         number = m.group(1)
-        # Exclude the ADR's own sibling plan file — e.g. 0001-cli-and-output-layer.plan.md would
-        # otherwise also match "0001-*.md" alongside the ADR itself.
-        matches = sorted(
-            p
-            for p in (REPO_ROOT / "docs" / "decisions").glob(f"{number}-*.md")
-            if not p.name.endswith(".plan.md")
-        )
+        matches = sorted((REPO_ROOT / "docs" / "decisions").glob(f"{number}-*.md"))
         if len(matches) != 1:
             findings.append(Finding(source, lineno, f"ADR {number} names no single record"))
             continue

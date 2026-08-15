@@ -1,5 +1,5 @@
 // The decoder side of the seam: `tiff`, a path, and the tag validation. Everything above it in
-// `raster.rs` stays free of both, which is what makes ADR 0002's fallback condition affordable.
+// `raster.rs` stays free of both, which is what makes ADR 0003's fallback condition affordable.
 
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
@@ -74,7 +74,7 @@ impl<R: Read + Seek> GeoTiffSource<R> {
         }
         reader.rewind().map_err(RasterError::Io)?;
 
-        // The default Limits stand, per ADR 0002: the registry raster's 86 KB strip offsets and 173 KB
+        // The default Limits stand, per ADR 0003: the registry raster's 86 KB strip offsets and 173 KB
         // strips sit far inside them, so unlimited would only widen what a malformed header can ask for.
         let mut decoder = decoded(Decoder::new(reader))?;
 
@@ -225,7 +225,7 @@ fn buffer_kind(result: &DecodingResult) -> &'static str {
 }
 
 /// Every `tiff` failure becomes the one opaque variant, converted here at the boundary rather than
-/// carried into the shared enum: a `#[from]` there would make ADR 0002's decoder swap a breaking
+/// carried into the shared enum: a `#[from]` there would make ADR 0003's decoder swap a breaking
 /// change to vocabulary the rest of the search has already matched on.
 fn decoded<T>(result: tiff::TiffResult<T>) -> Result<T, RasterError> {
     result.map_err(|error| RasterError::Decode(Box::new(error)))

@@ -1,4 +1,4 @@
-// The search over the shape the decimated table has — 2160 x 4320, the k=10 grid of ADR 0003 — built
+// The search over the shape the decimated table has — 2160 x 4320, the k=10 grid — built
 // synthetically rather than decimated from anything, because `platform.md` "Testing" forbids a test that
 // needs raster bytes to pass.
 //
@@ -19,7 +19,7 @@ use popcircles::raster::Synthetic;
 use popcircles::search::{Candidate, most_populous};
 use popcircles::table::{Decimation, Table, build};
 
-/// ADR 0003's decimated grid: a tenth of the registry raster's resolution in each direction.
+/// The decimated grid: a tenth of the registry raster's resolution in each direction.
 const WIDTH: u32 = 4320;
 const HEIGHT: u32 = 2160;
 

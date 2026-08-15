@@ -1,5 +1,5 @@
 // The I/O half of the search over radius: one JSON document holding what every probe found, so an
-// interrupted run resumes instead of paying for its radii twice. ADR 0003 decision 1's split, at a tenth of
+// interrupted run resumes instead of paying for its radii twice. The same split as the table's, at a tenth of
 // the size — `smallest.rs` stays a computation whose tests need no filesystem, and every path, every
 // `serde` derive and every write in this work is here.
 //
@@ -26,7 +26,7 @@ use crate::table::cache::{Attestation, Identity, Mismatch};
 /// a build reading a later document would accept it and resume from radii it has half understood. That is
 /// `FU-06`'s reasoning for the table's header, and a ledger is the same kind of file.
 ///
-/// Its own constant and not the table's, per ADR 0007 decision 2: the two documents share an attestation
+/// Its own constant and not the table's: the two documents share an attestation
 /// and are separately versioned, which is what the `version-bumps` hook asks for both of when the shared
 /// shape moves.
 pub const FORMAT_VERSION: u32 = 2;
@@ -103,7 +103,7 @@ struct Probe {
 /// parsed at all.
 ///
 /// The table header's probe and this one are separate structs over the same property — serde ignoring keys
-/// a struct does not name — because a test of one says nothing about the other. ADR 0007 decision 4.
+/// a struct does not name — because a test of one says nothing about the other.
 #[derive(Debug, Clone, Copy, Deserialize)]
 struct DocumentVersion {
     format_version: u32,
@@ -197,7 +197,7 @@ impl Ledger {
             }
         };
 
-        // The version out of the document before the document, per ADR 0007 decision 4: a ledger of
+        // The version out of the document before the document: a ledger of
         // another version is not required to parse into this build's `Document`, so without this probe a
         // bumped format reports as "not the JSON document this format is" and the constant is decoration.
         let probed: DocumentVersion =
@@ -263,7 +263,7 @@ impl Ledger {
 
     /// Writes the whole document to a temporary, syncs it, and renames it into place.
     ///
-    /// ADR 0003 decision 5's publication, and the reason is the same: a rename replaces a directory entry
+    /// ADR 0005's publication by rename, and the reason is the same: a rename replaces a directory entry
     /// rather than an inode, so a reader either sees the document that was there before or the one this
     /// call finished, never the half-written middle. The temporary's name is deterministic, so an
     /// interrupted run leaves at most one and the next `put` names it back rather than accumulating.
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn a_digest_from_other_cells_is_refused() {
-        // Issue #7's own requirement, and it reuses ADR 0003's mechanism rather than inventing a second
+        // Issue #7's own requirement, and it reuses the table cache's mechanism rather than inventing a second
         // notion of which raster a file belongs to.
         let directory = TempDir::new().unwrap();
         let identity = identity(4, 3);
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn a_decimation_factor_that_is_not_the_tables_is_refused() {
         // The dimensions agree and the digest agrees — a decimated table carries the source's digest, by
-        // ADR 0003 decision 3 — so this is the only field that can tell the two tables apart.
+        // ADR 0005 — so this is the only field that can tell the two tables apart.
         let directory = TempDir::new().unwrap();
         let identity = identity(4, 3);
         let ledger = ledger_in(&directory, &identity);
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn a_ledger_filled_over_another_grid_is_refused() {
-        // The consequence ADR 0007 puts above a wrong sum: before this the dimensions matched, so every
+        // The consequence ADR 0005 puts above a wrong sum: before this the dimensions matched, so every
         // probe's row and column minted cleanly onto the new grid, `CentreOffGrid` never fired, and the
         // resumed run published a centre whose population was measured half a turn away.
         let directory = TempDir::new().unwrap();
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn a_v1_document_is_refused_for_its_version_and_not_for_its_syntax() {
         // The document verbatim, because no struct in this build spells the shape that is on disk from
-        // before ADR 0007. Parsed into the widened `Document` it fails with `missing field origin_lat`,
+        // before the geometry joined the key. Parsed into the widened `Document` it fails with `missing field origin_lat`,
         // which is `Syntax` and never reaches a version comparison.
         let directory = TempDir::new().unwrap();
         let identity = identity(4, 3);

@@ -1,4 +1,4 @@
-// ADR 0003 decision 2's tolerance, at the shape it was measured at: 21600 x 43200 cells, against an
+// The table build's tolerance, at the shape it was measured at: 21600 x 43200 cells, against an
 // exact reference in i128 units of 2^-40. Neither table is ever held — the reference streams beside the
 // build one padded row at a time, and the rectangles are taken between a handful of rows kept as they
 // went past. expect and unwrap are what a test documents an invariant with; docs/ai/code.md allows both
@@ -240,7 +240,7 @@ fn the_full_resolution_table_stays_inside_decision_2s_tolerance() {
         }
     }
 
-    // The unit both figures are in, and the same one decision 2's measurements are in: one ulp at the
+    // The unit both figures are in, and the same one the build's measurements are in: one ulp at the
     // table's own magnitude. Not the ulp of each result — a rectangle is a difference of four corners
     // each of the table's magnitude, so a narrow rectangle carries the corners' rounding rather than
     // its own, and holding it to the ulp of its smaller answer would be a claim about cancellation
@@ -249,8 +249,8 @@ fn the_full_resolution_table_stays_inside_decision_2s_tolerance() {
     let cell_ulps = reference.worst_cell_units as f64 / unit;
     let query_ulps = worst_query_units as f64 / unit;
 
-    // Decision 2's two numbers, and assertions about the construction rather than about f64. ADR 0003
-    // measured the uncompensated separable form at 1.2e-4 at this shape, 126 ulp; drop the error term
+    // The two numbers, and assertions about the construction rather than about f64. The
+    // uncompensated separable form measured 1.2e-4 at this shape, 126 ulp; drop the error term
     // from `two_sum` and this test reports 105.5 ulp per cell, so it fails by two orders of magnitude
     // the moment the correction stops being applied. Compensated it measures 0.5 and 1.25. The query
     // budget is four rather than one because four corners are subtracted, each already rounded.

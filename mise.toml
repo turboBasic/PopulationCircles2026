@@ -133,7 +133,7 @@ run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 # is what stands in for `unsafe_code = "forbid"`, so a branch pushed from a clone where `prek install`
 # never ran has to meet it too.
 [tasks."lint:unsafe"]
-description = "Check the one #[allow(unsafe_code)] is where ADR 0003 put it"
+description = "Check the one #[allow(unsafe_code)] is where ADR 0006 put it"
 run = "prek run --all-files single-unsafe-allow"
 
 # Puts the prek hook in CI; see `lint:lfs` for why.

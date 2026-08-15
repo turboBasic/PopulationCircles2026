@@ -294,7 +294,7 @@ pub struct MostPopulous {
     ///
     /// Zero: refinement runs to single-cell blocks, the prune is strict and [`slack_km`]'s bound is
     /// inflated outward, so nothing here trades accuracy for time. What separates this figure from the
-    /// true one is the table's own arithmetic — ADR 0003's 4 ulp per rectangle query, about 4e-6 persons
+    /// true one is the table's own arithmetic — 4 ulp per rectangle query, about 4e-6 persons
     /// at a world total — which is the floor beneath this field rather than something it reports.
     ///
     /// A field rather than a constant because issue #6 asks the *result* to report it, and #7 reads

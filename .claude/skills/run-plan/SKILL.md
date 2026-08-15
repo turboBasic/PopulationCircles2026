@@ -18,9 +18,8 @@ issue checkbox the closing task reaches.
 ## Steps
 
 1. **Locate the plan.** Resolve the number, slug or bare description the user gave against the
-   `*.plan.md` files under `tmp/`; if more than one matches, ask rather than guessing. A `*.plan.md`
-   in `docs/decisions/` is one of the eight from the earlier convention — all complete, all frozen —
-   and is never executed even when the user names it directly.
+   `*.plan.md` files under `tmp/`; if more than one matches, ask rather than guessing. A plan outside
+   `tmp/` is not a plan this skill runs — the only home a plan file has is that directory.
 2. **Read the status line first.** A plan marked complete is frozen and is never executed — say so
    and stop.
 3. **Settle the scope before the first task, never during.** The default is the phase holding the

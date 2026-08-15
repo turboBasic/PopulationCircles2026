@@ -1,5 +1,5 @@
 // The I/O half of the summation table: the header, the payload and the publication that ties the two.
-// ADR 0003 decision 1 keeps every path and every serde derive here, which is what leaves `table.rs` a
+// Every path and every serde derive is kept here, which is what leaves `table.rs` a
 // computation its tests reach without a filesystem — the split `raster.rs` and `raster/geotiff.rs`
 // already have.
 use std::fmt;
@@ -32,7 +32,7 @@ pub enum ByteOrder {
 }
 
 impl ByteOrder {
-    /// The order every payload is written in, and the only one [`Cache::read`] accepts. Decision 4:
+    /// The order every payload is written in, and the only one [`Cache::read`] accepts.
     /// `bytemuck` casts natively and swaps nothing, so a payload from a host of the other order is
     /// rebuilt rather than reinterpreted, and a format declaring one order while casting in another
     /// would be silently wrong on half the hosts there are.
@@ -108,8 +108,8 @@ pub enum CacheError {
         found: ByteOrder,
     },
 
-    // The wrapper names the document and the ground says what differed, which is ADR 0007 decision 2's
-    // cost: the four per-ground variants this replaces each named the header in their own message, and a
+    // The wrapper names the document and the ground says what differed, which is the shared
+    // attestation's cost: the four per-ground variants this replaces each named the header in their own message, and a
     // ground shared with the ledger cannot. A caller telling a digest miss from a moved grid matches one
     // level deeper rather than losing the distinction.
     #[error("the cache header does not describe the table wanted: {0}")]
@@ -154,7 +154,7 @@ impl From<&BuiltTable> for Identity {
 /// Which of the grounds a document and an [`Identity`] disagree on.
 ///
 /// The messages name what was wanted and what was found and no document, because both a cache header and
-/// a radius ledger wrap this and each names itself: ADR 0007 decision 2 puts the noun in the wrapper so a
+/// a radius ledger wrap this and each names itself: the noun goes in the wrapper so a
 /// ground is added in one place rather than phrased twice.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum Mismatch {
@@ -186,7 +186,7 @@ pub enum Mismatch {
 /// What a document claims the table beside it is: the cells it was built from, how coarsely they were
 /// folded, and the whole grid it resolves coordinates against.
 ///
-/// ADR 0007 decision 2's one type, serialised into both the cache header and the radius ledger with
+/// One type, serialised into both the cache header and the radius ledger with
 /// `#[serde(flatten)]`, so the comparison and its tolerance exist once. The grid recorded is the table's
 /// own and not the source's: given the factor the source's is determined, and the coarser one is what a
 /// query resolves against.
@@ -222,8 +222,8 @@ impl Attestation {
     /// The digest, the dimensions and the factor exactly; the four geometry numbers within
     /// `BOUNDARY_TOLERANCE_DEG`, longitude through [`wrap_lon`].
     ///
-    /// A tolerance rather than the bit equality a JSON round trip would in fact give, per ADR 0007
-    /// decision 3: the raster reader compares a file's geotransform against a declared grid by exactly
+    /// A tolerance rather than the bit equality a JSON round trip would in fact give, and for the
+    /// raster reader's reason: it compares a file's geotransform against a declared grid by exactly
     /// this rule, so an exact comparison here would refuse a cache built over a raster that reader had
     /// accepted.
     ///
@@ -291,7 +291,7 @@ impl Attestation {
 /// The one field a header of any version carries, so the version can be compared before the rest of the
 /// document is parsed at all.
 ///
-/// ADR 0007 decision 4, and it rests on a default rather than a declaration: serde ignores keys a struct
+/// This rests on a default rather than a declaration: serde ignores keys a struct
 /// does not name, which is what lets this read a header of a shape this build has never seen. A
 /// `deny_unknown_fields` here would therefore refuse every real header, and
 /// `the_version_is_read_out_of_a_document_carrying_more` is the test that says so.
@@ -344,7 +344,7 @@ impl Header {
 
 /// The two files a cache is, at one location.
 ///
-/// A header and a payload rather than one self-describing file, per decision 4: a header of any size
+/// A header and a payload rather than one self-describing file: a header of any size
 /// that is not a page multiple leaves the payload unaligned in a mapping, and a JSON sidecar is
 /// something a person debugging a stale cache can read with `cat`.
 #[derive(Debug, Clone)]
@@ -459,7 +459,7 @@ impl Cache {
                 }
             }
         })?;
-        // The version out of the document before the document, per ADR 0007 decision 4: a header of
+        // The version out of the document before the document: a header of
         // another version is not required to parse into this build's `Header`, so without this probe a
         // bumped format reports as "not the JSON document this format is" and the constant is decoration.
         let probed: HeaderVersion =
@@ -537,7 +537,7 @@ impl Writer<'_> {
 
     /// Publishes the payload, then the header.
     ///
-    /// That order is decision 5's ground, not tidiness: no file is written into in place, so a rename
+    /// That order is ADR 0005's ground, not tidiness: no file is written into in place, so a rename
     /// replaces a directory entry rather than an inode, and a mapping already established keeps the
     /// bytes it mapped while a fresh build publishes over the same path.
     ///
@@ -1125,7 +1125,7 @@ mod tests {
 
     #[test]
     fn a_v1_header_is_refused_for_its_version_and_not_for_its_syntax() {
-        // The document verbatim, because that is the whole of what is on disk from before ADR 0007 and
+        // The document verbatim, because that is the whole of what is on disk from before the geometry joined the key and
         // no struct in this build can spell it. Parsed into the widened `Header` it fails with
         // `missing field origin_lat` — `HeaderSyntax`, raised before any version is looked at — which is
         // the failure the probe exists to prevent and the one issue #45 forbids.
@@ -1167,7 +1167,7 @@ mod tests {
 
     #[test]
     fn a_grid_the_table_was_not_built_over_is_refused() {
-        // The reachable case, and the one nothing caught before ADR 0007: same width, same height, same
+        // The reachable case, and the one nothing caught before the geometry joined the key: same width, same height, same
         // steps, same factor and the digest the build itself reported — with every column half a turn
         // from where the table's are.
         let directory = TempDir::new().unwrap();

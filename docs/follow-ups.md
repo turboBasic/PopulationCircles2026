@@ -108,11 +108,11 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-04 - Diagnostics have no facade
 
-- **Status** — `closed` (2026-08-14): [ADR 0004](decisions/0004-diagnostics-through-log.md) is the record
-  the Fix below demanded, and its [plan](decisions/0004-diagnostics-through-log.plan.md) is the
-  implementation. Two departures from that Fix as written, both on measurements in that record's Context:
-  `log` on the emitting side rather than `tracing`, and a hand-written `log::Log` in the CLI rather than
-  `tracing-subscriber`. The cost table below is left as it was measured — ADR 0004 carries its correction.
+- **Status** — `closed` (2026-08-14): the library emits through the `log` facade and the CLI is its own
+  subscriber, which discharges the Fix below in the cheaper of the two shapes it weighed. Two departures
+  from that Fix as written, both on the measurements beneath it: `log` on the emitting side rather than
+  `tracing`, and a hand-written `log::Log` in the CLI rather than `tracing-subscriber`. The cost table is
+  left as it was measured.
 - **Condition** — either signal that ad-hoc printing has outgrown itself. `rg -n 'print!|println!|eprintln!' crates/popcircles/src`
   matches anything: the library is printing, which is an `application.md` "Architecture" violation
   before it is a logging question. Or the CLI grows the flag shape that hand-rolls level filtering out of
@@ -121,11 +121,11 @@ Identifiers are flat, sequential and never reused.
   `rg -n "^\s*(verbose|quiet)\s*:|--verbose|--quiet|short = '[vq]'" crates/popcircles-cli/src`. The two
   letters are spelled out rather than matching `short =` at large, because a condition firing on any short
   alias the CLI ever grows would ban a mechanism instead of a flag. Progress reporting is **not** this
-  condition — ADR 0001 decision 4 routes progress through a sink the caller supplies, and a sink is not
-  a log.
-- **Fix** — a record **extending** ADR 0001's `tracing` clause rather than a fresh decision. That clause
-  is a live ruling, and `write-adr` requires a record reopening a settled question to say which of the
-  two it does. Then `tracing` on the emitting side and `tracing-subscriber` with `json` and `env-filter`
+  condition — `application.md` "Architecture" routes progress through a sink the caller supplies, and a
+  sink is not a log.
+- **Fix** — a record settling how diagnostics leave the library, since the facade is a project-wide
+  dependency choice rather than something a PR changes in passing. Then `tracing` on the emitting side
+  and `tracing-subscriber` with `json` and `env-filter`
   on the consuming side, which is what makes it the analogue of structured logging in Python: fields on
   events, and spans carrying context down a nesting the search already has — per radius, per latitude
   band, per candidate.
@@ -140,8 +140,8 @@ Identifiers are flat, sequential and never reused.
   | `log` + `env_logger` in a binary | 25 |
   | `tracing` + `tracing-subscriber` with `json`, `env-filter` | 41 |
 
-  Forty-one is nearly triple the trimmed clap tree ADR 0001 accepted, and the 13 lands on the library
-  whose dependency surface that record fought to hold at serde. So the cheaper shape has to be ruled out
+  Forty-one is nearly triple the trimmed clap tree the CLI accepted, and the 13 lands on the library
+  whose dependency surface is held at serde. So the cheaper shape has to be ruled out
   rather than skipped: `log` in the library, bridged into the binary's subscriber by `tracing-log`, costs
   one crate and buys no spans. If the nesting turns out shallow, that is the better answer and the record
   should say so.
@@ -254,10 +254,10 @@ Identifiers are flat, sequential and never reused.
   sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
   `smallest.rs` are outside it for the same reason.
   `crates/popcircles/tests/registry_validation.rs` joins that exclusion (2026-08-15). It picks 256, on the
-  plateau ADR 0009 measured, and it is a deselected fixture for the same reason the two above are.
+  plateau issue #10's sweep measured, and it is a deselected fixture for the same reason the two above are.
 
   **The curve this entry was waiting for exists, and it corrects the Condition's own arithmetic**
-  (2026-08-15, [ADR 0009](decisions/0009-validation-brackets-cheap-and-certifies-dear.md)). Swept over the
+  (2026-08-15, issue #10's spacing sweep). Swept over the
   5 arcmin table at 200, 800, 3 300 and 8 000 km, the wall clock falls **monotonically** with spacing in
   every row and flattens from about 256 — a sixteenth of the grid's width — rather than peaking at a knee.
   The pruning *fraction* falls with it, from 97.3% at spacing 8 to 77.2% at 256, so the figure the Condition
@@ -280,8 +280,9 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-09 - The predicate slack is reported and nothing acts on it
 
-- **Status** — `closed` (2026-08-14): [ADR 0005](decisions/0005-ambiguous-minimality-is-reported.md) is the
-  record and [its plan](decisions/0005-ambiguous-minimality-is-reported.plan.md) the implementation. Closed
+- **Status** — `closed` (2026-08-14):
+  [ADR 0007](decisions/0007-a-result-states-what-it-could-not-separate.md) is the record and the PR
+  carrying it the implementation. Closed
   with one departure from the Fix as written, measured rather than preferred — see the note beneath it. The
   condition keeps standing and stays checkable: the field is still published, and now something acts on it.
 - **Condition** — a surface publishes `predicate_slack_persons` while the search still answers an ambiguous
@@ -311,8 +312,8 @@ Identifiers are flat, sequential and never reused.
   radii sit inside the slack, spanning 14 960 to 16 384 km, where the pair this Fix names is 2 km wide. So
   the field is accumulated over every radius the search probed rather than derived from the final pair, and
   it is published as a floor on the ambiguity — the climb doubles, so the radii between two probes were
-  never measured and the true interval runs past both ends. ADR 0005's Context holds the measurement and
-  decision 2 the reason it is not read back from the ledger.
+  never measured and the true interval runs past both ends. ADR 0007's Context holds the measurement; that
+  the span is accumulated over the visit rather than read back from the ledger is the PR's.
 
 ### FU-10 - Nothing checks rustdoc
 
@@ -348,8 +349,9 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-11 - The cache binds no grid geometry
 
-- **Status** — `closed` (2026-08-15): [ADR 0007](decisions/0007-cache-identity-binds-the-whole-grid.md) is
-  the record the Fix below asks for, and its plan carried it into the tree. Both documents now embed one
+- **Status** — `closed` (2026-08-15):
+  [ADR 0005](decisions/0005-derived-artefacts-are-keyed-and-refused.md) is the record the Fix below asks
+  for, and issue #45 carried it into the tree. Both documents now embed one
   flattened attestation over the digest, the dimensions, the factor and the whole geometry, at
   `FORMAT_VERSION = 2` each. One departure from the Fix as written and one addition to it, plus a correction
   to the Condition's own illustration — all three in the note beneath the Fix.
@@ -364,8 +366,8 @@ Identifiers are flat, sequential and never reused.
   a flag the caller copies across. #8's documents publish the **declared** grid beside the **attested**
   digest and say which is which, which makes the gap visible rather than closed.
 - **Fix** — grid geometry in the header and in `Identity`, so opening a cache compares the whole geometry
-  rather than three of its numbers. It **takes a record**: ADR 0003 decision 3 ruled what sits in the header
-  as against inside the digest, and this reopens that ruling. It also bumps `FORMAT_VERSION` and invalidates
+  rather than three of its numbers. It **takes a record**: what sits in the header as against inside the
+  digest was a settled ruling, and this reopens it. It also bumps `FORMAT_VERSION` and invalidates
   every existing cache, which is a cost the record has to weigh rather than something a fix decides in
   passing — at full resolution a rebuild is the raster read again. The entry names the record it needs and
   stops there deliberately: prescribing the change here would settle in a register what `docs/decisions/`
@@ -383,8 +385,8 @@ Identifiers are flat, sequential and never reused.
   the `version-bumps` hook gained what it could not express — a watched block whose shape governs two
   constants.
 
-  **The Condition's illustration does not reproduce, and the count is four rather than six.** ADR 0007's
-  Context measures it: a grid 21600 rows deep at 1/120° spans exactly 180°, which pins its origin latitude
+  **The Condition's illustration does not reproduce, and the count is four rather than six.** Issue #45
+  measures it: a grid 21600 rows deep at 1/120° spans exactly 180°, which pins its origin latitude
   to the pole within the boundary tolerance, so `--origin-lat 0` is refused by `Grid::new` before any cache
   is opened. Six is the count of `GridArgs`' flags; the header bound two of them and four went unchecked.
   What was reachable was the origin's longitude, freely, and each step downward — and the reachable case is
@@ -394,17 +396,18 @@ Identifiers are flat, sequential and never reused.
 
 - **Status** — `closed` (2026-08-15): not by the Fix, which is declined rather than pending, but by
   `mise run release:smoke` putting the evidence it would have produced one command from anyone about to cut
-  a tag. The Condition below still reads true and is meant to — the gap stands, and ADR 0006 holds it. What
-  closed the entry is that nothing here is anyone's to discharge.
+  a tag. The Condition below still reads true and is meant to — the gap stands, and was taken knowingly when
+  the release shape was settled. What closed the entry is that nothing here is anyone's to discharge.
 - **Condition** — a release job builds a macOS artifact while no gate ever compiles for that target. Two
   greps: `rg -n 'macos' .github/workflows/release.yml` matching, and `rg -n 'runs-on|macos'
   .github/workflows/ci.yml` naming `ubuntu-latest` and nothing else. So the first time this code is compiled
-  for `aarch64-apple-darwin` is on a pushed tag, including the `unsafe` mmap site ADR 0003 decision 5
-  reviewed and the `#[allow(unsafe_code)]` the `single-unsafe-allow` hook guards. A macOS-only break
-  therefore surfaces when the tag already exists, which is the half of ADR 0006's cost that CONTRIBUTING's
+  for `aarch64-apple-darwin` is on a pushed tag, including the `unsafe` mmap site
+  [ADR 0006](decisions/0006-one-gated-unsafe.md) reviewed and the `#[allow(unsafe_code)]` the
+  `single-unsafe-allow` hook guards. A macOS-only break
+  therefore surfaces when the tag already exists, which is the half of the release's cost that CONTRIBUTING's
   Releasing section has to give a recovery for rather than prevent.
-- **Fix** — `macos-latest` in `ci.yml`'s job as a matrix beside `ubuntu-latest`. ADR 0006 weighed this and
-  did not take it: the cost is a second runner on every pull request rather than on every tag. The
+- **Fix** — `macos-latest` in `ci.yml`'s job as a matrix beside `ubuntu-latest`. It was weighed when the
+  release shape was settled and not taken: the cost is a second runner on every pull request rather than on every tag. The
   repository owner's ruling (2026-08-15) declines it rather than deferring it, so a later reader proposing
   `macos-latest` is reopening a decision rather than discharging an obligation.
 
@@ -432,7 +435,7 @@ Identifiers are flat, sequential and never reused.
   runs. That is a documented workaround for a missing identity rather than a property of the tool, and the
   entry exists because such an instruction reads as normal once it has sat in a README for a while.
 - **Fix** — sign and notarize the macOS artifact in the publish job, which drops the README line rather
-  than explaining it better. ADR 0006 put it out of scope for a reason that is a prerequisite and not a
+  than explaining it better. It was put out of scope for a reason that is a prerequisite and not a
   preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
   anyone who does not hold the account. Until then the honest form is the documented attribute, which is
   why the entry's condition is about a release existing rather than about the README's wording.
@@ -444,21 +447,21 @@ Identifiers are flat, sequential and never reused.
 - **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
   three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
   resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
-  what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — ADR 0007
-  decision 3 compares the geometry within it while the dimensions compare exactly — so a cell small enough
-  to land in that gap makes a stale cache indistinguishable from the right one, which is the failure that
-  record exists to catch.
+  what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — a cache
+  compares the geometry within it while the dimensions compare exactly — so a cell small enough
+  to land in that gap makes a stale cache indistinguishable from the right one, which is the failure
+  [ADR 0005](decisions/0005-derived-artefacts-are-keyed-and-refused.md) exists to catch.
 - **Fix** — a record, not a smaller number chosen in passing. The constant is shared with the raster reader
   by design (`grid.rs` says why a second copy would be two answers to one question), so tightening it for
   the cache alone reintroduces exactly what that comment forbids, and tightening it for both changes what
   rasters the reader accepts. What a record has to weigh is that 1e-9° is scaled to a measured rounding in
   the registry raster's own geotransform, and a dataset fine enough to fire this would bring a measurement
-  of its own to scale it to. ADR 0007's alternatives already rule out the two shortcuts: exact bit equality
+  of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
 
 ### FU-15 - cartopy is built from source because no cp314 wheel exists
 
-- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day ADR 0008 was written.
+- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day the renderer landed.
   `uv pip install --only-binary :all: --python-version 3.14 cartopy` answers "all versions of cartopy have
   no usable wheels", and a cold `uv sync --locked --reinstall-package cartopy` prints
   `Building cartopy==0.25.0` and takes 25.55 s here.
@@ -470,8 +473,8 @@ Identifiers are flat, sequential and never reused.
 - **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
   The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
   outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
-  tell whether removing it costs 25 seconds a job or nothing at all. ADR 0008's Consequences carry the
-  same figure, so the entry firing is what licenses removing the step rather than guessing at it.
+  tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
+  that figure, so the entry firing is what licenses removing the step rather than guessing at it.
 
 ### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
 
@@ -492,8 +495,7 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-17 - The full-resolution search is page faults, not arithmetic
 
-- **Status** — `dormant` (2026-08-15): measured in
-  [ADR 0009](decisions/0009-validation-brackets-cheap-and-certifies-dear.md), and dormant rather than due
+- **Status** — `dormant` (2026-08-15): measured under issue #10, and dormant rather than due
   because nothing in the tree asks for the runs that make it hurt. One radius at 30 arcsec is 207 s of which
   **13.4 s is CPU**, with `iostat` reporting ~7 000 transfers a second against the 7.5 GB payload. Every
   answer this repository has published came from a decimated table or from three certifying radii, and both
@@ -509,16 +511,16 @@ Identifiers are flat, sequential and never reused.
   says is that locality is the cost: `circle::population` walks a kernel's rows for one centre, and
   consecutive table rows are 345 KB apart, so one evaluation touches ~111 MB of scattered pages and the next
   centre re-walks the same stride one column over. Inverting that loop — one row band, every candidate column
-  in it, before moving on — reuses each page across a whole level instead of once, and is the change ADR 0009
-  says nobody could have justified without this figure. It is not free: it changes the order the fold adds
+  in it, before moving on — reuses each page across a whole level instead of once, and is a change nobody
+  could have justified without this figure. It is not free: it changes the order the fold adds
   in, which `search`'s determinism tests pin and `application.md` "Determinism" makes a stated rule, so a
   record has to weigh a changed answer's bits against the wall clock. Prefetching or `madvise` are the
   cheaper half-measures a record should rule on beside it, and neither touches the order.
 
 ### FU-18 - Diagnostics are line-oriented and nothing consumes them as data
 
-- **Status** — `dormant` (2026-08-15): every diagnostic this repository emits is read by a person.
-  [ADR 0004](decisions/0004-diagnostics-through-log.md) put them behind a facade so the library emits
+- **Status** — `dormant` (2026-08-15): every diagnostic this repository emits is read by a person. The `log`
+  facade puts them behind a seam where the library emits
   records and the binary alone chooses a stream, a level and a format, which is what makes the line-oriented
   form a choice rather than an accident — and the right one while the reader is human.
 - **Condition** — something in the tree parses a diagnostic rather than displaying it: a mise task, a
@@ -529,24 +531,23 @@ Identifiers are flat, sequential and never reused.
 - **Fix** — decide, and record the decision rather than reach for `tracing` by reflex. The consumer may be
   better served by the JSON document on stdout, which is already versioned and already a contract, than by
   structure in a stream that is not; where it genuinely wants the diagnostic, structured fields on the few
-  emissions that have a consumer may be the whole of it. Replacing the facade supersedes ADR 0004, reaches
-  every emission site, and changes what a person watching a run sees — weighable, but not to be paid for a
+  emissions that have a consumer may be the whole of it. Replacing the facade reaches
+  every emission site and changes what a person watching a run sees — weighable, but not to be paid for a
   consumer that does not exist. Issue #64 is the scheduled look at this question; this entry is what fires
   if that issue closes with "not yet".
 
 ### FU-19 - The record shape is machine-checkable and unchecked
 
-- **Status** — `dormant` (2026-08-15): [ADR 0011](decisions/0011-a-record-carries-one-ruling.md) caps a
+- **Status** — `dormant` (2026-08-15): [ADR 0001](decisions/0001-a-record-carries-one-ruling.md) caps a
   record at 80 lines, allows it one `scope:` from a closed list and forbids a numbered decision list, and
-  the housekeeping sweep is the only thing that looks. One record exists under those rules and it was
-  written by the same pass that wrote them, so nothing has yet had the chance to drift.
-- **Condition** — a record numbered 0011 or higher exceeds that record's 80-line ceiling, carries a
+  the housekeeping sweep is the only thing that looks. Every record in the directory was written to those
+  rules by the pass that adopted them, so nothing has yet had the chance to drift.
+- **Condition** — any record exceeds that 80-line ceiling, carries a
   `scope:` value absent from the closed list in the `write-adr` skill, or carries none at all.
-  `wc -l docs/decisions/*.md` read from 0011 down and `rg -n '^scope:' docs/decisions/` answer both halves,
+  `wc -l docs/decisions/*.md` and `rg -n '^scope:' docs/decisions/` answer both halves,
   and either answering wrong means the rules held for exactly as long as someone was watching.
 - **Fix** — a check in `scripts/lint_docs.py`, wired into `mise run lint:docs` the way the pointer and
-  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It reads the four-digit
-  prefix, skips anything below 0011 because records 0001 to 0010 predate the rules and are frozen against
-  being fixed to satisfy them, then asserts the line count and the `scope:` value. The numbered-list rule
+  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It asserts the line count
+  and the `scope:` value over every record, since none is exempt. The numbered-list rule
   is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
   guesses at the difference is worse than the sweep reading the file.

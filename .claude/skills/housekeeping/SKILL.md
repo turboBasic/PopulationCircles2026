@@ -44,11 +44,11 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    whose condition the repository *cannot* answer is, because it will read as dormant forever. Skip
    `closed` and `retired` entries — a retired entry's condition is unanswerable by construction,
    which is the whole of what retiring it recorded.
-6. **Record shape.** Records numbered 0011 and up, which are the ones ADR 0011 governs: each within the
+6. **Record shape.** Every record in `docs/decisions/`, which is what ADR 0001 governs: each within the
    80-line ceiling that record set, each carrying one `scope:` from the closed list in the `write-adr`
    skill, none carrying a numbered list of decisions. `wc -l` and `rg -n '^scope:' docs/decisions/` answer
-   the first two; the third is read. Records 0001 to 0010 are frozen and predate all three, so they are
-   skipped rather than reported. This check exists because nothing gates it — `FU-19`.
+   the first two; the third is read. No record is exempt. This check exists because nothing gates it —
+   `FU-19`.
 7. **Stale local allowlist.** `.claude/settings.local.json`, if it exists, grants permissions by path
    and command name. An entry naming a task, skill or file that no longer exists is a finding. Glob
    patterns covering a directory are not — they age fine.

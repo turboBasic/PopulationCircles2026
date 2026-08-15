@@ -3,7 +3,7 @@
 // `predicate_slack_persons` of `Table::whole`'s single query — the two answers to the same population,
 // one summed per row and one taken in four corners — at a magnitude where the sums actually round.
 //
-// The shape is ADR 0003's decimated grid, 4320 x 2160, with cells scaled so the total is a world's worth
+// The shape is the decimated grid, 4320 x 2160, with cells scaled so the total is a world's worth
 // of people. Not the full-resolution shape: a `Table` there is 7.5 GB of payload, and the bound scales
 // with the row count rather than jumping at some threshold, so measuring the formula at a tenth of the
 // rows measures the formula. `full_resolution_table.rs` covers the same arithmetic one layer down and

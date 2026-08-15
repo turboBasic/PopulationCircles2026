@@ -92,6 +92,6 @@ skill succeeding rather than refusing.
   question and no way to tell which governs.
 - **A decision this repository did not make is not a record.** Upstream conventions, a language's
   defaults and a tool's behaviour are cited, not ruled on.
-- **Records 0001 to 0010 were not written carelessly.** Every ruling in them was real and correctly
-  reasoned; what failed was that the trigger for writing was an issue rather than a question. Assume the
-  same pressure is on this draft.
+- **A record that fails the bar is rarely a careless one.** Its ruling is usually real and correctly
+  reasoned, and what failed was the trigger: an issue was worked rather than a question hit. Assume that
+  pressure is on this draft.

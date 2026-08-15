@@ -1,5 +1,5 @@
-// The computing half of the summation table. ADR 0003 decision 1 keeps the file, the header and
-// everything that serialises in `table/cache.rs`, so nothing here can be reached without a grid and a
+// The computing half of the summation table. The file, the header and
+// everything that serialises are kept in `table/cache.rs`, so nothing here can be reached without a grid and a
 // slice.
 
 pub mod cache;
@@ -102,8 +102,7 @@ pub struct Window {
 
 /// A summed-area table over a grid, borrowing its payload.
 ///
-/// The payload is padded to `(height + 1) x (width + 1)` with a zero first row and column — ADR 0003
-/// decision 4 — so element `(r, c)` holds the population of every cell strictly north of grid row `r`
+/// The payload is padded to `(height + 1) x (width + 1)` with a zero first row and column, so element `(r, c)` holds the population of every cell strictly north of grid row `r`
 /// and strictly west of grid column `c`, and a rectangle touching the north or west edge needs no
 /// branch of its own.
 ///
@@ -318,7 +317,7 @@ impl Decimation {
 /// What a build produced beside the rows it emitted, and everything a cache header needs of them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BuiltTable {
-    /// The identity of the cells this table was built from — ADR 0003 decision 3, and the only thing
+    /// The identity of the cells this table was built from — ADR 0005, and the only thing
     /// that says two tables are the same table. Of the source's cells, not the table's: a decimated
     /// table and a full one over the same raster carry the same digest and differ by the factor beside
     /// it, so a mismatch in either is reported as itself.
@@ -332,7 +331,7 @@ pub struct BuiltTable {
     pub decimation: Decimation,
 }
 
-// Decision 3's digest in full, because a digest whose word width or order is left to the
+// The digest in full, because one whose word width or order is left to the
 // implementation is a number that happens to match today rather than an identity: FNV-1a, 64-bit,
 // standard offset basis and prime, over each sanitised cell's `f32` bits widened to `u64`, in
 // row-major order.
@@ -388,7 +387,7 @@ where
     let mut digest = FNV_OFFSET_BASIS;
 
     // The boundary this step is, at the one granularity the library knows and a caller does not: the shape
-    // going in and the shape coming out. ADR 0004 — through the facade, so nothing here names a stream.
+    // going in and the shape coming out. Through the facade, so nothing here names a stream.
     log::info!(
         "streaming {} x {} cells into a {} x {} table",
         grid.width(),
@@ -446,7 +445,7 @@ where
 ///
 /// A decimated summation table **is** the full one's every k-th row and column, because the prefix sum
 /// over k by k blocks and the prefix sum over cells agree at every block corner. So decimation needs no
-/// block sum of its own, and the one thing decision 6 forbids — a block rounded before the table sees it
+/// block sum of its own, and the one thing forbidden — a block rounded before the table sees it
 /// — has nothing to round: every source cell is folded into the f64 accumulators exactly as it would be
 /// at full resolution, and the coarser table is what is read back out.
 fn decimated<'r>(acc: &'r [f64], coarse: &'r mut [f64], factor: usize) -> &'r [f64] {
@@ -743,7 +742,7 @@ mod tests {
         // 0x3f80_0000, the sentinel becomes 0.0 and so contributes 0x0000_0000, and 2.5 is
         // 0x4020_0000. Folding those three words into the offset basis with the FNV prime gives the
         // value below. A digest checked against whatever this build produces would pin nothing, which
-        // is the whole reason decision 3 spells the definition out.
+        // is the whole reason the definition is spelled out above.
         let grid = Grid::new(
             3,
             1,
@@ -848,7 +847,7 @@ mod tests {
     proptest! {
         /// Exactly, not within a tolerance: the cells are integers below 2^20, so every partial sum of
         /// them is exact in f64 and any difference here is the traversal — an index, the padding
-        /// offset, or a seam — rather than arithmetic. Decision 2's ulp budget is the other claim and
+        /// offset, or a seam — rather than arithmetic. The ulp budget is the other claim and
         /// is tested at full magnitude, where no direct sum exists to compare against.
         #[test]
         fn every_rectangle_matches_a_direct_sum(

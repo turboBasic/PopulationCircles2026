@@ -1,6 +1,6 @@
 /// Where a long-running step says how far it has got, supplied by whoever called it.
 ///
-/// ADR 0001 decision 4: the library reports to a sink it is given and never to a stream it chose, so
+/// The library reports to a sink it is given and never to a stream it chose, so
 /// nothing here names a destination. The one method is the whole surface a caller has to implement,
 /// which is what keeps a step's signature from asking for a reporting *facility*.
 ///

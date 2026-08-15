@@ -56,9 +56,9 @@ it. **The 60 km is explained rather than tuned away**, by four things and no def
   `earth_model`;
 - the answer is the best cell centre, not the best point — and at 30 arc-seconds that mesh is 926 m.
 
-[ADR 0009](docs/decisions/0009-validation-brackets-cheap-and-certifies-dear.md) holds the measurements,
-including what the search actually spends its time on: at full resolution it is **6.5% CPU** and the rest
-is page faults against a 7.5 GB table. `mise run test:validate` is the end-to-end run against the real
+What the search spends its time on was measured on the same run: at full resolution it is **6.5% CPU** and
+the rest is page faults against a 7.5 GB table, which `FU-17` in
+[`docs/follow-ups.md`](docs/follow-ups.md) holds. `mise run test:validate` is the end-to-end run against the real
 raster, and it skips with a message when the raster has not been fetched.
 
 ## Releases

@@ -5,9 +5,9 @@
 //
 // **Decimated to 5 arcmin rather than full resolution, and that is a cost decision with a measured
 // reason.** At full resolution one radius costs 207 s of which 13 s is CPU — the run is page faults
-// against a 7.5 GB mmap — and a search over radius probes two dozen of them. ADR 0009 decision 3 is
-// therefore that the cheap grid brackets and the expensive grid certifies: this test is the bracket, and
-// the full-resolution certification of the same answer is recorded in that ADR rather than run here.
+// against a 7.5 GB mmap — and a search over radius probes two dozen of them. So the cheap grid
+// brackets and the expensive grid certifies: this test is the bracket, and the full-resolution
+// certification of the same answer is recorded in issue #10 rather than run here.
 //
 // Skipped with a message rather than failed when the raster is an unfetched pointer, which is box 2 of
 // issue #10. A `#[test]` cannot skip at runtime, so the skip is an early return that says why — the
@@ -33,10 +33,10 @@ const HEIGHT: u32 = 21600;
 const NODATA: f32 = -3.402_823e38;
 const WORLD_TOTAL: f64 = 7_757_982_599.32;
 
-/// ADR 0003's decimated grid, and the shape `README.md`'s worked example uses.
+/// The decimated grid, and the shape `README.md`'s worked example uses.
 const DECIMATE: u32 = 10;
 
-/// The spacing the search tiles its first level into. Measured rather than chosen: ADR 0009's sweep found
+/// The spacing the search tiles its first level into. Measured rather than chosen: issue #10's sweep found
 /// the wall clock falls monotonically with spacing and flattens from about a sixteenth of the grid's
 /// width, so this is on the plateau. It changes how long the search takes and not what it answers, which
 /// is why a test may hold one at all — see `crates/popcircles-cli/src/main.rs`'s `SearchArgs`.
@@ -47,8 +47,8 @@ const SPACING: u32 = 256;
 /// A band rather than the figure, and a wide one: the assertion's job is that the whole path agrees with
 /// the published prior art on this dataset — Danny Quah's ~3300 km, and the Valeriepieris circle before
 /// it — not that a later change to the earth model or the fold reproduces this bit pattern. A regression
-/// that matters lands outside 40 km; one that does not lands inside it. ADR 0009 records the exact figure
-/// and where the remaining 60 km against 3300 comes from.
+/// that matters lands outside 40 km; one that does not lands inside it. `README.md`'s Validation section records
+/// the exact figure and where the remaining 60 km against 3300 comes from.
 const EXPECTED_RADIUS_KM: f64 = 3360.0;
 const RADIUS_BAND_KM: f64 = 40.0;
 

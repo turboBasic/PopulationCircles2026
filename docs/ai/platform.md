@@ -106,7 +106,7 @@ record's own shape is the `write-adr` skill's.
 
 **The trigger is a question, not a work package.** Working an issue forces dozens of choices at every
 level of impact, and recording them because an issue was worked is what
-[ADR 0011](../decisions/0011-a-record-carries-one-ruling.md) was written against. Most issues warrant
+[ADR 0001](../decisions/0001-a-record-carries-one-ruling.md) was written against. Most issues warrant
 no record; one may warrant two, having raised two independent questions; and a question raised in
 conversation with no issue behind it warrants one just the same.
 
@@ -152,16 +152,15 @@ frozen. The record cites inline the one number that decided it, and carries no t
   one line under its title are the only sanctioned edits.
 - A record records a decision **made**. A ruling that cannot carry a date is a proposal, and belongs in
   the issue thread or in conversation until it is settled.
-- **Records 0001 to 0010 predate this section and satisfy none of it.** They are frozen and stay as
-  written — not migrated, not re-scoped, not split. Read them for what was decided, never as the shape
-  a new record takes.
+- **Every record in the directory satisfies this section**, so any of them reads as the shape a new one
+  takes and none is exempt from the ceiling.
 
 ## Implementation plans
 
 **Work decomposition is GitHub issues**, one issue per deliverable, tracked from the roadmap issue that
 is its milestone's epic. That is the only durable home it has, and a committed task list anywhere in
 this tree — beside a record included — is the drift to avoid
-([ADR 0011](../decisions/0011-a-record-carries-one-ruling.md)).
+([ADR 0001](../decisions/0001-a-record-carries-one-ruling.md)).
 
 A **plan file** is the executable form of one issue's work: the same steps rewritten as tasks a skill
 can run, each with a verification that can fail. It is scratch — written under the gitignored `tmp/`,
@@ -183,9 +182,6 @@ either.
 - **Follow-ups** hold identifiers only: the obligations the work produced are entries in
   [`../follow-ups.md`](../follow-ups.md), which owns their format, statuses and the bar their
   conditions must meet.
-
-The eight `*.plan.md` files in `docs/decisions/` are all complete and frozen, and no new one joins
-them. They are read as history, never as the shape a plan takes.
 
 ## Issues
 
@@ -259,9 +255,8 @@ date derived from summing them is arithmetic on guesses.
   until then this repo's `ci.yml` is the prototype for it. Do not fork Python-specific shared
   workflows to fake Rust support.
 - A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
-  call rather than a condition on the event
-  ([ADR 0010](../decisions/0010-a-scenario-workflow-wraps-a-shared-build.md)). `ci.yml` is the stated
-  exception, because `main`'s ruleset matches its required checks by the names a call would prefix.
+  call rather than a condition on the event. `ci.yml` is the stated exception, because `main`'s ruleset
+  matches its required checks by the names a call would prefix.
 - A comment in a workflow explains the configuration beside it and nothing else. No ADR, issue or
   follow-up citation, no account of what the file used to be, and no sentence a reader has to unpack
   before it parses — `docs/decisions/` owns the reasoning, and a citation in a YAML file is a second
@@ -288,7 +283,7 @@ CLAUDE.md                        Claude entry point — imports only
 .github/workflows/               CI
 docs/ai-instructions.md          the router: invariants and layering
 docs/ai/                         the instruction layer, one file per subject
-docs/decisions/                  decision records, and the frozen plans of the earlier convention
+docs/decisions/                  decision records, one ruling and one page each
 docs/follow-ups.md               the register of pending obligations
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search
