@@ -90,13 +90,14 @@ enough to admit a wrong answer looks exactly like one that works.
   Verify: `mise run test:validate` passes on this machine with the raster fetched, and the same task on a
   clone with pointers prints the skip and exits 0; `mise run test` does not select it.
 
-- [ ] **2.3** `report.rs`'s module documentation gains the accuracy note, between the documents table and
+- [x] **2.3** `report.rs`'s module documentation gains the accuracy note, between the documents table and
   Growth. It composes rather than measures: 4 ulp per rectangle query, the predicate slack over the rows a
   circle spans, `tolerance_persons` of zero and what that zero asserts, the radius as a proved bracket in
   whole kilometres, and the centre as a cell centre rather than a point on the continuum. No second file
   states the composition.
-  Verify: `mise run lint:rustdoc` passes; `rg -n '4 ulp' crates/ docs/ai/` names `table.rs`, `search.rs`,
-  `smallest.rs` and `report.rs` and no fifth site inventing its own figure.
+  Verify: `mise run lint:rustdoc` passes; `rg -ln '4 ulp' crates/ docs/ai/` names `circle.rs`, `report.rs`,
+  `search.rs`, `smallest.rs` and `application.md`, every one of them citing ADR 0003 for the figure rather
+  than stating one of its own.
 
 ## Phase 3 — the documentation and the close
 
