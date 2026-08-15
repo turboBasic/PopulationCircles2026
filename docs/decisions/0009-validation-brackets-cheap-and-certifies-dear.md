@@ -64,10 +64,10 @@ this tree. `bench:circle` reports both, and its two figures bracket the search's
 
 | Table | ns per four-corner query | ms per circle |
 | --- | --- | --- |
-| resident, 5 arcmin, 200 km | 48.6 | 0.002 |
-| resident, 5 arcmin, 3 300 km | 16.5 | 0.011 |
-| mapped, 30 arcsec, 200 km | 136 487 | 55.2 |
-| mapped, 30 arcsec, 3 300 km | 100 062 | 646.7 |
+| resident, 5 arcmin, 200 km | 40–49 | 0.002 |
+| resident, 5 arcmin, 3 300 km | 14–17 | 0.010 |
+| mapped, 30 arcsec, 200 km | ~139 000 | 56 |
+| mapped, 30 arcsec, 3 300 km | ~97 000 | 626 |
 
 The resident figure agrees with the 18.6 ns borrowed from the scratch crate. The mapped one is **three times
 worse than the 31 µs the real search pays**, and the difference is the point rather than a discrepancy: this
@@ -111,11 +111,18 @@ grid's width and not its area, for a table 1 400 times larger than the process t
 
 | Shape | 200 km | 800 km | 3 300 km | 8 000 km |
 | --- | --- | --- | --- | --- |
-| 4320 × 2160 | 13.2 µs | 32.5 µs | 72.5 µs | 156.8 µs |
-| 43200 × 21600 | 55.0 µs | 194.3 µs | 667.2 µs | 1 275.4 µs |
+| 4320 × 2160 | 5.1 µs | 18.6 µs | 70 µs | 140 µs |
+| 43200 × 21600 | 46 µs | 189 µs | 669 µs | 1 282 µs |
 
 The rate is flat at 9 to 11 million kernel rows a second once a kernel spans enough rows to amortise its
 own setup, which is what says the per-row half width is the whole cost and nothing else in there scales.
+
+**Two significant figures, and the reason is decision 1's cost showing up immediately.** One `Instant`
+sample has no variance to report, and the first run of this benchmark on a machine still settling from a
+killed search read 13.2 µs in the top-left cell against the 5.1 µs three consecutive quiet runs then
+agreed on. The large-radius figures moved by a few percent across the same runs. So a cell here is worth
+its order of magnitude and its ratio to its neighbours, and a reader chasing a third digit is reading
+noise this harness cannot see.
 
 Against the search that motivates it: the full-resolution run at 3 360 km built 465 kernels, so it spent
 about **0.31 s of a 247 s run** — a tenth of a percent — computing every geodesic distance it used. Step 2
