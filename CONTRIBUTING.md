@@ -73,6 +73,16 @@ content: CI runs with LFS content absent.
 [ADR 0006](docs/decisions/0006-release-shape-and-format-promises.md) rules what a release is; this is
 the sequence for cutting one.
 
+```sh
+mise run release:smoke  # both build legs on demand, macOS included, publishing nothing
+```
+
+Run it before cutting a tag, and after bumping a pinned toolchain. Nothing else in this repository ever
+compiles for `aarch64-apple-darwin` — `ci.yml` is `ubuntu-latest` and, per ADR 0006, stays that way — so
+without it the first macOS compile of a tree is the tag you are trying to ship. It builds the branch as
+`origin` has it, takes about as long as a release, and leaves a run page and its two artifacts behind:
+no tag, no Release. It does not exercise the publish job, which only a tag reaches.
+
 1. Bump `version` in `[workspace.package]`, which is the only place it lives, and land it on `main` like
    any other change. Every report snapshot moves with it, because every document carries `tool_version`.
 2. Tag the merged commit `vX.Y.Z` for that same version and push the tag. The workflow's gate compares

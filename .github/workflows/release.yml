@@ -11,6 +11,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Issue #50: the same two build legs on demand, with no tag and nothing published, so the first macOS
+  # compile of a tree is not the tag someone is trying to ship. `FU-12` is why that gap exists — ADR 0006
+  # weighed `macos-latest` in ci.yml and declined it — and this trigger is the evidence it asks for rather
+  # than a step toward taking it. `mise run release:smoke` is the caller; the two jobs a tag needs and this
+  # one must not have are gated on the event below.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,6 +32,10 @@ jobs:
   # is built — ADR 0006 decision 1.
   gate:
     name: Gate
+    # A dispatch has no tag to compare against a manifest, and `mise run ci` is what every pull request
+    # already ran. Skipping it is what makes the smoke one macOS runner rather than two runners and a
+    # duplicate of CI.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -60,6 +70,9 @@ jobs:
   build:
     name: Build ${{ matrix.triple }}
     needs: gate
+    # A skipped `needs` skips its dependents, and an `if` naming no status function has `success()` folded
+    # into it — so both halves are load-bearing: without this the dispatch builds nothing at all.
+    if: ${{ !cancelled() && needs.gate.result != 'failure' }}
     runs-on: ${{ matrix.runner }}
     # Longer than the gate's because no gate has ever compiled this on macOS, so the release profile's
     # cost there — codegen-units = 1 and thin LTO — is unmeasured.
@@ -115,6 +128,9 @@ jobs:
   publish:
     name: Publish
     needs: build
+    # The whole of "a smoke leaves nothing behind": a dispatch has no tag, so `gh release create` would
+    # invent one. `scripts/release_smoke.py` checks this job did not run rather than trusting the guard.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

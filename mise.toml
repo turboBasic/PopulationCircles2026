@@ -277,6 +277,18 @@ run = "uv run pytest -m network"
 description = "Run everything CI runs, locally"
 depends = ["lint", "typecheck", "test"]
 
+# Issue #50. Not in `ci` and not on a condition a later change could satisfy: it dispatches a workflow
+# run and waits ten minutes on two runners, which is a thing a person asks for before a tag rather than
+# something every pull request pays. It builds origin's ref and not this tree, so the script refuses a
+# branch that is behind what is committed here.
+#
+# What it proves is compilation on `aarch64-apple-darwin`, the target `FU-12` records that no gate ever
+# compiles for. What it deliberately does not prove is the publish path: no tag exists, so the gate that
+# compares one against the manifest and the job that writes a Release are both skipped.
+[tasks."release:smoke"]
+description = "Compile both release legs on demand, macOS included, publishing nothing"
+run = "uv run python scripts/release_smoke.py"
+
 [tasks."data:pull"]
 description = "Fetch the Git LFS raster data that a normal clone deliberately skips"
 run = "git lfs pull --include='*.tif' --exclude=''"
