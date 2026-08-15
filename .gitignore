@@ -1,5 +1,8 @@
+# Everything cargo, ruff and pytest generate. mise.toml and pyproject.toml are what put it here,
+# rather than each tool's own directory at the repository root.
+/build/
+
 # Rust
-/target/
 **/*.rs.bk
 *.pdb
 # insta's pending snapshots, accepted into the .snap beside them or discarded
@@ -9,8 +12,6 @@
 .venv/
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ruff_cache/
 .pyright/
 
 # Generated data products: summation tables, rendered maps, profiling output

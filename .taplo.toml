@@ -1,7 +1,7 @@
 # Without an explicit include, taplo walks every .toml it can reach — including the
-# thousands under .venv and target.
+# thousands under .venv and build.
 include = ["*.toml", "crates/*/*.toml", ".github/**/*.toml"]
-exclude = [".venv/**", "target/**", "**/site-packages/**"]
+exclude = [".venv/**", "build/**", "**/site-packages/**"]
 
 [formatting]
 # Task and dependency lists stay one-per-line: collapsing them makes diffs noisier than

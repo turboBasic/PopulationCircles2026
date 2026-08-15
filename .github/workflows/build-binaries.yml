@@ -45,7 +45,7 @@ jobs:
           TRIPLE: ${{ matrix.triple }}
         run: |
           set -euo pipefail
-          cd target/release
+          cd build/target/release
           mv popcircles "popcircles-$TRIPLE"
           # sha256sum on the Linux runner, shasum on macOS, which ships no sha256sum.
           if command -v sha256sum > /dev/null 2>&1; then
@@ -58,7 +58,7 @@ jobs:
         with:
           name: popcircles-${{ matrix.triple }}
           path: |
-            target/release/popcircles-${{ matrix.triple }}
-            target/release/popcircles-${{ matrix.triple }}.sha256
+            build/target/release/popcircles-${{ matrix.triple }}
+            build/target/release/popcircles-${{ matrix.triple }}.sha256
           # A leg that built nothing must not reach publish as an empty upload.
           if-no-files-found: error

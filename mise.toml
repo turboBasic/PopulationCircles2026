@@ -14,6 +14,10 @@ node = "24.19.0"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
+# Everything cargo generates goes under one gitignored directory, so the repository root stays readable.
+# Absolute: cargo resolves a relative target dir against the working directory, and a task run from a
+# crate subdirectory would put a second tree there.
+CARGO_TARGET_DIR = "{{config_root}}/build/target"
 
 [tasks.setup]
 description = "Install dependencies and git hooks"
@@ -56,12 +60,12 @@ run = [
 description = "Run the popcircles CLI, optimised"
 run = "cargo run --release -p popcircles-cli --"
 
-# The file a release attaches, at `target/release/popcircles`. `--locked` is what ties that file to the
-# commit: the release job publishes what this task builds, and without the flag cargo may update
-# Cargo.lock while building it. The cost is that a manifest edit fails this task until the lock has
-# been updated. `cli` builds the binary incidentally; this task is asked for the file itself.
+# The file a release attaches, at `build/target/release/popcircles`. `--locked` is what ties that
+# file to the commit: the release job publishes what this task builds, and without the flag cargo may
+# update Cargo.lock while building it. The cost is that a manifest edit fails this task until the lock
+# has been updated. `cli` builds the binary incidentally; this task is asked for the file itself.
 [tasks.build]
-description = "Build the release binary from the committed lock, at target/release/popcircles"
+description = "Build the release binary from the committed lock, at build/target/release/popcircles"
 run = "cargo build --release --locked -p popcircles-cli"
 
 # Never in `lint` or `ci`, and no later change can put it there: `coastlines()` fetches Natural Earth
@@ -92,15 +96,15 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 #
 # Two invocations rather than one `--workspace`, and the second's `--target-dir` is why. The binary and
 # the library share the crate name `popcircles`, so `cargo doc --workspace` sends both to
-# `target/doc/popcircles/` (cargo#6313). The two runs document concurrently, and the second deletes the
-# directory the first is still writing into. Giving the CLI a directory of its own keeps both halves the
-# flags above are for: the library's rendered output, and the CLI's links checked too.
+# `build/target/doc/popcircles/` (cargo#6313). The two runs document concurrently, and the second
+# deletes the directory the first is still writing into. Giving the CLI a directory of its own keeps
+# both halves the flags above are for: the library's rendered output, and the CLI's links checked too.
 [tasks."lint:rustdoc"]
 description = "Lint rustdoc, broken intra-doc links are errors"
 env = { RUSTDOCFLAGS = "-D warnings" }
 run = [
   "cargo doc -p popcircles --no-deps --document-private-items",
-  "cargo doc -p popcircles-cli --no-deps --document-private-items --target-dir target/doc-cli",
+  'cargo doc -p popcircles-cli --no-deps --document-private-items --target-dir "$CARGO_TARGET_DIR/doc-cli"',
 ]
 
 [tasks."lint:python"]

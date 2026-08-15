@@ -17,7 +17,7 @@ mise run lint       # lint
 mise run typecheck  # type-check
 mise run test       # test
 mise run ci         # all of the above — what CI runs
-mise run build      # the release binary, at target/release/popcircles
+mise run build      # the release binary, at build/target/release/popcircles
 ```
 
 Deselected from `test` and `ci`, because each needs the raster, time, or both — `mise.toml`'s comment on
