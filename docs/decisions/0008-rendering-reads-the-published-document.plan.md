@@ -163,7 +163,7 @@ test is what stands between a seam artefact and a figure nobody checks.
   `Building cartopy`; `mise run lint:workflows` and `mise run lint:cspell` pass; `mise run lint` is
   green with no `noqa` added anywhere.
 
-- [ ] **2.2** `typings/cartopy/` declares the six symbols this renderer uses — `crs.PlateCarree`,
+- [x] **2.2** `typings/cartopy/` declares the six symbols this renderer uses — `crs.PlateCarree`,
   `crs.Orthographic`, `crs.AzimuthalEquidistant`, `crs.Globe`, `crs.Projection.project_geometry`
   and `mpl.geoaxes.GeoAxes` with the four methods called on it — and `[tool.pyright]` gains
   `stubPath = "typings"`. That is what turns the measured `reportMissingTypeStubs` into a checked

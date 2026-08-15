@@ -62,6 +62,7 @@ mbtiles
 naturalearth
 pmtiles
 pyogrio
+semiminor
 tiffinfo
 
 # --- Library and API identifiers ---
@@ -73,9 +74,12 @@ cartopy
 ccrs
 colortype
 corasick
+edgecolor
+facecolor
 flate
 geoaxes
 geoms
+gridlines
 indicatif
 insta
 keepends
@@ -93,6 +97,7 @@ splitmix
 thiserror
 weezl
 zerocopy
+zorder
 zune
 
 # --- Repository jargon ---
