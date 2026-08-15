@@ -16,12 +16,12 @@
       "config": { "MD041": false },
       "combine": "merge"
     },
-    // The write-adr skill's Consequences section is bold **Positive** / **Negative** labels, not
-    // headings — a template convention, not drift, and the only rule this trips across every
-    // accepted ADR and plan. docs/decisions/ is otherwise linted like anywhere else: a record is
-    // frozen once accepted or complete (docs/ai/platform.md "Architecture decisions" and
-    // "Implementation plans"), so this scopes the exception to what the template actually does
-    // rather than exempting the directory from every future rule too.
+    // Records 0001-0010 and the plans beside them write bold **Positive** / **Negative** labels
+    // where MD036 wants headings. A record is frozen once accepted and a plan once complete
+    // (docs/ai/platform.md "Architecture decisions" and "Implementation plans"), so none of them
+    // can be edited to satisfy this rule and the override has to stay. Records from 0011 on do not
+    // need it. docs/decisions/ is otherwise linted like anywhere else: this scopes the exception to
+    // the one rule those files trip rather than exempting the directory from every future rule too.
     {
       "filter": ["docs/decisions/**"],
       "config": { "MD036": false },

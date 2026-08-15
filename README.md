@@ -114,7 +114,7 @@ here expects.
 | `typings/` | Type stubs for libraries shipping no `py.typed`, so pyright stays strict |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
 | `docs/ai/` | Per-task conventions: [platform](docs/ai/platform.md), [code](docs/ai/code.md), [application](docs/ai/application.md) |
-| `docs/decisions/` | Architecture decision records and their implementation plans |
+| `docs/decisions/` | Architecture decision records — one ruling each, one page each |
 | `docs/follow-ups.md` | The register of pending obligations |
 
 Those documents are the conventions for humans as much as for AI tools. They are split across files so

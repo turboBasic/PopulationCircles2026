@@ -1,9 +1,9 @@
 # Follow-up register
 
-Every follow-up this repository has recorded, in one place. A plan's Follow-ups section names the
-identifiers it produced and points here; work with no plan of its own writes its entries here
-directly. This is a live document: entries change status as the repository moves under them, and an
-entry whose status is stale is worse than no entry at all.
+Every follow-up this repository has recorded, in one place, and the only committed one — a plan file is
+scratch, so its Follow-ups section names identifiers that must already exist here. This is a live
+document: entries change status as the repository moves under them, and an entry whose status is stale is
+worse than no entry at all.
 
 **Every entry states a condition the repository can answer.** A file, a command's output, a count, a
 hook's result — something a sweep can evaluate without asking the user what they have experienced.
@@ -533,3 +533,20 @@ Identifiers are flat, sequential and never reused.
   every emission site, and changes what a person watching a run sees — weighable, but not to be paid for a
   consumer that does not exist. Issue #64 is the scheduled look at this question; this entry is what fires
   if that issue closes with "not yet".
+
+### FU-19 - The record shape is machine-checkable and unchecked
+
+- **Status** — `dormant` (2026-08-15): [ADR 0011](decisions/0011-a-record-carries-one-ruling.md) caps a
+  record at 80 lines, allows it one `scope:` from a closed list and forbids a numbered decision list, and
+  the housekeeping sweep is the only thing that looks. One record exists under those rules and it was
+  written by the same pass that wrote them, so nothing has yet had the chance to drift.
+- **Condition** — a record numbered 0011 or higher exceeds that record's 80-line ceiling, carries a
+  `scope:` value absent from the closed list in the `write-adr` skill, or carries none at all.
+  `wc -l docs/decisions/*.md` read from 0011 down and `rg -n '^scope:' docs/decisions/` answer both halves,
+  and either answering wrong means the rules held for exactly as long as someone was watching.
+- **Fix** — a check in `scripts/lint_docs.py`, wired into `mise run lint:docs` the way the pointer and
+  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It reads the four-digit
+  prefix, skips anything below 0011 because records 0001 to 0010 predate the rules and are frozen against
+  being fixed to satisfy them, then asserts the line count and the `scope:` value. The numbered-list rule
+  is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
+  guesses at the difference is worse than the sweep reading the file.

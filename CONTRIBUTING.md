@@ -110,5 +110,6 @@ the split is so each subject can be corrected on its own, not so any of them is 
 before a first change. [`docs/decisions/`](docs/decisions/) says why a constraint exists, and
 [`docs/follow-ups.md`](docs/follow-ups.md) what is still owed; open those when you need them.
 
-A decision about how the repository is built is recorded as an ADR rather than argued again; the work
-that follows from one is its sibling plan file, while the algorithm roadmap stays in GitHub issues.
+A decision about how the repository is built is recorded as an ADR rather than argued again — but only
+where reversing it would cost more than a PR, and then on one page. Most choices are explained by the PR
+that makes them, and the work itself is decomposed in GitHub issues.
