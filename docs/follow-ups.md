@@ -376,3 +376,26 @@ Identifiers are flat, sequential and never reused.
   preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
   anyone who does not hold the account. Until then the honest form is the documented attribute, which is
   why the entry's condition is about a release existing rather than about the README's wording.
+
+### FU-14 - The binary and the library collide in rustdoc's output
+
+- **Status** — `due` (2026-08-15): met the moment `[[bin]] name = "popcircles"` landed under ADR 0006
+  decision 4.
+- **Condition** — the bin target and the library carry the same crate name, so `cargo doc --workspace`
+  writes both to `target/doc/popcircles/` and says so. The sweep is
+  `mise run lint:rustdoc 2>&1 | rg 'output filename collision'` matching **while the task exits 0**, which
+  is the same shape FU-10 was about: a warning nothing gates. What it costs was measured rather than
+  assumed. One target's rendered documentation overwrites the other's, and on this tree the library won —
+  `target/doc/popcircles/index.html` lists the library's modules and the binary's items are absent. What it
+  does **not** cost is the check FU-10 built the task for: an unresolvable intra-doc link added to
+  `main.rs` still fails `mise run lint:rustdoc` with `error: unresolved link`, because rustdoc runs over
+  both targets and only the output path collides. So this is lost rendered output, not a hole in a gate,
+  and the entry is `due` at that weight. It is cargo's own known bug, `cargo#6313`, which the warning
+  itself cites.
+- **Fix** — takes weighing rather than a patch, because each obvious move pays for the other. `doc = false`
+  on the `[[bin]]` clears it — measured here: the warning goes and the task stays green — but it drops the
+  CLI from rustdoc altogether, and the broken link above then passes unnoticed, which is the one thing
+  `--workspace` was added to catch. Renaming either crate reopens ADR 0006 decision 4, whose point is that
+  the artifact and the `tool` every document reports agree. Leaving it keeps both checks and loses one
+  rendered output. What would actually change is `lint:rustdoc`'s contract, and the comment above that task
+  in `mise.toml` is where such a change states its reasoning.

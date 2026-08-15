@@ -75,8 +75,10 @@ Six facts settled here rather than met mid-task:
   `tool_version` and nothing else, and a snapshot whose diff touches another line is a finding to report
   rather than accept.
   Verify: `cargo run -q -p popcircles-cli -- --version` prints `popcircles 0.1.0`;
-  `rg -n '^version' crates/*/Cargo.toml` returns nothing; `rg -c '"tool_version": "0.1.0"'
-  crates/popcircles/src/snapshots/*.snap` names ten files and `rg '0\.0\.0' crates/ docs/` returns nothing;
+  `rg -n '^version = ' crates/*/Cargo.toml` returns nothing — the literal, not `version.workspace`, which
+  this task requires; `rg -c '"tool_version": "0.1.0"' crates/popcircles/src/snapshots/*.snap` names ten
+  files and `rg '0\.0\.0' crates/` returns nothing, `crates/` alone because ADR 0006 quotes the old version
+  throughout as the state it measured and an accepted record is not edited to satisfy a grep;
   `cargo publish --dry-run -p popcircles` fails naming `publish = false` rather than a registry error.
 
 - [x] **1.2 The binary on disk is `popcircles`.** `[[bin]] name = "popcircles"` in the CLI crate, with
@@ -156,16 +158,19 @@ Six facts settled here rather than met mid-task:
   separates them; `mise run lint:markdown` and `mise run lint:cspell` clean.
 
 - [x] **3.3 The register carries what this plan deliberately left, #28's boxes are ticked, and this plan is
-  closed.** Two new entries in [`../follow-ups.md`](../follow-ups.md), each with a condition a sweep can
-  answer: `FU-12`, no gate compiles this for Apple silicon while a release job ships a macOS artifact; and
+  closed.** Three new entries in [`../follow-ups.md`](../follow-ups.md), each with a condition a sweep can
+  answer: `FU-12`, no gate compiles this for Apple silicon while a release job ships a macOS artifact;
   `FU-13`, a release exists while no artifact is signed, so a macOS user is told to clear an attribute by
-  hand. Tick the boxes of #28 that this plan discharged and leave the rest, without closing the issue — the
-  PR's `Closes #28` does that, per `platform.md` "Git". Then the status line above reads
-  `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section below holds the two identifiers.
-  Verify: `rg -n '^### FU-1[23]' docs/follow-ups.md` names both; `gh issue view 28` shows the build-task and
-  ADR boxes ticked and the issue still open; this file's status line reads complete and its Follow-ups
-  section names `FU-12` and `FU-13`.
+  hand; and `FU-14`, the bin target and the library share a crate name and so collide in rustdoc's output.
+  Two of the three were costs ADR 0006 weighed in advance. `FU-14` was not: it surfaced in 1.2, because the
+  rename that made the artifact agree with the `tool` every document reports also made `cargo doc` write two
+  targets to one path. Tick the boxes of #28 that this plan discharged and leave the rest, without closing
+  the issue — the PR's `Closes #28` does that, per `platform.md` "Git". Then the status line above reads
+  `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section below holds the three identifiers.
+  Verify: `rg -n '^### FU-1[234]' docs/follow-ups.md` names all three; `gh issue view 28` shows the
+  build-task and ADR boxes ticked and the issue still open; this file's status line reads complete and its
+  Follow-ups section names `FU-12`, `FU-13` and `FU-14`.
 
 ## Follow-ups
 
-Written by 3.3, in [`../follow-ups.md`](../follow-ups.md): `FU-12`, `FU-13`.
+Written by 3.3, in [`../follow-ups.md`](../follow-ups.md): `FU-12`, `FU-13`, `FU-14`.
