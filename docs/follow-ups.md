@@ -20,6 +20,11 @@ Prose that cannot meet that bar is not a follow-up and does not belong here.
 Closed and retired entries stay in the register, so a reader can tell "never fired" from "cannot
 fire".
 
+An entry that goes `due` gets an issue in the next milestone, and the Status names it. Where the Fix needs
+something nobody has — a paid identity, an account, hardware — it stays here and out of a milestone, and the
+Status says which of the two it is, so an obligation nobody can schedule is not read as one nobody has
+picked up. `FU-13` is the standing example of the second.
+
 ## Entry format
 
 An entry is a level-three heading, `FU-NN - <title>`, followed by three fields:
