@@ -18,6 +18,12 @@ indent_size = 4
 [*.{toml,yml,yaml,json,jsonc}]
 indent_size = 2
 
+# A committed dataset, so the layout is whatever its source serves: `data/README.md` records the
+# checksum against the tag it came from, and reformatting the file to this repository's taste is what
+# would make that checksum unverifiable. One line and no wrapping is what Natural Earth publishes.
+[*.geojson]
+max_line_length = off
+
 # insta generates these, so the layout is what it emits rather than what this file asks for. Trailing
 # whitespace included: clap pads help output with it, and a snapshot that disagrees with what it recorded
 # asserts nothing.

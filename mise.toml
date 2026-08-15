@@ -64,10 +64,10 @@ run = "cargo run --release -p popcircles-cli --"
 description = "Build the release binary from the committed lock, at build/target/release/popcircles"
 run = "cargo build --release --locked -p popcircles-cli"
 
-# Never in `lint` or `ci`, and no later change can put it there: `coastlines()` fetches Natural Earth
-# from naturalearth.s3.amazonaws.com on first use, and nothing in CI may reach the network.
-# `--no-coastlines` draws the cap without that fetch, which is the shape the unmarked tests assert on.
-# This task is the one a person runs to get a figure.
+# Not in `lint` or `ci`, and for a reason that no longer has anything to do with the network: the
+# basemap is committed, so a figure needs no download and the test suite draws complete ones. What
+# this task does is write a file and assert nothing about it, which is the same reason the benchmarks
+# are out. It is the one a person runs to get a figure at a path they chose.
 [tasks.render]
 description = "Render a map from a popcircles JSON document"
 run = "uv run python scripts/render_map.py"
@@ -256,14 +256,6 @@ run = ["mise run bench:kernel", "mise run bench:circle"]
 [tasks."test:python"]
 description = "Run the Python test suite"
 run = "uv run pytest"
-
-# Not in `test` or `ci`: the marked test calls `coastlines()`, which fetches Natural Earth from
-# naturalearth.s3.amazonaws.com, and nothing in CI may reach the network. Selected by marker rather
-# than by file, so a second marked test needs no change here. `pyproject.toml`'s `addopts` is what
-# deselects it everywhere else.
-[tasks."test:render"]
-description = "Render a full figure with coastlines (needs the network)"
-run = "uv run pytest -m network"
 
 [tasks.ci]
 description = "Run everything CI runs, locally"

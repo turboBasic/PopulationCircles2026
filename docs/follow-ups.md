@@ -135,33 +135,24 @@ Identifiers are flat, sequential and never reused.
   of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
 
-### FU-15 - cartopy is built from source because no cp314 wheel exists
-
-- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day the renderer landed.
-  `uv pip install --only-binary :all: --python-version 3.14 cartopy` answers "all versions of cartopy have
-  no usable wheels", and a cold `uv sync --locked --reinstall-package cartopy` prints
-  `Building cartopy==0.25.0` and takes 25.55 s here.
-- **Condition** — that same command resolves. It is a one-line sweep with a yes-or-no answer, and it fires
-  the day cartopy publishes a cp314 wheel: nothing about this repository has to change for it to become
-  true, which is why the entry exists rather than a task. `uv pip install --only-binary :all:
-  --python-version 3.14 pydantic` is the contrast — that one resolves today, so the cost is cartopy's
-  alone.
-- **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
-  The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
-  outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
-  tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
-  that figure, so the entry firing is what licenses removing the step rather than guessing at it.
-
 ### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
 
-- **Status** — `dormant` (2026-08-15): the registry holds one dataset, so one citation is the whole
-  mapping and a constant is indistinguishable from one.
-- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row. The sweep is the
-  count of registry entries in that file against the number of citations `scripts/render_map.py` holds:
-  one and one today. A second dataset makes `CITATION` the citation of whichever raster happens to have
-  been first, and a figure rendered from the other one then credits the wrong source while
-  `tests/test_render_map.py` still passes — the test asserts the constant appears in the registry, which
-  stays true of the wrong entry.
+- **Status** — `dormant` (2026-08-15): the registry holds one dataset a figure needs a citation for, so
+  one citation is the whole mapping and a constant is indistinguishable from one.
+
+  **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
+  `boundaries/ne-110m-coastline.geojson` is a basemap in the public domain, and its own registry entry
+  records that its terms ask for no attribution — so the count the Condition below sweeps for is now two
+  against one citation while the failure the entry guards against is still impossible. What the Condition
+  means, and what the correction beneath it now says, is a second row a figure would have to *credit*. The
+  note is here rather than a silent edit for `FU-08`'s reason: a reader should be able to tell "the row
+  arrived and the entry held" from "nobody looked".
+- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row **whose licence
+  requires attribution**. The sweep is the count of registry entries stating such a licence against the
+  number of citations `scripts/render_map.py` holds: one and one today. A second such dataset makes
+  `CITATION` the citation of whichever raster happens to have been first, and a figure rendered from the
+  other one then credits the wrong source while `tests/test_render_map.py` still passes — the test asserts
+  the constant appears in the registry, which stays true of the wrong entry.
 - **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
   choose between them. That second half is the reason this is an entry and not a task: `report`'s
   `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
@@ -554,3 +545,25 @@ Identifiers are flat, sequential and never reused.
   is a command a person runs and not a gate, which is why it closes this entry without touching the
   Condition, and why `CONTRIBUTING.md`'s Releasing section has to say when to run it: a dispatch nobody
   runs proves nothing.
+
+### FU-15 - cartopy is built from source because no cp314 wheel exists
+
+- **Status** — `closed` (2026-08-15): issue #69 took cartopy out of the tree, and the Fix below landed
+  with it — `.github/workflows/ci.yml` carries no `~/.cache/uv` step and no comment about one. Closed
+  rather than retired because what was owed was removing that step, and it was removed for the reason it
+  named; the Condition can no longer fire, since nothing here depends on cartopy's wheels either way.
+  Measured on the tree that closed it: `uv pip install --only-binary :all: --python-version 3.14
+  matplotlib pydantic pyproj pyright pytest ruff shapely` installs the whole dev group into a clean
+  target, and `uv sync --locked --reinstall` against an empty `UV_CACHE_DIR` prints no `Building` line,
+  leaves no built wheel in the cache, and takes **6.15 s** where the 25.55 s below was mostly one
+  compile.
+- **Condition** — that same command resolves. It is a one-line sweep with a yes-or-no answer, and it fires
+  the day cartopy publishes a cp314 wheel: nothing about this repository has to change for it to become
+  true, which is why the entry exists rather than a task. `uv pip install --only-binary :all:
+  --python-version 3.14 pydantic` is the contrast — that one resolves today, so the cost is cartopy's
+  alone.
+- **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
+  The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
+  outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
+  tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
+  that figure, so the entry firing is what licenses removing the step rather than guessing at it.

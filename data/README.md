@@ -1,6 +1,6 @@
 # Data
 
-Committed **input** datasets, one directory per kind. Git LFS holds the contents; a clone gets
+Committed **input** datasets, one directory per kind. Git LFS holds the raster contents; a clone gets
 pointers and fetches deliberately (see [Fetching](#fetching)).
 
 Generated products — summation tables, rendered maps — never live here. They are gitignored
@@ -9,11 +9,16 @@ Generated products — summation tables, rendered maps — never live here. They
 ```text
 data/
   population/   population rasters
-  boundaries/   country borders and coastlines (none yet)
+  boundaries/   coastlines and country borders
 ```
 
 A new kind gets its own directory and a row in the registry below. Keep names lowercase and
 hyphenated, and put the grid resolution in the filename when a dataset comes in several.
+
+**LFS is for the rasters, not for `data/` as such.** A vector dataset small enough to read on every
+render is a Git blob: it costs a hundred kilobytes of pack, and in exchange every clone and every CI
+job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` to LFS, and the
+`geo-data-lfs` hook is the tripwire for the binary formats neither of them names.
 
 ## Registry
 
@@ -107,9 +112,48 @@ The dataset is also mirrored in the Google Earth Engine catalog as
 [urs-curl]: https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget
 [urs-new]: https://urs.earthdata.nasa.gov/users/new
 
+### `boundaries/ne-110m-coastline.geojson`
+
+| Property | Value |
+| --- | --- |
+| Geometry | 134 LineStrings, 5128 vertices |
+| Extent | whole globe, −180° to 180°, −85.609038° to 83.645130° |
+| CRS | `urn:ogc:def:crs:OGC:1.3:CRS84`, the file's own declaration (EPSG:4326, axes as longitude then latitude) |
+| Size | 136.6 KiB, one line, **not in LFS** |
+| SHA-256 | `851f581ff5ffb844deed8ae1a9ce22e3c4bb3d74fa342cadb5d8e39b41ae7c3c` |
+| Properties per feature | `featurecla`, `scalerank`, `min_zoom` — none of them read |
+
+Measured from the file. The declared `bbox` reads `180.00000044181` at its eastern edge, four
+ten-millionths of a degree past the antimeridian and 5 cm on the ground; the vertices themselves stop
+at 180, so nothing here relies on the declaration.
+
+**It is [Natural Earth][ne]'s 1:110m physical coastline**, from the vector distribution repository at
+tag **[v5.1.2][ne-tag]**, path `geojson/ne_110m_coastline.geojson`. Committed byte-for-byte as that
+tag serves it, which is what makes the checksum above something a reader can check rather than a
+record of one download:
+
+```sh
+curl -sL https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_coastline.geojson \
+  | shasum -a 256
+```
+
+GeoJSON rather than the shapefile the same data is published as: `json` needs no reader beyond the
+standard library, where a shapefile would put a driver in the dependency tree to draw a coastline
+with.
+
+**Natural Earth is in the public domain.** Its [terms of use][ne-terms] place no restriction on use
+and ask for no permission, fee or attribution, so a figure drawn over this basemap carries the
+raster's citation alone — the one licence here that does require one. Crediting Natural Earth as well
+is welcomed by the project and is not done, for the reason the citation's wording is checked at all:
+what a figure says about its sources should be what those sources ask for and nothing else.
+
+[ne]: https://www.naturalearthdata.com/downloads/110m-physical-vectors/
+[ne-tag]: https://github.com/nvkelso/natural-earth-vector/releases/tag/v5.1.2
+[ne-terms]: https://www.naturalearthdata.com/about/terms-of-use/
+
 ## Fetching
 
-`.lfsconfig` asks Git LFS to skip these files by default, but **a Git config setting overrides
+`.lfsconfig` asks Git LFS to skip the rasters by default, but **a Git config setting overrides
 `.lfsconfig`** — so a machine with a global `lfs.fetchexclude` ignores it. Two layers make the
 intent hold:
 

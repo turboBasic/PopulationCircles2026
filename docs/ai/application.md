@@ -110,16 +110,22 @@ names what is inside it.
    span, since the climb doubles and the radii between two probes were never measured
    ([ADR 0007](../decisions/0007-a-result-states-what-it-could-not-separate.md)).
 5. **Rendering.** Python, from the published document and nothing else, kept out of the Rust search
-   path entirely. Three modules under `scripts/`: `circle_document` is the boundary, turning a document
+   path entirely. Four modules under `scripts/`: `circle_document` is the boundary, turning a document
    into frozen pydantic models and refusing a schema version it does not know, a kind it cannot draw or
-   an earth model that is not a sphere; `circle_geometry` builds the cap; `render_map` is the figure and
-   the only thing here that opens a file. A circle is **an azimuthal-equidistant buffer handed to PROJ's
-   polygon transform**, never a ring of latitudes and longitudes — the ring fills the complement at the
-   antimeridian and the wrong hemisphere over a pole, measurably, which is why the buffer's own vertices
-   and the polygon PROJ returns are two objects carrying two different assertions
-   ([ADR 0008](../decisions/0008-a-circle-is-projected-never-drawn.md)). The radius a cap is sized
-   on is the document's own `earth_model`, so no Python file names the sphere. Coastlines arrive over the
-   network, so the one test that draws a complete figure is marked and CI never runs it.
+   an earth model that is not a sphere; `circle_geometry` builds the cap and holds the one place a PROJ
+   definition is spelled; `map_frame` is what a figure is drawn *in* — the display projection, what it
+   can show, and the graticule; `render_map` is the figure and the only thing here that opens a file. A
+   circle is **an azimuthal-equidistant buffer handed to PROJ's polygon transform**, never a ring of
+   latitudes and longitudes — the ring fills the complement at the antimeridian and the wrong hemisphere
+   over a pole, measurably, which is why the buffer's own vertices and the polygon PROJ returns are two
+   objects carrying two different assertions
+   ([ADR 0008](../decisions/0008-a-circle-is-projected-never-drawn.md)). Three shapes come out of that
+   transform, not one, and which is right is settled by how many poles the cap holds: none is a walk that
+   closes, one is a walk closed along that pole, and both is the world with the region the cap misses cut
+   out of it. The radius a cap is sized on is the document's own `earth_model`, so no Python file names
+   the sphere. The basemap is committed (`data/README.md`), so a complete figure needs no network and the
+   suite draws one on every run — proved by taking sockets away for the duration rather than by reading
+   the imports.
 
 A module per subject, and two crates: the library `crates/popcircles/` and the binary
 `crates/popcircles-cli/`. A dependency forced that boundary and is what a further split takes too —

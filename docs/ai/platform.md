@@ -45,18 +45,22 @@ waiting on sources and tests to exist, not on someone noticing them.
 
 ## Large input data
 
-Input datasets live in `data/`, one directory per kind, contents in Git LFS.
+Input datasets live in `data/`, one directory per kind, the large ones in Git LFS.
 [`data/README.md`](../../data/README.md) is the registry and owns each dataset's grid, CRS, nodata
-value, checksum and provenance, plus the mechanics of skipping and fetching the objects
-([Fetching](../../data/README.md#fetching)). A dataset gets its row in the same change that adds it.
+value, checksum and provenance, which of them LFS holds, plus the mechanics of skipping and fetching
+the objects ([Fetching](../../data/README.md#fetching)). A dataset gets its row in the same change that
+adds it.
 
 The judgment around that mechanism:
 
 - **Never claim in docs or a commit message that a clone _cannot_ fetch the rasters.** Skipping is a
   layered default, and git-lfs lets a user's own Git config defeat the committed one. Overstating it
   turns a default into a guarantee nobody is holding.
-- A new **input** dataset goes to `data/<kind>/` through LFS, with a registry entry, and only
-  deliberately. Generated products are neither committed nor placed there.
+- A new **input** dataset goes to `data/<kind>/` with a registry entry, and only deliberately.
+  Generated products are neither committed nor placed there.
+- **LFS is the answer for a raster, not for `data/` by location.** A dataset every clone and every CI
+  job needs, small enough that fetching it would cost more than carrying it, is a Git blob — the
+  registry states that trade for each row, and `check-added-large-files` is what still bounds it.
 - Code that reads a raster fails with a clear message naming `mise run data:pull` when the file is
   an unfetched LFS pointer, rather than parsing the pointer as data.
 
@@ -287,8 +291,7 @@ docs/decisions/                  decision records, one ruling and one page each
 docs/follow-ups.md               the register of pending obligations
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search
-data/                            input datasets in Git LFS; registry in data/README.md
+data/                            input datasets; registry in data/README.md
 scripts/                         standalone Python tooling, run via `uv run python`
 tests/                           pytest suite for scripts/
-typings/                         stubs for libraries shipping no py.typed; pyright's stubPath
 ```

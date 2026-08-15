@@ -163,10 +163,13 @@ wording drifts from [`data/README.md`](data/README.md#licence-and-attribution).
 antimeridian comes out in two pieces at either edge of the map, and one covering a pole closes across the
 top of it — where drawing the ring directly fills the complement in the first case and the wrong
 hemisphere in the second. Both of those look like maps, which is why they are tested rather than eyeballed.
+A circle wide enough to hold both poles is the third case, and it comes out as the whole map with the one
+region it misses cut out.
 
-`--no-coastlines` is the only form that needs no network: coastlines are fetched from Natural Earth on
-first use and cached under `~/.local/share/cartopy/`. `mise run test:render` is the one test that draws a
-complete figure, kept out of CI for that reason.
+**Nothing here reaches the network.** The coastlines are Natural Earth 110m, committed under
+[`data/boundaries/`](data/README.md), so a figure is the same on a fresh clone as on a warm one and CI
+draws complete ones on every pull request. `--no-coastlines` draws the cap over a bare graticule, which is
+a choice about the figure rather than a way to avoid a download.
 
 ## Watching a run
 

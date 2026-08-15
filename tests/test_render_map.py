@@ -1,17 +1,23 @@
 import json
 import re
+import socket
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 from circle_document import circle_of
-from render_map import CITATION, ORTHOGRAPHIC, PLATE_CARREE, main, render
+from circle_geometry import HALF_TURN_DEG, POLE_LAT
+from map_frame import ORTHOGRAPHIC, PLATE_CARREE
+from render_map import CITATION, COASTLINE, basemap, main, render
 
 REGISTRY = Path(__file__).resolve().parent.parent / "data" / "README.md"
 
 CENTRE_LAT = 25.125
 CENTRE_LON = 79.708
 RADIUS_KM = 1000.0
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+NO_NETWORK = "a figure is drawn from the committed basemap and reaches no network"
 
 
 def document() -> dict[str, Any]:
@@ -46,8 +52,18 @@ def test_the_citation_is_the_text_the_registry_owns() -> None:
     assert normalised(CITATION) in normalised(REGISTRY.read_text(encoding="utf-8"))
 
 
+def test_the_basemap_is_the_committed_one() -> None:
+    # The registry's row is what a reader is sent to; this is the half a test can hold — the file is
+    # in the tree, outside LFS, and parses into coastlines spanning the world.
+    assert COASTLINE.is_file()
+    assert not COASTLINE.read_bytes().startswith(b"version https://git-lfs")
+    coastline = basemap(COASTLINE)
+    west, south, east, north = coastline.bounds
+    assert (west, east) == pytest.approx((-HALF_TURN_DEG, HALF_TURN_DEG), abs=1e-6)
+    assert -POLE_LAT < south < north < POLE_LAT
+
+
 def test_the_footer_artist_carries_the_citation() -> None:
-    # Without coastlines, so nothing here reaches the network.
     figure = render(circle_of(document()), PLATE_CARREE, coastlines=False)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
     assert normalised(CITATION) in drawn_text
@@ -61,24 +77,34 @@ def test_the_title_states_the_radius_the_share_and_the_centre() -> None:
     assert "1,254,363,868 people" in drawn_text
 
 
-def test_a_figure_is_written_where_it_is_told(tmp_path: Path) -> None:
+@pytest.mark.parametrize("projection", [PLATE_CARREE, ORTHOGRAPHIC])
+def test_a_complete_figure_is_written_where_it_is_told(projection: str, tmp_path: Path) -> None:
     # The figure a test writes goes to tmp_path: no rendered map enters the repository, which is the
     # first project invariant and the reason there is no baseline image to compare against.
     source = tmp_path / "circle.json"
     source.write_text(json.dumps(document()), encoding="utf-8")
     output = tmp_path / "figures" / "map.png"
 
-    assert main(["--input", str(source), "--output", str(output), "--no-coastlines"]) == 0
-    assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    argv = ["--input", str(source), "--output", str(output), "--projection", projection]
+    assert main(argv) == 0
+    assert output.read_bytes().startswith(PNG_MAGIC)
 
 
-@pytest.mark.network
-def test_a_full_figure_renders_with_coastlines(tmp_path: Path) -> None:
-    # The only test that draws the complete figure, and the reason it is marked: `coastlines()`
-    # fetches Natural Earth from naturalearth.s3.amazonaws.com on first use.
+def test_a_complete_figure_needs_no_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The claim the committed basemap exists to make, proved by denial rather than by reading the
+    # imports: sockets are taken away for the duration, so a figure that still needs a download
+    # fails here instead of passing on whichever machine happened to have one.
+    def refuse(*_args: object, **_kwargs: object) -> NoReturn:
+        raise AssertionError(NO_NETWORK)
+
+    for name in ("socket", "create_connection", "socketpair"):
+        monkeypatch.setattr(socket, name, refuse)
+
     source = tmp_path / "circle.json"
     source.write_text(json.dumps(document()), encoding="utf-8")
     output = tmp_path / "map.png"
 
     assert main(["--input", str(source), "--output", str(output)]) == 0
-    assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert output.read_bytes().startswith(PNG_MAGIC)

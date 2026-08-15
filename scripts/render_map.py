@@ -1,24 +1,33 @@
 import argparse
 import json
 import textwrap
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
 
-import cartopy.crs as ccrs
 import matplotlib as mpl
-from cartopy.mpl.geoaxes import GeoAxes
 from circle_document import Circle, circle_of
-from circle_geometry import cap, drawn
+from circle_geometry import cap, linestrings, polygons
+from map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path as DrawPath
+from shapely.geometry import shape
+from shapely.geometry.base import BaseGeometry
+from shapely.geometry.polygon import Polygon
+from shapely.ops import unary_union
 
 # Every figure this writes goes to a file, so an interactive backend is never wanted — and asking
 # for one is what fails on a machine with no display, rather than falling back.
 mpl.use("Agg")
 
-PLATE_CARREE = "plate-carree"
-ORTHOGRAPHIC = "orthographic"
-PROJECTIONS = (PLATE_CARREE, ORTHOGRAPHIC)
+# The committed basemap. Natural Earth 110m, public domain, outside LFS and small enough to read on
+# every render — `data/README.md` is the registry that owns its provenance and terms.
+COASTLINE = (
+    Path(__file__).resolve().parent.parent / "data" / "boundaries" / "ne-110m-coastline.geojson"
+)
 
 # CC BY 4.0 requires attribution of anything published from the raster, and `data/README.md`
 # "Licence and attribution" is the owner of this text — a figure carrying a different wording is
@@ -30,17 +39,67 @@ CITATION = (
     "and Applications Center (SEDAC). https://doi.org/10.7927/H4PN93PB"
 )
 
+# Bottom to top: the graticule under the coastlines, the circle over both, its centre over that, and
+# the frame's own outline last so no fill reaching the limb draws over it.
+GRATICULE_LAYER = 1
+COASTLINE_LAYER = 2
+CIRCLE_LAYER = 3
+CENTRE_LAYER = 4
+HORIZON_LAYER = 5
 
-def axes_projection(name: str, circle: Circle, globe: ccrs.Globe) -> ccrs.Projection:
-    # Both are built on the cap's own globe: a projection on another sphere makes PROJ shift the
-    # datum under the polygon, which is a second earth model arriving without anyone choosing it.
-    if name == ORTHOGRAPHIC:
-        return ccrs.Orthographic(
-            central_longitude=circle.centre.lon,
-            central_latitude=circle.centre.lat,
-            globe=globe,
+
+def basemap(path: Path) -> BaseGeometry:
+    features: Sequence[Mapping[str, dict[str, object]]] = json.loads(
+        path.read_text(encoding="utf-8"),
+    )["features"]
+    return unary_union([shape(feature["geometry"]) for feature in features])
+
+
+def compound(polygon: Polygon) -> DrawPath:
+    # Exterior first and every hole after it, in one path: a cap holding both poles covers the world
+    # bar one region, and that region is a hole rather than a second part.
+    return DrawPath.make_compound_path(
+        DrawPath(list(polygon.exterior.coords)),
+        *(DrawPath(list(ring.coords)) for ring in polygon.interiors),
+    )
+
+
+def fill_circle(axes: Axes, geometry: BaseGeometry) -> None:
+    for polygon in polygons(geometry):
+        axes.add_patch(
+            PathPatch(
+                compound(polygon),
+                facecolor="crimson",
+                edgecolor="darkred",
+                alpha=0.45,
+                linewidth=0.8,
+                zorder=CIRCLE_LAYER,
+            ),
         )
-    return ccrs.PlateCarree(globe=globe)
+
+
+def outline(axes: Axes, geometry: BaseGeometry) -> None:
+    for polygon in polygons(geometry):
+        axes.add_patch(
+            PathPatch(
+                compound(polygon),
+                facecolor="none",
+                edgecolor="0.4",
+                linewidth=0.6,
+                zorder=HORIZON_LAYER,
+            ),
+        )
+
+
+def stroke(axes: Axes, geometry: BaseGeometry, colour: str, width: float, layer: float) -> None:
+    axes.add_collection(
+        LineCollection(
+            [list(line.coords) for line in linestrings(geometry)],
+            colors=colour,
+            linewidths=width,
+            zorder=layer,
+        ),
+    )
 
 
 def title_of(circle: Circle) -> str:
@@ -62,9 +121,18 @@ def annotate(figure: Figure, y: float, text: str, size: float) -> None:
     )
 
 
+def draw(axes: Axes, view: Frame, coastline: BaseGeometry | None) -> None:
+    stroke(axes, project(view, graticule()), "0.75", 0.3, GRATICULE_LAYER)
+    if coastline is not None:
+        stroke(axes, project(view, coastline), "dimgrey", 0.5, COASTLINE_LAYER)
+    fill_circle(axes, view.circle)
+    outline(axes, view.horizon)
+
+
 def render(circle: Circle, projection: str, *, coastlines: bool) -> Figure:
     built = cap(circle.centre, circle.radius_km, circle.earth_radius_km)
-    target = ccrs.PlateCarree(globe=built.globe)
+    view = frame(projection, built)
+    centre = view.to_frame.transform(circle.centre.lon, circle.centre.lat)
 
     figure = plt.figure(  # pyright: ignore[reportUnknownMemberType] — matplotlib **kwargs: Unknown
         figsize=(11.0, 6.0),
@@ -72,38 +140,25 @@ def render(circle: Circle, projection: str, *, coastlines: bool) -> Figure:
     # Room for the title above and the wrapped citation below, since both are placed at figure
     # coordinates rather than left to a layout engine.
     figure.subplots_adjust(left=0.03, right=0.97, top=0.87, bottom=0.16)
-    # matplotlib annotates add_subplot(projection=...) as returning Axes3D, so the cast is what
-    # names what cartopy actually hands back. It is a cast to a checked type, not to Any.
-    axes = cast(
-        GeoAxes,
-        figure.add_subplot(1, 1, 1, projection=axes_projection(projection, circle, built.globe)),
-    )
-    axes.set_global()
-    if coastlines:
-        # Downloads Natural Earth on first use, which is why the caller decides and why the one test
-        # that asks for it is marked `network`.
-        axes.coastlines(resolution="110m", color="dimgrey")
-    axes.gridlines(draw_labels=False, linewidth=0.3)
+    axes = figure.add_subplot(1, 1, 1)
+    # Equal, because a degree of longitude and a degree of latitude are the same length on the one
+    # frame stated in degrees, and the other frame is metres in both directions.
+    axes.set_aspect("equal")
+    # The horizon is drawn rather than left to the spines: one frame's outline is a rectangle and
+    # the other's is a disc, and only one of those is an axes frame.
+    axes.set_axis_off()
+    west, south, east, north = view.horizon.bounds
+    axes.set_xlim(west, east)
+    axes.set_ylim(south, north)
 
-    # The drawn polygon, not the ring: PROJ has already cut it at the seam and closed it over a
-    # pole, which is the whole reason a ring of coordinates is not the drawing path.
-    axes.add_geometries(
-        [drawn(built, target)],
-        target,
-        facecolor="crimson",
-        edgecolor="darkred",
-        alpha=0.45,
-        linewidth=0.8,
-        zorder=3,
-    )
+    draw(axes, view, basemap(COASTLINE) if coastlines else None)
     axes.plot(  # pyright: ignore[reportUnknownMemberType] — matplotlib **kwargs: Unknown
-        [circle.centre.lon],
-        [circle.centre.lat],
+        [centre[0]],
+        [centre[1]],
         marker="+",
         color="black",
         markersize=9,
-        transform=target,
-        zorder=4,
+        zorder=CENTRE_LAYER,
     )
 
     annotate(figure, 0.94, title_of(circle), 12.0)
@@ -129,7 +184,6 @@ def main(argv: list[str] | None = None) -> int:
     projection: str = args.projection
     no_coastlines: bool = args.no_coastlines
 
-    # The one file this program opens. Nothing here reaches the raster, the table or the ledger.
     document = json.loads(input_path.read_text(encoding="utf-8"))
     figure = render(circle_of(document), projection, coastlines=not no_coastlines)
     output_path.parent.mkdir(parents=True, exist_ok=True)
