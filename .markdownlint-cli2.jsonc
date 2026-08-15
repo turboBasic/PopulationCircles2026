@@ -15,17 +15,6 @@
       "filter": [".github/PULL_REQUEST_TEMPLATE.md"],
       "config": { "MD041": false },
       "combine": "merge"
-    },
-    // The write-adr skill's Consequences section is bold **Positive** / **Negative** labels, not
-    // headings — a template convention, not drift, and the only rule this trips across every
-    // accepted ADR and plan. docs/decisions/ is otherwise linted like anywhere else: a record is
-    // frozen once accepted or complete (docs/ai/platform.md "Architecture decisions" and
-    // "Implementation plans"), so this scopes the exception to what the template actually does
-    // rather than exempting the directory from every future rule too.
-    {
-      "filter": ["docs/decisions/**"],
-      "config": { "MD036": false },
-      "combine": "merge"
     }
   ]
 }

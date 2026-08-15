@@ -95,7 +95,7 @@ def test_the_watched_constants_are_the_ones_on_disk() -> None:
 
 
 def test_the_attestation_is_watched_against_both_format_versions() -> None:
-    # ADR 0007 decision 2 flattens one shape into two separately versioned documents, so a field
+    # One shape is flattened into two separately versioned documents, so a field
     # added to it owes both bumps. The pairing is the whole reason a trigger names files rather than
     # reading the constant beside the block, and dropping it would leave the ledger's readers
     # unguarded while the hook still passed.

@@ -175,7 +175,7 @@ mod tests {
         // table exact in f64, so the shifted table's corners are the unshifted ones rearranged rather than
         // rounded. At full-resolution magnitudes the same shift moves the answer by up to 2 ulp, about
         // 1.9e-6 persons, because rotating a row rotates the sequence its prefix accumulates and the
-        // four-corner difference inherits the last bits of that. It is inside ADR 0003's 4 ulp per
+        // four-corner difference inherits the last bits of that. It is inside the table's 4 ulp per
         // rectangle query, and it is the table's arithmetic rather than a fault in the wrapping — not
         // something to chase by changing how the table is built.
         let grid = grid();

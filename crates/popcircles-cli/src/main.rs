@@ -27,7 +27,7 @@ use popcircles::table::cache::{Cache, CacheError, Identity, Mapped};
 use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build};
 
 /// Without an `about`, clap falls back to the description of the struct `Cli` flattens, and what a user
-/// read first was `LogArgs`'s reasoning — ADR 0006 decision 4 is what closed that.
+/// read first was `LogArgs`'s reasoning, which this `about` is what closed.
 #[derive(Parser, Debug)]
 #[command(
     name = "popcircles",
@@ -42,11 +42,11 @@ struct Cli {
     command: Command,
 }
 
-// `//` rather than `///`, which is ADR 0006 decision 4: clap publishes a flattened struct's description
+// `//` rather than `///`, deliberately: clap publishes a flattened struct's description
 // when the command declares none, so this reasoning was the first thing `--help` showed. The words are a
 // maintainer's and the level's own help text is the field's below.
 //
-// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. There
+// How much a run says about what it is doing, and the only control over it. There
 // is no boolean pair beside it: two flags standing in for a threshold is the shape `FU-04` names, and its
 // condition is a sweep over this directory, so spelling those two flags out here would fire it.
 //
@@ -332,7 +332,7 @@ const EXIT_BAD_INPUT: u8 = 2;
 const EXIT_MISSING_DATA: u8 = 3;
 
 fn main() -> ExitCode {
-    // The first statement, before argument parsing: ADR 0004 decision 2 says elapsed since the process
+    // The first statement, before argument parsing: elapsed is measured from the process
     // started, and a clock started after `Cli::parse()` and the install is not that.
     let started = Instant::now();
     let cli = Cli::parse();
@@ -891,7 +891,7 @@ fn serialised(json: serde_json::Result<String>) -> Result<String, Failure> {
     json.map_err(|error| Failure::new(EXIT_FAILURE, &error))
 }
 
-/// Progress on stderr, which is ADR 0001 decision 4's other half: the library reports through a sink,
+/// Progress on stderr, which is the sink's other half: the library reports through a sink,
 /// and choosing the stream is this crate's business.
 ///
 /// One line, redrawn per whole percent, and silent when stderr is not a terminal — a redraw in a log
@@ -936,7 +936,7 @@ impl Progress for StderrProgress {
     }
 }
 
-/// One record per line on stderr, which is ADR 0004 decision 2: the library emits through the facade and
+/// One record per line on stderr: the library emits through the facade and
 /// this crate is the only place a diagnostic reaches a stream.
 ///
 /// The elapsed figure is what makes a duration a subtraction over two lines, and it is milliseconds since

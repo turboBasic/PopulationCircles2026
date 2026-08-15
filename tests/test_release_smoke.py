@@ -25,7 +25,7 @@ def test_the_smoke_dispatches_the_workflow_this_script_watches() -> None:
     assert "uses: ./.github/workflows/build-binaries.yml" in text
 
 
-# ADR 0010 decision 2: a smoke publishes nothing because its workflow declares no job that could,
+# A smoke publishes nothing because its workflow declares no job that could,
 # and neither wrapper tells its jobs apart by the event. Both are properties of the files, so this
 # is where they are checked — at run time there is nothing left to look at.
 def test_the_smoke_workflow_can_neither_publish_nor_write() -> None:

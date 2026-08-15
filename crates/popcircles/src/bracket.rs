@@ -1,8 +1,8 @@
 //! The `debug` pair box 7 of issue #8 asks for: two records carrying one operation name, so a duration is
 //! a subtraction over their elapsed prefixes rather than a stopwatch run by hand.
 //!
-//! Its own module rather than a corner of [`crate::progress`], because the two must not touch: ADR 0004
-//! decision 3 keeps progress and diagnostics apart, and the CLI opens pairs of its own with the same shape.
+//! Its own module rather than a corner of [`crate::progress`], because the two must not touch:
+//! progress and diagnostics are kept apart, and the CLI opens pairs of its own with the same shape.
 
 /// A `debug` pair, opened where the expensive step begins and closed by [`Drop`].
 ///

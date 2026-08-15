@@ -1,8 +1,8 @@
 // The four search commands run for real, against a cache this file builds. What only a real invocation
 // can check is here and nothing else: that stdout is one JSON document, that stderr stays out of it, that
 // the exit code is the class the failure falls in, and that the document names the table it was answered
-// from. The wire format itself is snapshotted in the library, over `report`'s own types — see ADR 0001
-// decision 3, and `FU-03`, whose tripwire watches `crates/popcircles/src/snapshots/` and would not see a
+// from. The wire format itself is snapshotted in the library, over `report`'s own types — see ADR 0004
+// and `FU-03`, whose tripwire watches `crates/popcircles/src/snapshots/` and would not see a
 // snapshot kept here.
 //
 // No raster anywhere. `Synthetic` is public and unconditional, so the fixture streams into a real cache
@@ -380,7 +380,7 @@ fn a_digest_naming_another_table_is_missing_data_and_prints_nothing() {
 
 #[test]
 fn a_grid_the_cache_was_not_built_over_is_missing_data_and_prints_nothing() {
-    // The whole of ADR 0007 in one invocation: every flag a success case passes, with the columns half a
+    // The whole of the grid attestation in one invocation: every flag a success case passes, with the columns half a
     // turn from where the table's are. The digest is the one the build reported, the width, the height,
     // the steps and the factor all agree, and before this the command answered with a population.
     let fixture = Fixture::build();

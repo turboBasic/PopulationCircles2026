@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: Audit repository hygiene - gates, instruction-layer duplication, the structure tree, the dataset registry, the follow-up register and stale permissions - and report the findings without fixing them. Use when the user asks for a repo audit, hygiene check, or housekeeping pass.
+description: Audit repository hygiene - gates, instruction-layer duplication, the structure tree, the dataset registry, the follow-up register, record shape and stale permissions - and report the findings without fixing them. Use when the user asks for a repo audit, hygiene check, or housekeeping pass.
 ---
 
 # Housekeeping sweep
@@ -37,14 +37,19 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    names a file that exists. Run `mise run data:status` and report which objects are pointer-only —
    that is the expected state, and a fetched raster sitting in the tree is worth naming, not fixing.
    A generated artifact anywhere under `data/` is a finding.
-5. **Follow-up register.** `docs/follow-ups.md` holds every follow-up this repository has recorded; a
-   plan's Follow-ups section is a pointer line into it. Take the `dormant` and `due` entries, answer
+5. **Follow-up register.** `docs/follow-ups.md` holds every follow-up this repository has recorded.
+   Take the `dormant` and `due` entries, answer
    each condition against the repository rather than from memory, and report the ones now true. An
    entry whose condition has not fired is not a finding and is not worth listing; a `dormant` one
    whose condition the repository *cannot* answer is, because it will read as dormant forever. Skip
    `closed` and `retired` entries — a retired entry's condition is unanswerable by construction,
    which is the whole of what retiring it recorded.
-6. **Stale local allowlist.** `.claude/settings.local.json`, if it exists, grants permissions by path
+6. **Record shape.** Every record in `docs/decisions/`, which is what ADR 0001 governs: each within the
+   80-line ceiling that record set, each carrying one `scope:` from the closed list in the `write-adr`
+   skill, none carrying a numbered list of decisions. `wc -l` and `rg -n '^scope:' docs/decisions/` answer
+   the first two; the third is read. No record is exempt. This check exists because nothing gates it —
+   `FU-19`.
+7. **Stale local allowlist.** `.claude/settings.local.json`, if it exists, grants permissions by path
    and command name. An entry naming a task, skill or file that no longer exists is a finding. Glob
    patterns covering a directory are not — they age fine.
 

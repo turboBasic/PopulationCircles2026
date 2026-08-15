@@ -1,8 +1,8 @@
 # Platform
 
 Read this when changing tooling, dependencies, input data, quality gates, git conventions or CI, when
-working a GitHub issue, when authoring a record under `docs/decisions/` or its sibling plan, or when
-the structure tree moves.
+working a GitHub issue, when deciding whether a change warrants a record under `docs/decisions/` or
+writing the plan that carries it, or when the structure tree moves.
 
 Committed configuration is authoritative for what it declares — read `mise.toml`, `Cargo.toml`,
 `pyproject.toml`, `.pre-commit-config.yaml` and `.lfsconfig` rather than assuming. Extend those
@@ -101,40 +101,77 @@ strict mode.
 ## Architecture decisions
 
 Consulting accepted ADRs before an architecture choice is a project invariant, stated in
-`docs/ai-instructions.md`. This section governs authoring them.
+`docs/ai-instructions.md`. This section governs when one is warranted and how it is scoped; the
+record's own shape is the `write-adr` skill's.
 
-- A decision is a numbered record in `docs/decisions/`, named `NNNN-<kebab-slug>.md`.
-- An accepted ADR is superseded by a new record, never edited. The two supersession fields and the
-  Status section of the superseded record are the only sanctioned edits.
-- An ADR records a decision **made**. A ruling that cannot carry a `decided` date is a proposal and
-  belongs in a plan or in conversation.
-- The record's shape — frontmatter fields and the five sections — is owned by the `write-adr` skill,
-  which is where an author meets it.
+**The trigger is a question, not a work package.** Working an issue forces dozens of choices at every
+level of impact, and recording them because an issue was worked is what
+[ADR 0001](../decisions/0001-a-record-carries-one-ruling.md) was written against. Most issues warrant
+no record; one may warrant two, having raised two independent questions; and a question raised in
+conversation with no issue behind it warrants one just the same.
+
+### The bar
+
+A change needs a record only when all three hold:
+
+1. **Reversing it costs more than a PR.** It crosses a crate or language boundary, changes a published
+   format, or changes a project-wide policy.
+2. **A competent person would have chosen differently.** There was a real option, not a preference.
+3. **Someone will ask "why is it like this?" and not be able to answer from the code.**
+
+Two corollaries do most of the work in practice:
+
+- **A choice a gate already pins does not need a record.** If a test asserts the tolerance or a
+  manifest confines the dependency, the gate is the record.
+- **A record whose own Consequences say it is cheap to reverse has failed test 1**, and the draft
+  admitting that is the signal to stop rather than a paragraph to soften.
+
+### Scope
+
+1. **One record, one ruling, one `scope:`.** A numbered list of decisions is the symptom that the
+   record is more than one record.
+2. **Rule the constraint, not the implementation of it.** "The build takes no non-Rust prerequisite"
+   survives a crate swap; the crate and its feature flags do not, and protect the same thing.
+3. **Never enumerate a schema, a field list or a file layout.** State the property the artefact must
+   have; the fields belong to the code and its version constant. A record that lists them guarantees a
+   record when the list changes.
+4. **The record holds the why; the instruction layer holds the rule.** `docs/ai/` says what is true
+   now, in present tense and editable. The record says what was chosen, what lost and when, frozen.
+   Neither restates the other at length, and the link between them is one line.
+5. **One page — 80 lines including frontmatter, hard.** Not a style preference: it is the forcing
+   function for the four rules above. What will not fit is the implementation, which is the PR, the
+   evidence, which is the issue, or a second record.
+
+A measured figure belongs to whatever measured it — the issue thread and the PR are already dated and
+frozen. The record cites inline the one number that decided it, and carries no tables.
+
+### Mechanics
+
+- A record is `docs/decisions/NNNN-<kebab-slug>.md`, taking the lowest unused prefix.
+- An accepted record is superseded by a new one, never edited. Its `status:`, its `superseded_by:` and
+  one line under its title are the only sanctioned edits.
+- A record records a decision **made**. A ruling that cannot carry a date is a proposal, and belongs in
+  the issue thread or in conversation until it is settled.
+- **Every record in the directory satisfies this section**, so any of them reads as the shape a new one
+  takes and none is exempt from the ceiling.
 
 ## Implementation plans
 
-A plan is the sibling `NNNN-<slug>.plan.md` of the ADR whose work it carries, in the same directory;
-it may precede the ADR it drives. Two skills read a plan file — one writes it, one executes it — so
-its shape is fixed here rather than in either.
+**Work decomposition is GitHub issues**, one issue per deliverable, tracked from the roadmap issue that
+is its milestone's epic. That is the only durable home it has, and a committed task list anywhere in
+this tree — beside a record included — is the drift to avoid
+([ADR 0001](../decisions/0001-a-record-carries-one-ruling.md)).
 
-**A plan file carries work an ADR decided. The step decomposition of the algorithm roadmap is GitHub
-issues**, one per step, tracked from the roadmap issue.
+A **plan file** is the executable form of one issue's work: the same steps rewritten as tasks a skill
+can run, each with a verification that can fail. It is scratch — written under the gitignored `tmp/`,
+executed, and never committed. What outlives it is the issue's ticked boxes and the commits it
+produced. Two skills read one, `write-plan` and `run-plan`, so its shape is fixed here rather than in
+either.
 
-The transition runs one way. An issue that turns out to need an architecture decision produces an ADR,
-and the tasks following from that decision move into its plan file; a plan is never reopened to absorb
-roadmap work.
-
-Those are the only two homes, and a third takes a record. Work fitting neither — a committed task list
-outside `docs/decisions/`, or a roadmap issue whose steps a record decided rather than discovered — is
-ruled into `docs/decisions/` naming which side it falls on and why, never settled by judgment in the
-moment. The failure to avoid is not a wrong answer but a quiet third convention.
-
-- **Frontmatter** carries `tags: [plan, <domain>, popcircles]` and `created:`, the domain tag
-  matching the ADR's.
+- **No frontmatter.** Nothing indexes a file that is never committed.
 - **Status line** is the paragraph directly under the title, opening
-  `**Status: in progress (YYYY-MM-DD).**` or `**Status: complete (YYYY-MM-DD).**`. A plan marked
-  complete is frozen: it stays in place as the record of what was decided then, and is never
-  executed or ticked off again.
+  `**Status: in progress (YYYY-MM-DD).**` or `**Status: complete (YYYY-MM-DD).**`. Those two values are
+  all there are, and a plan marked complete is never executed or ticked off again.
 - **Ground rules** constrain how every task in that plan is done. They add to the executing skill's
   loop and never replace it.
 - **Out of scope** records what was weighed and deliberately left out, so a later reader does not
@@ -142,10 +179,9 @@ moment. The failure to avoid is not a wrong answer but a quiet third convention.
 - **Phases** group tasks and may carry a `Model:` note naming the model the phase expects.
 - **Tasks** are checkboxes numbered `<phase>.<task>`, each ending in a `Verify:` line stating what
   proves it done. The task is the unit of execution and the unit of commit.
-- **Follow-ups** close the plan and hold identifiers only: the obligations the plan produced are
-  entries in [`../follow-ups.md`](../follow-ups.md), which owns their format, statuses and the bar
-  their conditions must meet. The section here names those identifiers and sends the reader there,
-  and is frozen with the rest of the plan once written.
+- **Follow-ups** hold identifiers only: the obligations the work produced are entries in
+  [`../follow-ups.md`](../follow-ups.md), which owns their format, statuses and the bar their
+  conditions must meet.
 
 ## Issues
 
@@ -219,9 +255,8 @@ date derived from summing them is arithmetic on guesses.
   until then this repo's `ci.yml` is the prototype for it. Do not fork Python-specific shared
   workflows to fake Rust support.
 - A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
-  call rather than a condition on the event
-  ([ADR 0010](../decisions/0010-a-scenario-workflow-wraps-a-shared-build.md)). `ci.yml` is the stated
-  exception, because `main`'s ruleset matches its required checks by the names a call would prefix.
+  call rather than a condition on the event. `ci.yml` is the stated exception, because `main`'s ruleset
+  matches its required checks by the names a call would prefix.
 - A comment in a workflow explains the configuration beside it and nothing else. No ADR, issue or
   follow-up citation, no account of what the file used to be, and no sentence a reader has to unpack
   before it parses — `docs/decisions/` owns the reasoning, and a citation in a YAML file is a second
@@ -248,7 +283,7 @@ CLAUDE.md                        Claude entry point — imports only
 .github/workflows/               CI
 docs/ai-instructions.md          the router: invariants and layering
 docs/ai/                         the instruction layer, one file per subject
-docs/decisions/                  decision records and their sibling plans
+docs/decisions/                  decision records, one ruling and one page each
 docs/follow-ups.md               the register of pending obligations
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search

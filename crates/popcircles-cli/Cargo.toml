@@ -7,11 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-# ADR 0006 decision 1, the same ruling the library carries: this crate cannot be published without
+# The same rule the library carries: this crate cannot be published without
 # the library going first, and neither is going.
 publish = false
 
-# ADR 0006 decision 4: without this the file takes the package name, and every document the CLI writes
+# Without this the file takes the package name, and every document the CLI writes
 # already reports `popcircles`. It is also what fixes the usage line, which clap takes from the binary
 # rather than from `#[command(name = ...)]`.
 [[bin]]
@@ -24,7 +24,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-# Both ends of ADR 0004: this crate emits its own records and implements the `log::Log` that consumes
+# Both ends of the facade: this crate emits its own records and implements the `log::Log` that consumes
 # every crate's.
 log.workspace = true
 popcircles = { path = "../popcircles" }

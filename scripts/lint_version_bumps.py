@@ -15,7 +15,7 @@ LEDGER_CACHE = "crates/popcircles/src/smallest/cache.rs"
 # Each watched block, where it lives, and the files whose FORMAT_VERSION its shape governs. Both
 # structs of a ledger are listed because `Probe` is what `Document.radii` holds, so a field of
 # either moves the document. `Attestation` governs two, which is the pairing this table exists to
-# express: ADR 0007 flattens one shape into both documents, and a field added to it that bumped only
+# express: one shape is flattened into both documents, and a field added to it that bumped only
 # the constant in its own file would leave the other format's readers accepting a document they
 # misread.
 STRUCT_TRIGGERS = (

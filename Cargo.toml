@@ -27,7 +27,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
 thiserror = "2"
-# The trimmed feature set is ADR 0002's ruling, not a default: deflate, fax and jpeg are decode
+# The trimmed feature set is ADR 0003's ruling, not a default: deflate, fax and jpeg are decode
 # paths a Float32 population raster cannot reach, and enabling one costs eleven more crates.
 tiff = { version = "0.11", default-features = false, features = ["lzw"] }
 # 0.1 rather than the current 0.2, because the point of it is to compress test fixtures with the
@@ -44,7 +44,7 @@ authors = ["turboBasic"]
 
 [workspace.lints.rust]
 # deny rather than forbid, and the difference is the whole point: `forbid` cannot be overridden by an
-# `#[allow]` at all, so the one `unsafe` block ADR 0003 decision 5 accepts — `memmap2::Mmap::map` is an
+# `#[allow]` at all, so the one `unsafe` block ADR 0006 accepts — `memmap2::Mmap::map` is an
 # unsafe fn and cannot be otherwise — is a change to this line rather than a local exception to it. What
 # replaces the guarantee `forbid` was making is the `single-unsafe-allow` hook, which asserts the count
 # of exceptions under `crates/` is exactly one and that it is the site that record names.

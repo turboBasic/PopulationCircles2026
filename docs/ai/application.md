@@ -76,7 +76,7 @@ command answers, which owns what a consumer of that format needs to know. The bu
 over radius is the search's.
 bracket, circle, geodesy, grid, kernel, progress, report, search, smallest, `raster` itself and `table`
 itself are pure computation with no I/O — a `log` record is not I/O here, because none reaches a stream until the CLI's own
-subscriber writes it, which is [ADR 0004](../decisions/0004-diagnostics-through-log.md);
+subscriber writes it;
 the file, the decoder and the tag validation are `crates/popcircles/src/raster/geotiff.rs`, the header,
 the atomic publication and the mapping are `crates/popcircles/src/table/cache.rs`, the ledger document and
 its own publication are `crates/popcircles/src/smallest/cache.rs`, and nothing above any of those modules
@@ -108,7 +108,7 @@ names what is inside it.
    Where the summation slack cannot separate a probed radius from the target, the result names the span of
    probed radii it cannot separate rather than asserting a minimality it has not proved — a floor on that
    span, since the climb doubles and the radii between two probes were never measured
-   ([ADR 0005](../decisions/0005-ambiguous-minimality-is-reported.md)).
+   ([ADR 0007](../decisions/0007-a-result-states-what-it-could-not-separate.md)).
 5. **Rendering.** Python, from the published document and nothing else, kept out of the Rust search
    path entirely. Three modules under `scripts/`: `circle_document` is the boundary, turning a document
    into frozen pydantic models and refusing a schema version it does not know, a kind it cannot draw or
@@ -117,7 +117,7 @@ names what is inside it.
    polygon transform**, never a ring of latitudes and longitudes — the ring fills the complement at the
    antimeridian and the wrong hemisphere over a pole, measurably, which is why the buffer's own vertices
    and the polygon PROJ returns are two objects carrying two different assertions
-   ([ADR 0008](../decisions/0008-rendering-reads-the-published-document.md)). The radius a cap is sized
+   ([ADR 0008](../decisions/0008-a-circle-is-projected-never-drawn.md)). The radius a cap is sized
    on is the document's own `earth_model`, so no Python file names the sphere. Coastlines arrive over the
    network, so the one test that draws a complete figure is marked and CI never runs it.
 
@@ -140,8 +140,7 @@ an arrow is an architecture change, not a refactor.
   value. Prefer a type whose invalid states do not construct over a check repeated at every use.
 - **The domain computes and returns; it does not read, write, print, or format.** A diagnostic emitted
   through the `log` facade is not an exception to that — the record is a value handed to whatever the
-  binary installed, and choosing a stream, a level and a format stays the CLI's
-  ([ADR 0004](../decisions/0004-diagnostics-through-log.md)). geodesy, grid,
+  binary installed, and choosing a stream, a level and a format stays the CLI's. geodesy, grid,
   ingest, table, kernels and search take domain types and give back domain types. Paths, file formats,
   stdout, progress reporting and CLI flags are not domain concerns — a module that grows one has taken
   a second responsibility (SRP), and the test that used to be a pure function call now needs a

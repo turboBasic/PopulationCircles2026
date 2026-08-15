@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-# ADR 0006 decision 1: a release is a tag and attached binaries, and no registry. Enforced rather
+# A release is a tag and attached binaries, and no registry. Enforced rather
 # than intended, because `cargo publish` in either crate directory would otherwise attempt one.
 publish = false
 
@@ -16,11 +16,11 @@ workspace = true
 
 [dependencies]
 bytemuck.workspace = true
-# ADR 0004 decision 1: the library emits diagnostics through the facade and never to a stream.
+# The library emits diagnostics through the facade and never to a stream.
 log.workspace = true
 memmap2.workspace = true
 serde.workspace = true
-# A normal dependency from ADR 0003 decision 4 on: the cache header is JSON, so the library writes and
+# A normal dependency rather than a dev one: the cache header is JSON, so the library writes and
 # reads it rather than only serialising documents a caller prints.
 serde_json.workspace = true
 thiserror.workspace = true
@@ -32,7 +32,7 @@ proptest.workspace = true
 tempfile.workspace = true
 weezl.workspace = true
 
-# ADR 0009 decision 1: a benchmark is a `harness = false` target measuring with `std::time::Instant`, and
+# A benchmark is a `harness = false` target measuring with `std::time::Instant`, and
 # adds no dependency. `test = false` on each is what keeps `cargo test` from running a benchmark as a
 # test — with `harness = false` and no `main` that takes libtest's flags, a bench target under
 # `cargo test` would fail on the arguments the harness passes it. `cargo clippy --all-targets` still

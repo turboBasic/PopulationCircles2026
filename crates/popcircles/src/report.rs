@@ -1,5 +1,5 @@
-//! The published shape of a result, and the only place in this crate a serde derive appears. ADR 0001
-//! decision 3: the domain types change when the search changes, so what is serialised is a separate
+//! The published shape of a result, and the only place in this crate a serde derive appears. ADR 0004:
+//! the domain types change when the search changes, so what is serialised is a separate
 //! representation with its own version, and a field here is a promise to two renderers and two command
 //! surfaces.
 //!
@@ -29,8 +29,8 @@
 //! carries no provenance, because there the table is what the command is *about* rather than what it was
 //! answered from.
 //!
-//! **The `grid` in provenance is attested, in the same sense `digest` and `decimation` are.** ADR 0007
-//! binds the whole geometry in the cache header, so opening one compares it and a table built over
+//! **The `grid` in provenance is attested, in the same sense `digest` and `decimation` are.** The cache
+//! header binds the whole geometry, per ADR 0005, so opening one compares it and a table built over
 //! another grid is refused rather than answered from. What a document publishes is the caller's spelling
 //! of that geometry, which the header accepted within the tolerance the raster reader grants.
 //!
@@ -62,13 +62,13 @@
 //!
 //! # What these numbers are accurate to
 //!
-//! ADR 0009 decision 5 puts this here rather than in a document of its own: what a published figure is
+//! This sits here rather than in a document of its own: what a published figure is
 //! accurate to is what a consumer of this format needs to know, and every field it composes is one this
 //! module publishes. Nothing below is a tolerance this crate applied — no candidate is ever discarded by
 //! one — so each is a bound on the arithmetic beneath an answer, not a margin around it.
 //!
 //! **A population is accurate to the slack the document carries.** One rectangle query is within 4 ulp of
-//! the magnitude it sums, which is ADR 0003 decision 2 and about 4e-6 persons at the registry raster's
+//! the magnitude it sums, which is about 4e-6 persons at the registry raster's
 //! 7.76e9. A circle is a sum of one such query per grid row it spans, added in
 //! [`crate::circle::population`]'s fixed order, so the error composes rather than cancelling:
 //! [`crate::smallest::predicate_slack_persons`] is that composition, and it is what
@@ -87,7 +87,7 @@
 //! `short_below` is the kilometre beneath it that does not. Both were measured. Where a probe's margin
 //! falls inside the slack the comparison could have gone either way, and then `ambiguity` is present and
 //! names the span of probed radii that cannot be separated — a floor on it, because the climb doubles and
-//! the radii between two probes were never measured, which is ADR 0005. An absent `ambiguity` is the
+//! the radii between two probes were never measured, which is ADR 0007. An absent `ambiguity` is the
 //! stronger statement.
 //!
 //! **The centre is a cell centre, and that is a property of the question rather than an error in the
@@ -207,7 +207,7 @@ impl<T: Document> Envelope<T> {
 /// The table a command answered from, and where it sits.
 ///
 /// All three facts here are the cache's own: `digest`, `decimation` and `grid` are what opening a cache
-/// **attested** to, because ADR 0007 binds the whole geometry in the header and compares it. The geometry
+/// **attested** to, because the header binds the whole geometry and compares it (ADR 0005). The geometry
 /// is compared within `BOUNDARY_TOLERANCE_DEG`, so what a document names is the caller's spelling of a
 /// grid the header accepted rather than the header's own bits.
 #[derive(Debug, Clone, Serialize)]

@@ -1,5 +1,5 @@
 // What a summation table build costs, and how much of that is the payload write rather than the
-// compensated arithmetic — the question ADR 0003 left open when its figures came from a scratch crate
+// compensated arithmetic — the question left open when the first figures came from a scratch crate
 // outside this tree.
 //
 // No raster: the source is generated a row at a time, so this measures the build and not a decoder, and
@@ -190,7 +190,7 @@ fn main() {
         black_box(total);
     }
 
-    // The write is measured only at full resolution, because 7.5 GB is the figure ADR 0003 expected to
+    // The write is measured only at full resolution, because 7.5 GB is the figure expected to
     // dominate and a 74.7 MB one says nothing about it. The temporary goes under `out/`, which is
     // gitignored, and both files are removed again.
     let base = workspace("out/bench-table-build");

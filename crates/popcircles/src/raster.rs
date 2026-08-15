@@ -1,5 +1,5 @@
 // The raster seam: the vocabulary every consumer matches on, and no decoder. Which crate does the
-// decoding is the sibling module's business and appears in no type here, so replacing it — ADR 0002
+// decoding is the sibling module's business and appears in no type here, so replacing it — ADR 0003
 // names the conditions — is not a breaking change to anything downstream has matched on.
 
 pub mod geotiff;
@@ -163,7 +163,7 @@ pub enum RasterError {
     Io(#[source] std::io::Error),
 
     // The source is boxed and opaque, so no consumer matches on the decoder's own error type and
-    // ADR 0002's fallback stays the two lines of Cargo.toml it claims to be.
+    // ADR 0003's fallback stays the two lines of Cargo.toml it claims to be.
     #[error("the raster could not be decoded")]
     Decode(#[source] Box<dyn Error + Send + Sync>),
 }

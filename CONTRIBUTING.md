@@ -30,8 +30,7 @@ mise run bench:table    # the table build — writes 7.5 GB, which is why it is 
 ```
 
 A benchmark asserts nothing and no gate compares it against a baseline, so its figures are read rather
-than checked; the ones taken on one machine are recorded in
-[ADR 0009](docs/decisions/0009-validation-brackets-cheap-and-certifies-dear.md).
+than checked, and a figure worth keeping belongs to the issue or the PR that measured it.
 
 Each task's description in `mise.toml` names what it actually runs; `mise run ci` is the check to
 run before opening a PR. Hooks run through
@@ -70,7 +69,7 @@ content: CI runs with LFS content absent.
 
 ## Releasing
 
-[ADR 0006](docs/decisions/0006-release-shape-and-format-promises.md) rules what a release is; this is
+A release is a tag and the two binaries it attaches, from one workspace version and no registry; this is
 the sequence for cutting one.
 
 ```sh
@@ -78,7 +77,7 @@ mise run release:smoke  # both build legs on demand, macOS included, publishing 
 ```
 
 Run it before cutting a tag, and after bumping a pinned toolchain. Nothing else in this repository ever
-compiles for `aarch64-apple-darwin` — `ci.yml` is `ubuntu-latest` and, per ADR 0006, stays that way — so
+compiles for `aarch64-apple-darwin` — `ci.yml` is `ubuntu-latest` and deliberately stays that way — so
 without it the first macOS compile of a tree is the tag you are trying to ship. It builds the branch as
 `origin` has it, takes about as long as a release, and leaves a run page and its two artifacts behind:
 no tag, no Release. It runs the same build a tag runs — `.github/workflows/release-smoke.yml` and
@@ -110,5 +109,6 @@ the split is so each subject can be corrected on its own, not so any of them is 
 before a first change. [`docs/decisions/`](docs/decisions/) says why a constraint exists, and
 [`docs/follow-ups.md`](docs/follow-ups.md) what is still owed; open those when you need them.
 
-A decision about how the repository is built is recorded as an ADR rather than argued again; the work
-that follows from one is its sibling plan file, while the algorithm roadmap stays in GitHub issues.
+A decision about how the repository is built is recorded as an ADR rather than argued again — but only
+where reversing it would cost more than a PR, and then on one page. Most choices are explained by the PR
+that makes them, and the work itself is decomposed in GitHub issues.

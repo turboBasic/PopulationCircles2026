@@ -260,7 +260,7 @@ pub struct Smallest {
 /// How far apart two circles' computed populations must be before the comparison between them is certain,
 /// in persons.
 ///
-/// **Not ADR 0003's 4 ulp**, which bounds one rectangle query. A circle is a sum of up to one query per
+/// **Not the table's 4 ulp**, which bounds one rectangle query. A circle is a sum of up to one query per
 /// grid row, added in [`crate::circle::population`]'s fixed order, so the error composes: `rows · 4 ulp` of
 /// the total for the terms, plus about `rows · ε · total` for the additions that combine them. At the
 /// registry raster's 21 600 rows and a total near 8e9 that is about 0.12 persons — seven orders of
@@ -610,7 +610,7 @@ mod tests {
     /// it: every synthetic table that is ambiguous at all is ambiguous by a margin of **exactly zero** — a
     /// handful of populated rows gives the fold nothing to reorder — so `margin == 0.0` would satisfy every
     /// fixture case in this module. The registry raster's own residue appears below as a literal for that
-    /// reason, and ADR 0005's Context is where it was measured.
+    /// reason, and ADR 0007's Context is where it was measured.
     #[test]
     fn the_slack_is_inside_itself_and_the_bit_above_it_is_not() {
         let slack = 0.011_960_601_365_319_32;
