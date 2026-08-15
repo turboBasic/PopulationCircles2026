@@ -411,8 +411,11 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
 
-- **Status** — `dormant` (2026-08-15): the condition needs a release to exist, and none does. The workflow
-  has been fired once, against a pre-release tag since deleted along with its Release.
+- **Status** — `due` (2026-08-15): `v0.1.0` is published, so both halves of the condition read true —
+  `gh release list` returns it, and `release.yml` names no signing tool. The published macOS asset was
+  measured on the day: `gh release download` leaves it carrying `com.apple.provenance` and no
+  `com.apple.quarantine`, and it runs and reports `popcircles 0.1.0`. That is the README's claim holding,
+  not the identity arriving.
 - **Condition** — a Release exists while no artifact carries a Developer ID signature. The sweep is
   `gh release list` returning at least one release, together with
   `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml` returning nothing. Not "unsigned":
