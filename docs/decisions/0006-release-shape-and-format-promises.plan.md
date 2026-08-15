@@ -136,7 +136,7 @@ Six facts settled here rather than met mid-task:
 
 ## Phase 3 — documentation, register, close-out
 
-- [ ] **3.1 The two promises a user needs are written where a user reads them.** `README.md` gains a
+- [x] **3.1 The two promises a user needs are written where a user reads them.** `README.md` gains a
   Releases section: the two artifacts and their triples, the `.sha256` beside each, the macOS quarantine
   attribute and the one-line command that clears it, and — in ADR 0006 decision 5's terms — that the JSON
   documents' `schema_version` is a contract across releases while a cached table or ledger may be

@@ -119,3 +119,4 @@ RUSTDOCFLAGS
 smudge
 testpaths
 typecheck
+xattr
