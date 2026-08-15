@@ -10,6 +10,14 @@
 //! understand, and `provenance` precedes `result` for the same reason one step out: what produced a
 //! document is read before the document.
 //!
+//! # The earth model, and why it is published
+//!
+//! [`EarthModel`] attests **which sphere every distance in this document was measured on**. A radius, a
+//! great-circle distance and a cap's boundary are all that number's, so a consumer drawing the answer on
+//! another earth model is drawing a different figure — and drawing it without complaint, which is why the
+//! model is a field rather than a thing a renderer assumes. `geodesy.rs` owns the model
+//! ([`EARTH_RADIUS_KM`]); this block is a publication of that owner, so a consumer needs no copy of it.
+//!
 //! # Provenance, and what it does not attest
 //!
 //! [`Provenance`] is where a document's **identity** lives: which table it was answered from, and where
@@ -28,20 +36,26 @@
 //!
 //! # The documents
 //!
-//! | Payload | What it answers |
-//! | --- | --- |
-//! | [`DistanceReport`] | a great-circle distance between two coordinates |
-//! | [`GridSummary`] | the geometry of a declared grid |
-//! | [`TableBuildReport`] | what a summation table build settled, and where it went |
-//! | [`TableQueryReport`] | the population of one rectangle of a table |
-//! | [`CircleReport`] | the population inside one circle a caller named |
-//! | [`MostPopulousReport`] | the most populous circle of a fixed radius |
-//! | [`SmallestDocument`] | the smallest circle reaching one share |
-//! | [`SweepDocument`] | the smallest circle for each of a range of shares |
+//! `kind` is the envelope's `document` key, which is what a consumer branches on before it reads anything
+//! under `result`. [`Document`] is where a payload type declares it.
+//!
+//! | Payload | `kind` | What it answers |
+//! | --- | --- | --- |
+//! | [`DistanceReport`] | `distance` | a great-circle distance between two coordinates |
+//! | [`GridSummary`] | `grid` | the geometry of a declared grid |
+//! | [`TableBuildReport`] | `table-build` | what a summation table build settled, and where it went |
+//! | [`TableQueryReport`] | `table-query` | the population of one rectangle of a table |
+//! | [`CircleReport`] | `circle` | the population inside one circle a caller named |
+//! | [`MostPopulousReport`] | `most-populous` | the most populous circle of a fixed radius |
+//! | [`SmallestReport`] | `smallest-circle` | one smallest circle, with no ledger around it |
+//! | [`SmallestDocument`] | `smallest` | the smallest circle reaching one share |
+//! | [`SweepDocument`] | `sweep` | the smallest circle for each of a range of shares |
 //!
 //! The last two are documents rather than bare payloads because a ledger belongs to the run and not to any
 //! one circle, and because a payload meaning either "a circle" or "some circles" would leave a consumer
-//! branching on which it got.
+//! branching on which it got. `smallest-circle` is the circle inside the second of them, published on its
+//! own by a snapshot rather than by a command, and it carries a kind because a payload type that can be
+//! wrapped is one a consumer can be handed.
 //!
 //! **A [`SweepDocument`]'s `records` ascend by `target.share`.** That is part of the contract and held by
 //! construction, so a renderer plotting share against radius may read them in the order it gets them.
@@ -56,7 +70,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
+use crate::geodesy::{EARTH_RADIUS_KM, LatLon, RadiusKm, wrap_lon};
 use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
 use crate::search::{MostPopulous, SearchStats};
@@ -68,31 +82,67 @@ use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 /// whose meaning moved. A new field does not bump it.
 pub const SCHEMA_VERSION: u32 = 1;
 
+/// The kind a payload type is, published as the envelope's `document` key.
+///
+/// An associated constant rather than an argument to [`Envelope::new`], so a kind is a property of the
+/// payload type and no call site can wrap one payload under another's name. What the trait cannot do is
+/// make the kinds distinct — nothing checks two implementations for a constant they share — which is why
+/// `nine_payload_types_carry_nine_distinct_kinds` collects them into a set and counts it, and why a tenth
+/// payload type owes that test a line as well as the table above.
+pub trait Document {
+    /// What a consumer branches on before it reads anything under `result`.
+    const KIND: &'static str;
+}
+
+/// The earth model every distance in a document was measured on.
+///
+/// `model` names the shape and `radius_km` is that shape's one parameter, so a consumer reads the pair
+/// rather than inferring an ellipsoid from a missing field. Both are read from `geodesy.rs`, which is why
+/// `Self::SPHERE` is the only value this crate constructs.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct EarthModel {
+    model: &'static str,
+    radius_km: f64,
+}
+
+impl EarthModel {
+    /// The model `geodesy.rs` holds, read from its constant rather than restated.
+    const SPHERE: Self = Self {
+        model: "sphere",
+        radius_km: EARTH_RADIUS_KM,
+    };
+}
+
 /// Every document the program writes.
 ///
 /// `schema_version` is declared first because serde emits struct fields in declaration order, so a
-/// consumer reads the version before anything it might not understand. `provenance` precedes `result`
-/// for the same reason one step out: what produced a document is read before the document.
+/// consumer reads the version before anything it might not understand, and `document` second because
+/// which document this is decides what the rest of it means. `provenance` precedes `result` for the same
+/// reason one step out: what produced a document is read before the document.
 #[derive(Debug, Clone, Serialize)]
 pub struct Envelope<T> {
     schema_version: u32,
+    document: &'static str,
     tool: &'static str,
     tool_version: &'static str,
+    earth_model: EarthModel,
     #[serde(skip_serializing_if = "Option::is_none")]
     provenance: Option<Provenance>,
     result: T,
 }
 
-impl<T> Envelope<T> {
+impl<T: Document> Envelope<T> {
     /// A document with no provenance to declare, which is every command that reads no cached table.
     #[must_use]
     pub const fn new(result: T) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            document: T::KIND,
             // This crate, not whichever binary is writing: the format is the library's, and stamping
             // the caller's name would make one document's producer unidentifiable from another's.
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            earth_model: EarthModel::SPHERE,
             provenance: None,
             result,
         }
@@ -104,8 +154,10 @@ impl<T> Envelope<T> {
     pub const fn with_provenance(result: T, provenance: Provenance) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            document: T::KIND,
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            earth_model: EarthModel::SPHERE,
             provenance: Some(provenance),
             result,
         }
@@ -162,6 +214,10 @@ pub struct DistanceReport {
     great_circle_km: f64,
 }
 
+impl Document for DistanceReport {
+    const KIND: &'static str = "distance";
+}
+
 impl DistanceReport {
     #[must_use]
     pub fn new(from: LatLon, to: LatLon, great_circle_km: f64) -> Self {
@@ -185,6 +241,10 @@ pub struct GridSummary {
     lat_step: f64,
     spans_full_turn: bool,
     middle_row_cell_area_km2: f64,
+}
+
+impl Document for GridSummary {
+    const KIND: &'static str = "grid";
 }
 
 impl From<&Grid> for GridSummary {
@@ -238,6 +298,10 @@ pub struct TableBuildReport {
     cache: CacheFiles,
 }
 
+impl Document for TableBuildReport {
+    const KIND: &'static str = "table-build";
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CacheFiles {
     header: String,
@@ -282,6 +346,10 @@ pub struct TableQueryReport {
     rows: RowRange,
     columns: ColRange,
     population: f64,
+}
+
+impl Document for TableQueryReport {
+    const KIND: &'static str = "table-query";
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -365,6 +433,10 @@ pub struct CircleReport {
     share_of_total: f64,
 }
 
+impl Document for CircleReport {
+    const KIND: &'static str = "circle";
+}
+
 impl CircleReport {
     #[must_use]
     pub fn new(
@@ -427,6 +499,10 @@ pub struct MostPopulousReport {
     share_of_total: f64,
     tolerance_persons: f64,
     stats: SearchStatsReport,
+}
+
+impl Document for MostPopulousReport {
+    const KIND: &'static str = "most-populous";
 }
 
 impl MostPopulousReport {
@@ -553,6 +629,10 @@ pub struct SmallestReport {
     stats: SmallestStatsReport,
 }
 
+impl Document for SmallestReport {
+    const KIND: &'static str = "smallest-circle";
+}
+
 impl SmallestReport {
     #[must_use]
     pub fn new(found: &Smallest, grid: &Grid) -> Self {
@@ -615,6 +695,10 @@ pub struct SmallestDocument {
     circle: SmallestReport,
 }
 
+impl Document for SmallestDocument {
+    const KIND: &'static str = "smallest";
+}
+
 impl SmallestDocument {
     #[must_use]
     pub const fn new(ledger: LedgerReport, circle: SmallestReport) -> Self {
@@ -664,6 +748,10 @@ pub struct SweepDocument {
     records: Vec<SmallestReport>,
 }
 
+impl Document for SweepDocument {
+    const KIND: &'static str = "sweep";
+}
+
 impl SweepDocument {
     /// Ordering here rather than asking a caller for it, so the contract above holds by construction.
     /// `total_cmp` because a share is an ordinary finite proportion and a total order needs no case for
@@ -701,7 +789,7 @@ fn hexadecimal(digest: u64) -> String {
     clippy::cast_precision_loss
 )]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::convert::Infallible;
     use std::num::NonZeroU32;
 
@@ -713,6 +801,33 @@ mod tests {
     use crate::search::{self, Candidate};
     use crate::smallest::{self, RadiusLedger, Share};
     use crate::table::{Decimation, Table, build};
+
+    /// The three tests below are about the envelope and carry no payload, so the unit they wrap needs a
+    /// kind to satisfy the bound. `cfg(test)` because a document with no result is not one this crate
+    /// publishes, and an implementation outside the tests would say it could.
+    impl Document for () {
+        const KIND: &'static str = "envelope-fixture";
+    }
+
+    #[test]
+    fn nine_payload_types_carry_nine_distinct_kinds() {
+        // The trait cannot check this: two implementations sharing a constant compile. So the set is
+        // built and counted, which turns a copied `impl` block into a failure here rather than into two
+        // documents a consumer cannot tell apart. `()`'s kind is deliberately absent — it is a fixture,
+        // not a payload.
+        let kinds = BTreeSet::from([
+            DistanceReport::KIND,
+            GridSummary::KIND,
+            TableBuildReport::KIND,
+            TableQueryReport::KIND,
+            CircleReport::KIND,
+            MostPopulousReport::KIND,
+            SmallestReport::KIND,
+            SmallestDocument::KIND,
+            SweepDocument::KIND,
+        ]);
+        assert_eq!(kinds.len(), 9, "{kinds:?}");
+    }
 
     #[test]
     fn the_envelope_leads_with_its_schema_version() {

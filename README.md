@@ -9,8 +9,9 @@ is what makes the answer differ from the familiar viral versions. Also renders t
 **Status: early.** Grid geometry, spherical geodesy, raster ingest, the summation table with its
 on-disk cache, the circular kernels a circle is measured through, the population inside one such
 circle, the most populous circle of a fixed radius, and the smallest circle holding a given share of a
-population — resumable across runs — are implemented and tested. What is left is the command line over
-that search, and the maps.
+population — resumable across runs — are implemented and tested, with a command line over that search
+and maps rendered from what it publishes. What is left is validation against the published results, and
+the same question restricted to a single country.
 
 ## Getting started
 
@@ -172,6 +173,30 @@ resolution in each direction, so a radius here is good to about the width of one
 against the published 3300 km result is a later step's job, and this section is a demonstration that the
 commands run rather than a claim that they are right.
 
+### Maps
+
+Rendering opens one file — a document one of the commands above wrote — and nothing else. Not the
+raster, not the table, not the ledger:
+
+```sh
+search most-populous --radius-km 1000 --spacing 32 > out/most-populous.json
+mise run render -- --input out/most-populous.json --output out/most-populous.png
+mise run render -- --input out/most-populous.json --output out/globe.png --projection orthographic
+```
+
+`--projection` takes `plate-carree`, which is what the viral maps used, or `orthographic` centred on the
+circle. Every figure carries the CC BY citation the raster's licence requires, and a test fails if that
+wording drifts from [`data/README.md`](data/README.md#licence-and-attribution).
+
+**The circle is a spherical cap projected by PROJ, not a ring of coordinates.** So one crossing the
+antimeridian comes out in two pieces at either edge of the map, and one covering a pole closes across the
+top of it — where drawing the ring directly fills the complement in the first case and the wrong
+hemisphere in the second. Both of those look like maps, which is why they are tested rather than eyeballed.
+
+`--no-coastlines` is the only form that needs no network: coastlines are fetched from Natural Earth on
+first use and cached under `~/.local/share/cartopy/`. `mise run test:render` is the one test that draws a
+complete figure, kept out of CI for that reason.
+
 ### Watching a run
 
 Every command takes `--log-level`, the only control over what a run says about itself: `error`, `warn`,
@@ -232,6 +257,7 @@ about this copy is still unverified.
 | `crates/popcircles-cli/` | The `popcircles` binary — a client of the library |
 | `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
+| `typings/` | Type stubs for libraries shipping no `py.typed`, so pyright stays strict |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
 | `docs/ai/` | Per-task conventions: [platform](docs/ai/platform.md), [code](docs/ai/code.md), [application](docs/ai/application.md) |
 | `docs/decisions/` | Architecture decision records and their implementation plans |

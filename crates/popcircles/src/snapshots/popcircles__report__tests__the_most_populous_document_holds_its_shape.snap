@@ -4,8 +4,13 @@ expression: "Envelope::new(MostPopulousReport::new(&found, &grid, total))"
 ---
 {
   "schema_version": 1,
+  "document": "most-populous",
   "tool": "popcircles",
   "tool_version": "0.1.0",
+  "earth_model": {
+    "model": "sphere",
+    "radius_km": 6371.0088
+  },
   "result": {
     "centre": {
       "lat": -85.0,

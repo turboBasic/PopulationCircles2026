@@ -422,3 +422,37 @@ Identifiers are flat, sequential and never reused.
   the registry raster's own geotransform, and a dataset fine enough to fire this would bring a measurement
   of its own to scale it to. ADR 0007's alternatives already rule out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
+
+### FU-15 - cartopy is built from source because no cp314 wheel exists
+
+- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day ADR 0008 was written.
+  `uv pip install --only-binary :all: --python-version 3.14 cartopy` answers "all versions of cartopy have
+  no usable wheels", and a cold `uv sync --locked --reinstall-package cartopy` prints
+  `Building cartopy==0.25.0` and takes 25.55 s here.
+- **Condition** — that same command resolves. It is a one-line sweep with a yes-or-no answer, and it fires
+  the day cartopy publishes a cp314 wheel: nothing about this repository has to change for it to become
+  true, which is why the entry exists rather than a task. `uv pip install --only-binary :all:
+  --python-version 3.14 pydantic` is the contrast — that one resolves today, so the cost is cartopy's
+  alone.
+- **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
+  The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
+  outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
+  tell whether removing it costs 25 seconds a job or nothing at all. ADR 0008's Consequences carry the
+  same figure, so the entry firing is what licenses removing the step rather than guessing at it.
+
+### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
+
+- **Status** — `dormant` (2026-08-15): the registry holds one dataset, so one citation is the whole
+  mapping and a constant is indistinguishable from one.
+- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row. The sweep is the
+  count of registry entries in that file against the number of citations `scripts/render_map.py` holds:
+  one and one today. A second dataset makes `CITATION` the citation of whichever raster happens to have
+  been first, and a figure rendered from the other one then credits the wrong source while
+  `tests/test_render_map.py` still passes — the test asserts the constant appears in the registry, which
+  stays true of the wrong entry.
+- **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
+  choose between them. That second half is the reason this is an entry and not a task: `report`'s
+  `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
+  came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
+  fires this adds that field first, additively, and the entry is where the two halves are recorded
+  together.
