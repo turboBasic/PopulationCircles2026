@@ -74,6 +74,7 @@ STRUCTURE_EXEMPT_ROOTS = frozenset(
         ".taplo.toml",
         ".markdownlint-cli2.jsonc",
         "cspell.config.yaml",
+        ".cargo",
         ".cspell",
         ".vscode",
         "README.md",

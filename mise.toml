@@ -14,10 +14,6 @@ node = "24.19.0"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
-# Everything cargo generates goes under one gitignored directory, so the repository root stays readable.
-# Absolute: cargo resolves a relative target dir against the working directory, and a task run from a
-# crate subdirectory would put a second tree there.
-CARGO_TARGET_DIR = "{{config_root}}/build/target"
 
 [tasks.setup]
 description = "Install dependencies and git hooks"
@@ -104,7 +100,7 @@ description = "Lint rustdoc, broken intra-doc links are errors"
 env = { RUSTDOCFLAGS = "-D warnings" }
 run = [
   "cargo doc -p popcircles --no-deps --document-private-items",
-  'cargo doc -p popcircles-cli --no-deps --document-private-items --target-dir "$CARGO_TARGET_DIR/doc-cli"',
+  "cargo doc -p popcircles-cli --no-deps --document-private-items --target-dir {{config_root}}/build/target/doc-cli",
 ]
 
 [tasks."lint:python"]

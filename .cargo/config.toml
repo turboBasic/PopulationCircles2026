@@ -1,0 +1,6 @@
+# Cargo's own config rather than an environment variable, because this has to hold for a bare `cargo test`
+# typed in a subdirectory and not only inside a mise task. A relative `target-dir` here resolves against
+# this file's parent — the workspace root — so every invocation writes to the same place wherever it is run
+# from, which is what an env var carrying a relative path could not promise.
+[build]
+target-dir = "build/target"
