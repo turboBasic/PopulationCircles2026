@@ -327,7 +327,11 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-11 - The cache binds no grid geometry
 
-- **Status** — `due` (2026-08-14): met by this tree, and met by `table query` before #8 touched anything.
+- **Status** — `closed` (2026-08-15): [ADR 0007](decisions/0007-cache-identity-binds-the-whole-grid.md) is
+  the record the Fix below asks for, and its plan carried it into the tree. Both documents now embed one
+  flattened attestation over the digest, the dimensions, the factor and the whole geometry, at
+  `FORMAT_VERSION = 2` each. One departure from the Fix as written and one addition to it, plus a correction
+  to the Condition's own illustration — all three in the note beneath the Fix.
 - **Condition** — `struct Header` in `crates/popcircles/src/table/cache.rs` carries no origin and no step
   field while a command resolves a coordinate against a grid taken from flags. Two greps: `rg -n 'origin|step'
   crates/popcircles/src/table/cache.rs` naming nothing inside the `struct Header` block, and
@@ -345,6 +349,25 @@ Identifiers are flat, sequential and never reused.
   passing — at full resolution a rebuild is the raster read again. The entry names the record it needs and
   stops there deliberately: prescribing the change here would settle in a register what `docs/decisions/`
   owns.
+
+  **The geometry went into the header alone.** `Identity` holds a `Decimation`, which holds both grids, so
+  half of "in the header and in `Identity`" was already there and what narrowed the geometry to three
+  numbers was the header's field list and its `check` body. No caller's side moved.
+
+  **The radius ledger was in scope, which this entry does not say and issue #45 excluded.**
+  `crates/popcircles/src/smallest/cache.rs` spelled the same three numbers itself rather than embedding
+  `Identity`, so it inherited nothing from the header's fix, and it mints each probe's row and column back
+  onto the caller's declared grid: with the dimensions agreeing the mint succeeded and a resumed run
+  published a centre whose population was measured somewhere else. Its own `FORMAT_VERSION` moved too, and
+  the `version-bumps` hook gained what it could not express — a watched block whose shape governs two
+  constants.
+
+  **The Condition's illustration does not reproduce, and the count is four rather than six.** ADR 0007's
+  Context measures it: a grid 21600 rows deep at 1/120° spans exactly 180°, which pins its origin latitude
+  to the pole within the boundary tolerance, so `--origin-lat 0` is refused by `Grid::new` before any cache
+  is opened. Six is the count of `GridArgs`' flags; the header bound two of them and four went unchecked.
+  What was reachable was the origin's longitude, freely, and each step downward — and the reachable case is
+  not a typo but a half-turn shift of every column over identical width, height and steps.
 
 ### FU-12 - No gate compiles this for Apple silicon
 
@@ -380,3 +403,22 @@ Identifiers are flat, sequential and never reused.
   preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
   anyone who does not hold the account. Until then the honest form is the documented attribute, which is
   why the entry's condition is about a release existing rather than about the README's wording.
+
+### FU-14 - A dataset's grid step approaches the tolerance two grids are one within
+
+- **Status** — `dormant` (2026-08-15): the registry holds one dataset, at 0.008333° — six orders of
+  magnitude above the constant.
+- **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
+  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
+  resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
+  what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — ADR 0007
+  decision 3 compares the geometry within it while the dimensions compare exactly — so a cell small enough
+  to land in that gap makes a stale cache indistinguishable from the right one, which is the failure that
+  record exists to catch.
+- **Fix** — a record, not a smaller number chosen in passing. The constant is shared with the raster reader
+  by design (`grid.rs` says why a second copy would be two answers to one question), so tightening it for
+  the cache alone reintroduces exactly what that comment forbids, and tightening it for both changes what
+  rasters the reader accepts. What a record has to weigh is that 1e-9° is scaled to a measured rounding in
+  the registry raster's own geotransform, and a dataset fine enough to fire this would bring a measurement
+  of its own to scale it to. ADR 0007's alternatives already rule out the two shortcuts: exact bit equality
+  on the four numbers, and a per-caller tolerance.

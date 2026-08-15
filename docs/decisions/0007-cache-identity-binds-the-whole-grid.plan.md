@@ -5,7 +5,7 @@ created: 2026-08-15
 
 # Implementation plan — ADR 0007, one attestation keyed on the whole grid
 
-**Status: in progress (2026-08-15).** Carries [ADR 0007](0007-cache-identity-binds-the-whole-grid.md) into
+**Status: complete (2026-08-15).** Carries [ADR 0007](0007-cache-identity-binds-the-whole-grid.md) into
 the tree, which is the whole of issue #45. It invalidates every cache and every ledger in existence, which
 the ADR's Context prices and `README.md` already promises a release may do.
 
@@ -185,7 +185,7 @@ Eight facts settled here rather than met mid-task:
   is empty and `rg -n 'SCHEMA_VERSION: u32 = 1' crates/popcircles/src/report.rs` still matches, which is what
   proves this task changed a claim and not a format; `mise run lint:docs` clean.
 
-- [ ] **3.4 The register carries what this plan settled and what it left, #45's boxes are ticked, and this
+- [x] **3.4 The register carries what this plan settled and what it left, #45's boxes are ticked, and this
   plan is closed.** `FU-11` closed in [`../follow-ups.md`](../follow-ups.md) with the date and what closed
   it, naming the departure from its Fix as written: the geometry went into the header alone, because
   `Identity` already carried it. One new entry, with a condition a sweep can answer: `FU-14`, a registry
