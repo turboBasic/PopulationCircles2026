@@ -156,12 +156,18 @@ test is what stands between a seam artefact and a figure nobody checks.
   pydantic is not that cost and does not add a second one: it resolves under
   `uv pip install --only-binary :all: --python-version 3.14`, so it arrives as a wheel.
   `.gitattributes` gains `*.pyi text` — a new file type arrives in 2.2 — and `.cspell/project.txt`
-  gains the library and geospatial terms in the sections that hold them (`cartopy`, `pyproj`,
-  `shapely`, `matplotlib`, `geoaxes`, `PlateCarree`, `Orthographic`, `naturalearth`, `azimuthal`,
-  `equidistant`, `quad`, `savefig`).
-  Verify: `uv sync --locked` is clean and `uv sync --locked --reinstall-package cartopy` prints
-  `Building cartopy`; `mise run lint:workflows` and `mise run lint:cspell` pass; `mise run lint` is
-  green with no `noqa` added anywhere.
+  gains the library and geospatial terms cspell actually flags, in the sections that hold them. Which
+  terms those are is not knowable from here: `cartopy`, `ccrs`, `Carree`, `geoaxes` and `naturalearth`
+  are flagged, while `pyproj`, `shapely`, `matplotlib`, `Orthographic`, `azimuthal`, `equidistant`,
+  `quad` and `savefig` are in cspell's bundled dictionaries and adding them would be noise — the rule
+  in `platform.md` "Linting" is that a term it *flags* gets an entry. Whichever of them 1.1's own prose
+  reaches first arrives in that commit instead of this one.
+  Verify: `uv sync --locked` is clean, and `uv sync --locked --reinstall-package cartopy` prints
+  `Building cartopy` **against a cold cache** — with a warm `~/.cache/uv` it prints `Prepared 1 package`
+  and rebuilds nothing, so the build has to be provoked with `UV_CACHE_DIR` pointed at an empty
+  directory. That is the same warm-cache behaviour the `ci.yml` step above exists to buy, so a run that
+  reports `Prepared` is the feature working rather than the check failing; `mise run lint:workflows` and
+  `mise run lint:cspell` pass; `mise run lint` is green with no `noqa` added anywhere.
 
 - [x] **2.2** `typings/cartopy/` declares the six symbols this renderer uses — `crs.PlateCarree`,
   `crs.Orthographic`, `crs.AzimuthalEquidistant`, `crs.Globe`, `crs.Projection.project_geometry`
@@ -219,24 +225,33 @@ is a condition the repository can answer rather than a sentence that reads like 
   and the projection the viral maps used) or `orthographic` centred on the circle. It draws the cap
   through `add_geometries`, marks the centre, titles the figure from the document's own figures, and
   puts the CC BY citation in the footer. Every remaining pyright complaint is a per-line ignore
-  naming its rule and stating that matplotlib types the keyword arguments as `Unknown`; the
-  measurement says there are three of them, at `pyplot.figure`, `Figure.text` and `Figure.savefig`.
+  naming its rule and stating that matplotlib types the keyword arguments as `Unknown`. **Four of
+  them**: the measurement behind the three in the table above — `pyplot.figure`, `Figure.text` and
+  `Figure.savefig` — was taken over a renderer that did not mark the centre, and marking it is
+  `axes.plot`, a fourth matplotlib member typing its keyword arguments the same way. The count is
+  not a target to hit: what makes each one legitimate is that removing it produces an error, so
+  the number this task lands on is whatever survives that check.
   `mise.toml` gains a `render` task passing its arguments through, and its comment says why the task
   is in neither `lint` nor `ci`.
   Verify: `mise run render -- --input <a document written by mise run cli> --output tmp/map.png`
-  writes a PNG; `rg -n 'pyright: ignore' scripts/render_map.py` shows 3 lines, each with a reason;
-  `mise run typecheck` and `mise run lint:python` pass.
+  writes a PNG; `rg -n 'pyright: ignore' scripts/render_map.py` shows 4 lines, each naming its rule
+  and its reason, and stripping all four reports exactly 4 errors — one per line, which is what
+  proves none is decorative; `mise run typecheck` and `mise run lint:python` pass.
 
 - [x] **3.2** The attribution is checked rather than trusted: `tests/test_render_map.py` asserts the
-  citation constant appears in `data/README.md` with whitespace normalised, so the registry stays the
+  citation constant appears in `data/README.md`, so the registry stays the
   owner of the text and a drift between the two fails a test instead of shipping a figure that
-  credits nobody. The same module asserts the footer artist carries it, over a figure built without
+  credits nobody. Whitespace normalised is not enough on its own — the registry writes the citation as
+  a Markdown blockquote with emphasis and an autolink, and a figure draws it as prose, so comparing
+  them at all means discounting the `>`, `*` and `<` that only one of the two carries. The same module
+  asserts the footer artist carries it, over a figure built without
   coastlines. The one test that renders a full figure with coastlines is marked `network`, and
   `pyproject.toml` declares the marker and adds `-m "not network"` to `addopts`; `mise.toml` gains
   `test:render` for the marked set, with the comment `test:raster` carries.
   Verify: `uv run pytest` collects the suite with the marked test deselected and
   `uv run pytest -m network` collects exactly 1; `uv run pytest -m network` passes on a machine with
-  network; `rg -n 'CIESIN' scripts/ tests/` names the constant and the assertion only.
+  network; `rg -n 'CIESIN' scripts/ tests/` names the constant and nothing else — the test importing it
+  rather than spelling the citation a second time is the point, so one hit is the passing result.
 
 - [x] **3.3** The documentation the change invalidated moves with it. `application.md` step 5 says
   what rendering is now — the three modules, the azimuthal cap, and that the renderer reads the
