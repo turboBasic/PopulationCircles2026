@@ -1,12 +1,15 @@
 [package]
 name = "popcircles"
-version = "0.0.0"
+version.workspace = true
 description = "Find the smallest circle on Earth containing a given share of world population"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+# ADR 0006 decision 1: a release is a tag and attached binaries, and no registry. Enforced rather
+# than intended, because `cargo publish` in either crate directory would otherwise attempt one.
+publish = false
 
 [lints]
 workspace = true

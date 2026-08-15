@@ -69,7 +69,7 @@ Six facts settled here rather than met mid-task:
 
 ## Phase 1 — the manifests and what the binary presents
 
-- [ ] **1.1 One workspace version at `0.1.0`, inherited by both crates, and neither is publishable.**
+- [x] **1.1 One workspace version at `0.1.0`, inherited by both crates, and neither is publishable.**
   `version = "0.1.0"` in `[workspace.package]`, `version.workspace = true` in both crate manifests,
   `publish = false` in both. Accept the ten snapshots the bump rewrites in the same commit — the diff is
   `tool_version` and nothing else, and a snapshot whose diff touches another line is a finding to report

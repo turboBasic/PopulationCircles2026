@@ -5,7 +5,7 @@ expression: "Envelope::new(SmallestReport::new(&found, &grid))"
 {
   "schema_version": 1,
   "tool": "popcircles",
-  "tool_version": "0.0.0",
+  "tool_version": "0.1.0",
   "result": {
     "radius_km": 1572,
     "centre": {

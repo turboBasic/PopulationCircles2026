@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "popcircles"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "insta",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "popcircles-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
