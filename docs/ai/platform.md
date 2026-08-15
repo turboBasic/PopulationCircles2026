@@ -210,6 +210,10 @@ permission exists to make unnecessary, not the one it grants.
   call rather than a condition on the event
   ([ADR 0010](../decisions/0010-a-scenario-workflow-wraps-a-shared-build.md)). `ci.yml` is the stated
   exception, because `main`'s ruleset matches its required checks by the names a call would prefix.
+- A comment in a workflow explains the configuration beside it and nothing else. No ADR, issue or
+  follow-up citation, no account of what the file used to be, and no sentence a reader has to unpack
+  before it parses — `docs/decisions/` owns the reasoning, and a citation in a YAML file is a second
+  place it goes stale. This narrows [`code.md`](code.md) "Comments and docs" for workflows only.
 - Drive CI through mise tasks so what CI runs and what `mise run ci` runs cannot drift apart.
 - Lint, typecheck, test only.
 - Secrets via CI environment secrets or OIDC.
