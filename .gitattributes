@@ -2,6 +2,7 @@
 
 *.rs text
 *.py text
+*.pyi text
 *.toml text
 *.md text
 *.yml text

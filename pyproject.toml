@@ -13,9 +13,14 @@ package = false
 
 [dependency-groups]
 dev = [
+  "cartopy>=0.25.0",
+  "matplotlib>=3.11.1",
+  "pydantic>=2.13.4",
+  "pyproj>=3.7.2",
   "pyright>=1.1.407",
   "pytest>=9.0.2",
   "ruff>=0.16.2",
+  "shapely>=2.1.2",
 ]
 
 [tool.ruff]

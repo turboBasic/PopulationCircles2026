@@ -148,10 +148,13 @@ withdrawn later.
 parser with three refusals. 2.4 is the one task that fails by drawing a plausible wrong circle, and its
 test is what stands between a seam artefact and a figure nobody checks.
 
-- [ ] **2.1** The four rendering dependencies are in `[dependency-groups].dev` with `uv.lock`
-  updated in the same change, and the cost the measurements found is paid where it shows: `ci.yml`
+- [x] **2.1** The five Python dependencies are in `[dependency-groups].dev` with `uv.lock`
+  updated in the same change — the four rendering libraries, plus `pydantic` for the boundary 2.3
+  parses at — and the cost the measurements found is paid where it shows: `ci.yml`
   caches `~/.cache/uv` keyed on `uv.lock`, because without it every CI run rebuilds cartopy from
   source. The comment beside that step names the missing cp314 wheel as the reason, not "speed".
+  pydantic is not that cost and does not add a second one: it resolves under
+  `uv pip install --only-binary :all: --python-version 3.14`, so it arrives as a wheel.
   `.gitattributes` gains `*.pyi text` — a new file type arrives in 2.2 — and `.cspell/project.txt`
   gains the library and geospatial terms in the sections that hold them (`cartopy`, `pyproj`,
   `shapely`, `matplotlib`, `geoaxes`, `PlateCarree`, `Orthographic`, `naturalearth`, `azimuthal`,
@@ -171,13 +174,19 @@ test is what stands between a seam artefact and a figure nobody checks.
   Verify: `mise run typecheck` passes; `mise run lint:docs` passes with `typings/` tracked;
   `rg -n 'Any' typings/` returns nothing.
 
-- [ ] **2.3** `scripts/circle_document.py` turns a document into frozen dataclasses, refusing what it
-  cannot honestly draw: a `schema_version` above the one it knows, an unrecognised `document` kind,
-  and an `earth_model.model` that is not `"sphere"`. It ignores keys it does not know, which is the
-  format's own instruction to consumers, and it exposes the three circle-bearing kinds — `circle`,
+- [ ] **2.3** `scripts/circle_document.py` turns a document into frozen pydantic models, refusing what
+  it cannot honestly draw: a `schema_version` above the one it knows, an unrecognised `document` kind,
+  and an `earth_model.model` that is not `"sphere"`. Frozen models rather than frozen dataclasses
+  because every one of those three refusals is a validation a dataclass performs nowhere, so the
+  hand-written alternative is this library's own job done worse — `model_config` carries
+  `frozen=True` and `extra="ignore"`, the second being the format's own instruction to consumers
+  (`report.rs` "Growth") rather than a convenience. The kind is a `Literal` over the nine
+  `Document::KIND` strings and the model is `"sphere"` the same way, so a refusal is a schema fact and
+  not a branch someone remembered to write. It exposes the three circle-bearing kinds — `circle`,
   `most-populous`, `smallest` — as one `Circle` with centre, radius, population and share, plus the
   document's radius in kilometres. `tests/test_circle_document.py` builds each of the three from a
-  dictionary and asserts the three refusals name the field they refused on.
+  dictionary and asserts each refusal names the field it refused on, read off
+  `ValidationError.errors()`'s `loc` rather than matched against a message string.
   Verify: `uv run pytest tests/test_circle_document.py` passes with at least 6 tests, and no fixture
   in it opens a file; `mise run typecheck` passes.
 
