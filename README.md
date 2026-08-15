@@ -98,6 +98,11 @@ arc-second resolution — CIESIN / Columbia University, distributed by NASA SEDA
 it; [`data/README.md`](data/README.md#provenance) holds the citation, the grid details, and what
 about this copy is still unverified.
 
+**It is not in a release and not in a plain clone.**
+[Obtaining it](data/README.md#obtaining-it) is the download from NASA Earthdata — which needs a free
+login — and the extract, rename and checksum check that turn the granule into the file every command
+here expects.
+
 ## Layout
 
 | Path | What it is |
@@ -137,7 +142,7 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
 [ci]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml/badge.svg?branch=main
-[gpw]: https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11
+[gpw]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
 [gpw-doi]: https://doi.org/10.7927/H4PN93PB
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/turboBasic/PopulationCircles2026

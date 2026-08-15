@@ -42,15 +42,50 @@ changed.
 The file is **[Gridded Population of the World, Version 4.11 (GPWv4.11): Population Count Adjusted
 to Match the 2015 Revision of UN WPP Country Totals, Revision 11][gpw-adj]**, year **2020**, 30
 arc-second GeoTIFF — CIESIN, Columbia University, distributed by NASA SEDAC, DOI
-[10.7927/H4PN93PB](https://doi.org/10.7927/H4PN93PB).
+[10.7927/H4PN93PB](https://doi.org/10.7927/H4PN93PB). SEDAC's own `sedac.ciesin.columbia.edu` host
+is gone; the DOI is the route that survived it, and resolves to the catalogue entry above.
 
 It is the UN WPP-adjusted variant, not the unadjusted [Population Count][gpw-raw]: those differ
-only in values, and SEDAC catalogues their maxima as 602 380 and 627 597 respectively.
+only in values, and their catalogued maxima are 602 380 and 627 597 respectively — the measured
+`Largest cell` above is what identifies this copy as the adjusted one.
 
-The file itself claims none of this — its `GDALMetadata` is generic and the name it arrived with,
-`NASA2020POPDATA.tif`, came from the upstream project. Still open: which SEDAC release this copy
-came from, and whether it was modified after download. The checksum above is of our copy; compare it
-against a fresh download from the landing page before publishing a result.
+**The file itself claims none of this.** Its `GDALMetadata` is generic, the name above is this
+project's own, and the copy here reached the repository without a recorded download. What ties it to
+the dataset named is measurement: the grid, extent, nodata sentinel and maximum in the registry all
+match, and nothing else does. Still open is whether it is byte-identical to a fresh download — the
+checksum above is of *our* copy, and [Obtaining it](#obtaining-it) is how to get one that is not.
+
+#### Obtaining it
+
+The raster is not in a normal clone and is not attached to a release. Download it from the source
+above; the whole of it is four commands, and the last one is the point.
+
+**It needs a free [NASA Earthdata Login][urs-new].** The archive is behind URS OAuth, so an
+anonymous request gets a 401 and a redirect rather than the file. A browser download from the
+[dataset's granules in Earthdata Search][gpw-search] is the simplest route — pick the 2020, 30
+arc-second GeoTIFF granule. For `curl` or `wget`, NASA documents the [cookie and netrc
+setup][urs-curl] the redirect needs.
+
+The granule is a ~405 MB zip. Extract just the raster, and rename it to what this repository's
+registry, tests and examples expect:
+
+```sh
+unzip -j <granule>.zip '*.tif' -d data/population/
+mv data/population/gpw_v4_population_count_*_2020_30_sec.tif \
+   data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
+shasum -a 256 data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
+```
+
+The zip carries one `.tif` per year, so the glob is what selects 2020 rather than an assumption
+about the name inside.
+
+**Check the last line against the `SHA-256` in the registry.** A match means the copy this project
+measured every figure above from is the copy the archive serves. A mismatch is a finding, not a
+broken download: it means the two differ, and the registry — measured from ours — is what would then
+need re-measuring. Say so rather than working around it.
+
+`mise run data:pull` fetches the copy already committed here instead, for anyone with access to the
+LFS objects; [Fetching](#fetching) covers that path.
 
 #### Licence and attribution
 
@@ -62,12 +97,15 @@ so any published map or figure derived from this raster carries the citation:
 > Revision of UN WPP Country Totals, Revision 11.* Palisades, NY: NASA Socioeconomic Data and
 > Applications Center (SEDAC). <https://doi.org/10.7927/H4PN93PB>
 
-The original download requires a free NASA Earthdata login; the dataset is also mirrored in the
-Google Earth Engine catalog as `CIESIN/GPWv411/GPW_UNWPP-Adjusted_Population_Count`.
+The dataset is also mirrored in the Google Earth Engine catalog as
+`CIESIN/GPWv411/GPW_UNWPP-Adjusted_Population_Count`.
 
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
-[gpw-adj]: https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11
-[gpw-raw]: https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-rev11
+[gpw-adj]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
+[gpw-raw]: https://doi.org/10.7927/H4JW8BX5
+[gpw-search]: https://search.earthdata.nasa.gov/search/granules?p=C3540909447-ESDIS
+[urs-curl]: https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget
+[urs-new]: https://urs.earthdata.nasa.gov/users/new
 
 ## Fetching
 
