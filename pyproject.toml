@@ -51,7 +51,7 @@ typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
-# tests/ imports scripts/lint_docs.py directly, the same resolution pytest's `pythonpath` gives it.
+# tests/ imports the scripts/ modules directly, the same resolution pytest's `pythonpath` gives them.
 extraPaths = ["scripts"]
 
 [tool.pytest.ini_options]

@@ -64,7 +64,11 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-03 - Nothing couples a wire-format change to a version bump
 
-- **Status** — `dormant`.
+- **Status** — `closed` (2026-08-15): the `version-bumps` prek hook, `scripts/lint_version_bumps.py`, is
+  the tripwire the Fix below asks for, and it carries `FU-06`'s two further pairs in the one hook that
+  entry prescribes. Closed while still dormant — the sweep is clean, four commits touch the directory and
+  every one is an addition — with three departures from the Fix as written, each measured; see the note
+  beneath it.
 - **Condition** — a commit **modifies** an existing file under `crates/popcircles/src/snapshots/`
   without changing `SCHEMA_VERSION` in `crates/popcircles/src/report.rs`. The sweep is
   `git log --diff-filter=M --format=%H -- crates/popcircles/src/snapshots/`, and for each commit it
@@ -79,6 +83,23 @@ Identifiers are flat, sequential and never reused.
   the directory adds the snapshots, so the sweep is clean, and a staged edit to one of them fires the
   check. It cannot judge whether a shape change was breaking, which makes it a tripwire of the same
   kind as `geo-data-lfs` rather than a lint of its own.
+
+  **Three departures from that Fix, all measured on 2026-08-15.** What fires the snapshot half is a JSON
+  key HEAD's snapshot published and the staged one does not, rather than any modification: `report.rs`
+  rules the format additive, so a new field rewrites an existing snapshot while owing no bump, and a
+  tripwire firing on that would send an author with nothing to bump to `--no-verify` — the hole `FU-05`
+  closed. A renamed or removed field always drops a key, and a deleted snapshot drops all of them. Second,
+  `always_run: true` rather than `files:`: on prek 0.4.13 a `files:`-gated hook is skipped when the only
+  staged change is a deletion, so a withdrawn payload type would pass unseen. Third, the bump is read as
+  the constant's value in HEAD against its value in the index rather than as a diff naming the constant,
+  because editing the comment above it names it too.
+
+  Two limits, since neither is visible from a green commit. The escape for a change no reader can misread
+  is `SKIP=version-bumps`, which prek honours per-hook, rather than `--no-verify`. And there is no
+  `mise run lint:` half: the check reads the index against HEAD, so on a CI checkout nothing is staged and
+  an `--all-files` run would report a gate that had looked at nothing. The hook is the whole of it, bar the
+  trigger names, which `tests/test_lint_version_bumps.py` pins against the tree — so a watched block
+  renamed out from under the check fails in CI even though the check itself never runs there.
 
 ### FU-04 - Diagnostics have no facade
 
@@ -141,7 +162,10 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-06 - Nothing couples a cache header change to a format version bump
 
-- **Status** — `dormant`.
+- **Status** — `closed` (2026-08-15): the `version-bumps` hook is `FU-03`'s hook carrying this entry's two
+  further pairs, which is the one hook the Fix below asks for. Closed while still dormant: the sweep is
+  clean, one commit touches each cache file and each adds it with its constant. `FU-03` holds the
+  three departures common to both halves; two more are this entry's, in the note beneath the Fix.
 - **Condition** — a commit changes the fields of `Header` in `crates/popcircles/src/table/cache.rs`
   without changing `FORMAT_VERSION` in the same file. The sweep is
   `git log --format=%H -- crates/popcircles/src/table/cache.rs`, and for each commit it names,
@@ -164,6 +188,13 @@ Identifiers are flat, sequential and never reused.
   The radius ledger is the same kind of file as the table header rather than the same kind as a snapshot,
   which is why it joins this entry: a run that resumes reads the document *back*, so a field added to it
   without a bump leaves an older build resuming from radii it has half understood.
+
+  **Two departures beyond `FU-03`'s three, measured the same day.** The trigger is the whole field set of
+  each named block in HEAD against its field set in the index, rather than a field line read out of a diff
+  hunk — the same answer where a diff is readable, and no `struct Header {` block boundary to find inside
+  one. And a watched block that is not there under that name at all fires the check too, for
+  `single-unsafe-allow`'s reason: a rename would otherwise leave the tripwire watching nothing and saying so
+  nowhere.
 
 ### FU-07 - A radius in kilometres is a bare f64 in more than one signature
 

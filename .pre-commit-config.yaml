@@ -151,3 +151,18 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      # FU-03 and FU-06 (docs/follow-ups.md). A tripwire and not a lint: it cannot judge whether a
+      # shape change was breaking, only that one landed under an unchanged version number.
+      #
+      # always_run rather than gated on the three trigger paths, measured on prek 0.4.13: a `files:`
+      # hook is skipped when the only staged change is a deletion, and a deleted snapshot is a whole
+      # payload type withdrawn. There is no `mise run lint:` half for the reason the others have one —
+      # it reads the index against HEAD, so on a CI checkout, where nothing is staged, an --all-files
+      # run would pass without checking anything and report a gate that had not run.
+      - id: version-bumps
+        name: a moved format shape bumps its version
+        entry: uv run python scripts/lint_version_bumps.py
+        language: system
+        always_run: true
+        pass_filenames: false
