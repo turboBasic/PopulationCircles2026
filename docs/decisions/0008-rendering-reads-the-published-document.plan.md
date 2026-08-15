@@ -5,7 +5,7 @@ created: 2026-08-15
 
 # Implementation plan — ADR 0008, map rendering from the published document
 
-**Status: in progress (2026-08-15).** Carries issue #9, the ninth step of roadmap #11 and step 5 of
+**Status: complete (2026-08-15).** Carries issue #9, the ninth step of roadmap #11 and step 5 of
 `application.md` "Approach": the results rendered as maps in Python, from the published document and
 nothing else. It is the sibling of [ADR 0008](0008-rendering-reads-the-published-document.md), whose
 four rulings every task below implements. Task 1.1 wrote that record and moved this file here from
@@ -251,7 +251,7 @@ is a condition the repository can answer rather than a sentence that reads like 
   README.md` shows both updated; the two entries are the last two in `docs/follow-ups.md` and each
   names a command or a file.
 
-- [ ] **3.4** The plan is closed: the status line reads `**Status: complete (YYYY-MM-DD).**`,
+- [x] **3.4** The plan is closed: the status line reads `**Status: complete (YYYY-MM-DD).**`,
   Follow-ups holds `FU-15` and `FU-16` and nothing else, and the four checkboxes in issue #9's body
   are ticked along with #9's box in the roadmap issue #11. The issue itself is left open — the PR's
   `Closes #9` is what closes it, per `platform.md` "Git".
@@ -260,4 +260,4 @@ is a condition the repository can answer rather than a sentence that reads like 
 
 ## Follow-ups
 
-`FU-15`, `FU-16`.
+Written by 3.3, in [`../follow-ups.md`](../follow-ups.md): `FU-15`, `FU-16`.
