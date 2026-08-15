@@ -132,7 +132,6 @@ GPWv
 JRC
 NASA
 Palisades
-POPDATA
 SEDAC
 unwpp
 WPP

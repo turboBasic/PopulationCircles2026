@@ -62,7 +62,9 @@ circle, as a country is the spec error
 [the application doc](docs/ai/application.md#what-this-program-does) names.
 
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
-Building needs the raster, so `mise run data:pull` first.
+Building needs the raster, so `mise run data:pull` first — or, without access to this repository's LFS
+objects, [Obtaining it](data/README.md#obtaining-it), which is the download from NASA Earthdata and the
+rename that produces the path spelled above.
 
 ## Circles
 
