@@ -101,7 +101,7 @@ enough to admit a wrong answer looks exactly like one that works.
 
 ## Phase 3 — the documentation and the close
 
-- [ ] **3.1** The human layer stops claiming this work is outstanding. `README.md`'s opening sentence and
+- [x] **3.1** The human layer stops claiming this work is outstanding. `README.md`'s opening sentence and
   its Usage section both say validation against the published result is a later step; both become the
   result, with its date and the four sources of the divergence named in one sentence each, sending a reader
   to ADR 0009 for the measurements. The new tasks appear where the other tasks are documented.

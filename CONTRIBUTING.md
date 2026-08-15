@@ -20,6 +20,19 @@ mise run ci         # all of the above — what CI runs
 mise run build      # the release binary, at target/release/popcircles
 ```
 
+Deselected from `test` and `ci`, because each needs the raster, time, or both — `mise.toml`'s comment on
+each says which:
+
+```sh
+mise run test:validate  # the real raster, end to end, against the published result
+mise run bench          # kernel construction and circle evaluation
+mise run bench:table    # the table build — writes 7.5 GB, which is why it is separate
+```
+
+A benchmark asserts nothing and no gate compares it against a baseline, so its figures are read rather
+than checked; the ones taken on one machine are recorded in
+[ADR 0009](docs/decisions/0009-validation-brackets-cheap-and-certifies-dear.md).
+
 Each task's description in `mise.toml` names what it actually runs; `mise run ci` is the check to
 run before opening a PR. Hooks run through
 [prek](https://github.com/j178/prek), not pre-commit; the config keeps pre-commit's filename and

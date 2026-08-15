@@ -10,8 +10,9 @@ is what makes the answer differ from the familiar viral versions. Also renders t
 on-disk cache, the circular kernels a circle is measured through, the population inside one such
 circle, the most populous circle of a fixed radius, and the smallest circle holding a given share of a
 population — resumable across runs — are implemented and tested, with a command line over that search
-and maps rendered from what it publishes. What is left is validation against the published results, and
-the same question restricted to a single country.
+and maps rendered from what it publishes. The answer for half the world has been run against the real
+raster at full resolution and checked against the published prior art ([Validation](#validation)). What
+is left is the same question restricted to a single country.
 
 ## Getting started
 
@@ -168,10 +169,10 @@ $ search sweep --from 10 --to 50 --step 20 --spacing 32 --ledger out/radii.json
 A ledger describing another table is refused rather than resumed from, which is why there is no way to
 turn it off.
 
-**These figures are a decimated table's, not the answer.** The 5 arcmin grid is a tenth of the raster's
-resolution in each direction, so a radius here is good to about the width of one of its cells. Comparing
-against the published 3300 km result is a later step's job, and this section is a demonstration that the
-commands run rather than a claim that they are right.
+**These figures are a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
+each direction, so a radius here is good to about the width of one of its cells — which for half the
+world turns out to be no error at all. [Validation](#validation) is where that was checked at full
+resolution.
 
 ### Maps
 
@@ -211,6 +212,27 @@ to a file draws none — the meter is silent when stderr is not a terminal. Both
 stdout stays exactly one JSON document at every level.
 
 `mise run cli -- --help` has the full command and flag reference.
+
+## Validation
+
+Half the world's population — half of this raster's own 7 757 982 599 persons — is held by a circle of
+**3 360 km** centred at 28.84 N, 100.66 E, in western Yunnan. Measured 2026-08-15 on the full 30
+arc-second grid, and it is a bracket rather than an estimate: 3 360 km reaches half by 655 480 persons and
+3 359 km falls 75 397 short. Both were computed, and the summation slack between them is 0.2 of a person.
+
+The published prior art is Danny Quah's ~3 300 km, and the [Valeriepieris circle][valeriepieris] before
+it. **The 60 km is explained rather than tuned away**, by four things and no defect:
+
+- the raster is 2020 and the published figures are earlier, over a world 4% smaller;
+- half of *this* dataset is not half of the world, and the target is always the dataset's own total;
+- distances here are great-circle arcs on a sphere of 6 371.0088 km, published in every document's
+  `earth_model`;
+- the answer is the best cell centre, not the best point — and at 30 arc-seconds that mesh is 926 m.
+
+[ADR 0009](docs/decisions/0009-validation-brackets-cheap-and-certifies-dear.md) holds the measurements,
+including what the search actually spends its time on: at full resolution it is **6.5% CPU** and the rest
+is page faults against a 7.5 GB table. `mise run test:validate` is the end-to-end run against the real
+raster, and it skips with a message when the raster has not been fetched.
 
 ## Releases
 
