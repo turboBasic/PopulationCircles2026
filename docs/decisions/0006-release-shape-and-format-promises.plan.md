@@ -111,7 +111,7 @@ Six facts settled here rather than met mid-task:
   lock file, and the edit reverts clean; `rg -n 'mise run build' CONTRIBUTING.md` matches inside "The loop";
   `mise run lint:docs` stays clean.
 
-- [ ] **2.2 A release workflow builds both targets on a `v*` tag, gated on the tag agreeing with the
+- [x] **2.2 A release workflow builds both targets on a `v*` tag, gated on the tag agreeing with the
   manifest, and publishes from one job.** `on: push: tags: ['v*']`, `GIT_LFS_SKIP_SMUDGE: 1` at workflow
   level, a `timeout-minutes` on every job, and `permissions: contents: write` on the publishing job and
   nothing wider. Three jobs, ordered by `needs` rather than by position in the file, because a gate a
