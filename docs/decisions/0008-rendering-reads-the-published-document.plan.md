@@ -124,7 +124,7 @@ withdrawn later.
   `"radius_km": 6371.0088`; `rg -n '6371' crates/ --glob '!*.snap'` still names `geodesy.rs` only;
   `prek run --all-files version-bumps` passes with `SCHEMA_VERSION` unchanged at 1.
 
-- [ ] **1.3** `Envelope` publishes which document it is, as a `document` key emitted directly after
+- [x] **1.3** `Envelope` publishes which document it is, as a `document` key emitted directly after
   `schema_version` — a consumer branches on the kind before reading anything under `result`. A
   `Document` trait with `const KIND: &'static str`, implemented for the nine payload types, so no call
   site passes a string and a kind is a property of its type rather than of whoever wrapped it. The trait
