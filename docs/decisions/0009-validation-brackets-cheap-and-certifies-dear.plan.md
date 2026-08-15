@@ -5,7 +5,7 @@ created: 2026-08-15
 
 # Implementation plan — ADR 0009, validation against the published result and the benchmark harness
 
-**Status: in progress (2026-08-15).** Carries issue #10, the tenth and last step of roadmap #11: the
+**Status: complete (2026-08-15).** Carries issue #10, the tenth and last step of roadmap #11: the
 comparison against the published prior art, the gated end-to-end run against the real raster, the
 benchmarks, and the accuracy note. It is the sibling of
 [ADR 0009](0009-validation-brackets-cheap-and-certifies-dear.md), whose five rulings the tasks below
@@ -117,7 +117,7 @@ enough to admit a wrong answer looks exactly like one that works.
   Verify: `rg -n 'FU-08' docs/` shows the note dated 2026-08-15 and the status still `dormant`; the new
   entry is the last in the register and names a command.
 
-- [ ] **3.3** The plan is closed: the status line reads `**Status: complete (2026-08-15).**`, Follow-ups
+- [x] **3.3** The plan is closed: the status line reads `**Status: complete (2026-08-15).**`, Follow-ups
   holds the identifiers 3.2 wrote, and the four boxes in issue #10's body are ticked along with #10's box in
   roadmap #11. The issue is left open — the PR's `Closes #10` closes it, per `platform.md` "Git". The
   spacing finding is a comment on #10 rather than a silent correction, because it contradicts a proposal
