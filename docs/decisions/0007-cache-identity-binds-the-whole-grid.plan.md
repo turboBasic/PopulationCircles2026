@@ -135,7 +135,7 @@ Eight facts settled here rather than met mid-task:
 
 ## Phase 2 — the ledger on the same attestation
 
-- [ ] **2.1 The ledger document is the attestation, at its own `FORMAT_VERSION = 2`, and its version is read
+- [x] **2.1 The ledger document is the attestation, at its own `FORMAT_VERSION = 2`, and its version is read
   before the document.** `Document` declares `format_version`, the flattened attestation, then `radii`;
   `Document::check` is the attestation's check and nothing else; `open_or_empty` parses the version-only
   struct first, as 1.2 does. `LedgerError`'s four per-ground variants collapse into one carrying `Mismatch`,
