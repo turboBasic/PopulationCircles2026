@@ -14,6 +14,7 @@ codesign
 iostat
 commitizen
 cspell
+flycheck
 mise
 notarytool
 popcircles
