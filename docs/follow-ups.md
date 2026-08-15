@@ -387,7 +387,9 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-12 - No gate compiles this for Apple silicon
 
-- **Status** — `due` (2026-08-15): met the moment `.github/workflows/release.yml` landed.
+- **Status** — `due` (2026-08-15): met the moment `.github/workflows/release.yml` landed. **`due` here is a
+  standing accepted gap and not queued work**, which is the one place this register's statuses can mislead —
+  see the note under the Fix.
 - **Condition** — a release job builds a macOS artifact while no gate ever compiles for that target. Two
   greps: `rg -n 'macos' .github/workflows/release.yml` matching, and `rg -n 'runs-on|macos'
   .github/workflows/ci.yml` naming `ubuntu-latest` and nothing else. So the first time this code is compiled
@@ -399,6 +401,17 @@ Identifiers are flat, sequential and never reused.
   did not take it: the cost is a second runner on every pull request rather than on every tag, which is why
   this is an entry and not a task. What would move it is evidence the gap bites — a release leg failing on
   macOS where the Linux leg passed, which is a fact a run either shows or does not.
+
+  **The Fix above is declined rather than pending, and #50 is where the evidence comes from instead**
+  (2026-08-15, the repository owner's ruling). `ci.yml` stays `ubuntu-latest` and macOS is compiled at
+  release time only: a second runner on every pull request buys less than the same evidence asked for on
+  demand. So this entry is not waiting for someone to notice it, and a later reader proposing `macos-latest`
+  is reopening a decision rather than discharging an obligation.
+
+  What #50 changes about the Condition is nothing — it is a command a person runs, not a gate, so the two
+  greps keep matching and this entry keeps standing. What it changes is the cost of the gap: the first macOS
+  compile of a tree stops being the tag someone is trying to ship. The evidence the paragraph above names
+  becomes available before a release rather than during one, which is the whole of the mitigation.
 
 ### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
 
