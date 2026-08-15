@@ -238,7 +238,7 @@ is a condition the repository can answer rather than a sentence that reads like 
   `uv run pytest -m network` collects exactly 1; `uv run pytest -m network` passes on a machine with
   network; `rg -n 'CIESIN' scripts/ tests/` names the constant and the assertion only.
 
-- [ ] **3.3** The documentation the change invalidated moves with it. `application.md` step 5 says
+- [x] **3.3** The documentation the change invalidated moves with it. `application.md` step 5 says
   what rendering is now — the three modules, the azimuthal cap, and that the renderer reads the
   document and the earth model it publishes — and its "Approach" paragraph names `report`'s two new
   fields. `README.md` gains the render task under "Usage" and the `typings/` row under "Layout".

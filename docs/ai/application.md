@@ -47,7 +47,7 @@ quiet workaround.
 
 ## Approach
 
-Step 5 is a target rather than existing code. Steps 1 to 4 and the ground they stand on are one
+Steps 1 to 4 and the ground they stand on are one
 library crate, `crates/popcircles/`, with `geodesy` holding the earth model, longitude wrapping,
 great-circle distance, the angle an arc subtends and the checked radius a circle is asked for,
 `grid` holding the raster's geometry — the checked
@@ -68,7 +68,9 @@ distance across one, and the level loop that prunes a rectangle or halves it; `s
 search over radius — the checked share a circle is asked for, the radius at which a circle is the whole
 grid, the climb and bisection over whole kilometres, the slack inside which the comparison between two
 radii is uncertain, and the ledger seam a resumed run reads; and `report` holding the wire format — the
-versioned envelope, the provenance a document names its table by, and one payload type per question a
+versioned envelope, the earth model every distance in a document was measured on, the kind a payload
+type declares so a consumer branches before reading under `result`, the provenance a document names its
+table by, and one payload type per question a
 command answers, which owns what a consumer of that format needs to know. The build is the
 `RasterSource` trait's first caller, the circle is `place`'s, the search is the circle's, and the search
 over radius is the search's.
@@ -107,7 +109,17 @@ names what is inside it.
    probed radii it cannot separate rather than asserting a minimality it has not proved — a floor on that
    span, since the climb doubles and the radii between two probes were never measured
    ([ADR 0005](../decisions/0005-ambiguous-minimality-is-reported.md)).
-5. **Rendering.** Python, from the search results, kept out of the Rust search path entirely.
+5. **Rendering.** Python, from the published document and nothing else, kept out of the Rust search
+   path entirely. Three modules under `scripts/`: `circle_document` is the boundary, turning a document
+   into frozen pydantic models and refusing a schema version it does not know, a kind it cannot draw or
+   an earth model that is not a sphere; `circle_geometry` builds the cap; `render_map` is the figure and
+   the only thing here that opens a file. A circle is **an azimuthal-equidistant buffer handed to PROJ's
+   polygon transform**, never a ring of latitudes and longitudes — the ring fills the complement at the
+   antimeridian and the wrong hemisphere over a pole, measurably, which is why the buffer's own vertices
+   and the polygon PROJ returns are two objects carrying two different assertions
+   ([ADR 0008](../decisions/0008-rendering-reads-the-published-document.md)). The radius a cap is sized
+   on is the document's own `earth_model`, so no Python file names the sphere. Coastlines arrive over the
+   network, so the one test that draws a complete figure is marked and CI never runs it.
 
 A module per subject, and two crates: the library `crates/popcircles/` and the binary
 `crates/popcircles-cli/`. A dependency forced that boundary and is what a further split takes too —
