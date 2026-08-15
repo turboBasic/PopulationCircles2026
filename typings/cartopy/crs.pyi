@@ -1,3 +1,4 @@
+import pyproj
 from shapely.geometry.base import BaseGeometry
 
 class Globe:
@@ -10,7 +11,11 @@ class Globe:
         flattening: float | None = ...,
     ) -> None: ...
 
-class CRS: ...
+# Declared as pyproj's CRS because that is what it is, which is what lets `Transformer.from_crs`
+# take one of these directly rather than through a PROJ string this module would have to build a
+# second time.
+class CRS(pyproj.CRS):
+    def as_geodetic(self) -> CRS: ...
 
 class Projection(CRS):
     # Widening to BaseGeometry rather than naming Polygon: PROJ splits a cap at the seam, so a

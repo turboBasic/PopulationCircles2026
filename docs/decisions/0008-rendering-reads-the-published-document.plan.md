@@ -190,7 +190,7 @@ test is what stands between a seam artefact and a figure nobody checks.
   Verify: `uv run pytest tests/test_circle_document.py` passes with at least 6 tests, and no fixture
   in it opens a file; `mise run typecheck` passes.
 
-- [ ] **2.4** `scripts/circle_geometry.py` builds the cap and knows nothing about figures. Three
+- [x] **2.4** `scripts/circle_geometry.py` builds the cap and knows nothing about figures. Three
   functions, because the paragraph above says the ring and the drawing are different objects: a
   `cap(centre, radius_km, earth_radius_km)` returning the shapely buffer with its source CRS, a
   `boundary(cap)` transforming that buffer's own vertices point by point into latitudes and longitudes,
