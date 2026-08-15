@@ -21,8 +21,9 @@ mise run setup      # toolchains, dependencies, git hooks
 mise run ci         # lint, typecheck, test — the same checks CI runs
 ```
 
-Input datasets live in [`data/`](data/README.md) and their contents are Git LFS objects, kept out
-of a normal clone so cloning stays fast and cheap:
+Input datasets live in [`data/`](data/README.md). The rasters are Git LFS objects, kept out of a
+normal clone so cloning stays fast and cheap; the coastline basemap is a committed blob, because a
+hundred kilobytes every clone needs is cheaper carried than fetched:
 
 ```sh
 GIT_LFS_SKIP_SMUDGE=1 git clone …   # clone without downloading the rasters
@@ -109,9 +110,8 @@ here expects.
 | --- | --- |
 | `crates/popcircles/` | Rust library — the search |
 | `crates/popcircles-cli/` | The `popcircles` binary — a client of the library |
-| `data/` | Input datasets in Git LFS, with a registry in [`data/README.md`](data/README.md) |
+| `data/` | Input datasets, with a registry in [`data/README.md`](data/README.md) |
 | `pyproject.toml` | Python tooling for data prep and map rendering (no package yet) |
-| `typings/` | Type stubs for libraries shipping no `py.typed`, so pyright stays strict |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
 | `docs/ai/` | Per-task conventions: [platform](docs/ai/platform.md), [code](docs/ai/code.md), [application](docs/ai/application.md) |
 | `docs/decisions/` | Architecture decision records — one ruling each, one page each |

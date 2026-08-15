@@ -56,6 +56,7 @@ Valeriepieris
 AEQD
 Carree
 EPSG
+featurecla
 GDAL
 grib
 IEEEFP
@@ -63,9 +64,12 @@ IUGG
 libgdal
 mbtiles
 naturalearth
+nvkelso
 pmtiles
 pyogrio
+scalerank
 semiminor
+shapefile
 tiffinfo
 
 # --- Library and API identifiers ---
@@ -74,7 +78,6 @@ anstyle
 bpaf
 bytemuck
 cartopy
-ccrs
 colortype
 corasick
 darkred
@@ -84,10 +87,10 @@ facecolor
 figsize
 flate
 fontsize
-geoaxes
 geoms
 gridlines
 horizontalalignment
+linestrings
 indicatif
 insta
 keepends
@@ -103,9 +106,12 @@ pread
 proptest
 SEGS
 skia
+socketpair
 splitmix
 thiserror
 weezl
+xlim
+ylim
 zerocopy
 zorder
 zune

@@ -1,33 +1,54 @@
 import math
 
-import cartopy.crs as ccrs
 import pytest
 from circle_document import Coordinate
-from circle_geometry import METRES_PER_KM, QUAD_SEGS, Cap, boundary, cap, drawn
+from circle_geometry import (
+    METRES_PER_KM,
+    POLE_LAT,
+    QUAD_SEGS,
+    Cap,
+    boundary,
+    cap,
+    enclosed_poles,
+    geographic,
+    polygons,
+)
 from pyproj import Geod
-from shapely.geometry import MultiPolygon
+from shapely.geometry.polygon import Polygon
 
 EARTH_RADIUS_KM = 6371.0088
 
-# The four cases the drawing primitive was chosen on: a cap crossing the seam, one over each pole,
-# and one crossing nothing. The last is the only one that round-trips, which is why it is here.
+# The five cases the drawing primitive was chosen on: a cap crossing the seam, one over each pole,
+# one holding both, and one crossing nothing. The last is the only one that round-trips, which is
+# why it is here.
 SEAM = Coordinate(lat=10.0, lon=178.0)
 NORTH = Coordinate(lat=78.0, lon=20.0)
 SOUTH = Coordinate(lat=-80.0, lon=-170.0)
+WHOLE = Coordinate(lat=25.125, lon=79.708)
 CLEAN = Coordinate(lat=30.0, lon=100.0)
 
 SEAM_RADIUS_KM = 3000.0
 NORTH_RADIUS_KM = 3000.0
 SOUTH_RADIUS_KM = 4000.0
+WHOLE_RADIUS_KM = 16384.0
 CLEAN_RADIUS_KM = 3300.0
 
 CASES = (
     (SEAM, SEAM_RADIUS_KM),
     (NORTH, NORTH_RADIUS_KM),
     (SOUTH, SOUTH_RADIUS_KM),
+    (WHOLE, WHOLE_RADIUS_KM),
     (CLEAN, CLEAN_RADIUS_KM),
 )
-CASE_IDS = ("antimeridian", "north-pole", "south-pole", "no-crossing")
+CASE_IDS = ("antimeridian", "north-pole", "south-pole", "both-poles", "no-crossing")
+
+# The two one-pole cases with the latitude the cap reaches away from its pole, which is the far edge
+# of the band the closing bounds.
+POLE_CASES = (
+    (NORTH, NORTH_RADIUS_KM, POLE_LAT, 51.020),
+    (SOUTH, SOUTH_RADIUS_KM, -POLE_LAT, -44.027),
+)
+POLE_CASE_IDS = ("north-pole", "south-pole")
 
 # shapely starts a buffer's ring due east and walks it clockwise, so a quarter of QUAD_SEGS * 4
 # sides is a quarter turn. Each index below is paired with the azimuth that vertex lies on.
@@ -36,15 +57,21 @@ CARDINALS = ((0, 90.0), (QUAD_SEGS, 180.0), (2 * QUAD_SEGS, -90.0), (3 * QUAD_SE
 # A ring of QUAD_SEGS * 4 sides is that many vertices plus the repeated close.
 RING_VERTICES = 4 * QUAD_SEGS + 1
 
-# Measured, and the figures the two-object split exists for: closing a cap over a pole synthesises
-# four vertices, two of them sitting exactly on the pole, and cutting one down the ±180 meridian
-# synthesises seven. Neither lies on the cap's boundary.
-POLE_CLOSED_VERTICES = 725
-SEAM_CUT_VERTICES = 728
-POLE_LAT = 90.0
-SEAM_LON = 180.0
-VERTICES_ON_THE_POLE = 2
+# Measured, and the figures the two-object split exists for: cutting the ring down the ±180 meridian
+# or closing it over a pole each leaves five more vertices than the ring carried, and none of the
+# five lies on the cap's boundary. A cap holding both poles is the other shape entirely — the world,
+# whose ring is four corners and the repeated close, with the region it misses as a hole.
+CUT_VERTICES = RING_VERTICES + 5
+WORLD_VERTICES = 5
 SEAM_PARTS = 2
+SEAM_LON = 180.0
+
+# A vertex the cut synthesises sits on a line straight in longitude and latitude between two ring
+# vertices, and the boundary between them is an arc, so it can land outside the cap: 7.2 m at 3000
+# km over the north pole, measured, which is the worst of the five cases. The claim is that nothing
+# is drawn outside the cap, and this is the width of "nothing" — a fortieth of the 926.6 m cell the
+# registry raster answers on.
+CUT_SLACK_KM = 0.01
 
 
 def great_circle_km(a: Coordinate, b: Coordinate) -> float:
@@ -62,17 +89,17 @@ def built(centre: Coordinate, radius_km: float) -> Cap:
     return cap(centre, radius_km, EARTH_RADIUS_KM)
 
 
-def parts(shape: MultiPolygon) -> list[tuple[float, float]]:
-    return [(x, y) for polygon in shape.geoms for x, y in polygon.exterior.coords]
+def rings(polygon: Polygon) -> list[tuple[float, float]]:
+    # Holes included: the region a cap holding both poles does not cover is one, and its vertices
+    # are the only real boundary the drawn shape carries.
+    walk = [(x, y) for x, y in polygon.exterior.coords]
+    for hole in polygon.interiors:
+        walk.extend((x, y) for x, y in hole.coords)
+    return walk
 
 
-def projected(shape: Cap) -> MultiPolygon:
-    # The target is built on the cap's own globe: another one makes PROJ shift the datum, which is a
-    # second earth model arriving by default. The isinstance is the topological claim itself —
-    # `drawn` is typed as any geometry because a cap at the seam genuinely becomes two polygons.
-    out = drawn(shape, ccrs.PlateCarree(globe=shape.globe))
-    assert isinstance(out, MultiPolygon)
-    return out
+def drawn(shape: Cap) -> tuple[Polygon, ...]:
+    return polygons(geographic(shape))
 
 
 @pytest.mark.parametrize(("centre", "radius_km"), CASES, ids=CASE_IDS)
@@ -87,7 +114,7 @@ def test_every_boundary_vertex_is_the_radius_from_the_centre(
 
 
 def test_the_cardinal_vertices_match_the_direct_geodesic_problem() -> None:
-    # pyproj's direct geodesic problem at flattening zero: a different library than the one that
+    # pyproj's direct geodesic problem at flattening zero: a different code path than the one that
     # drew the ring, answering about the same sphere.
     geod = Geod(a=EARTH_RADIUS_KM * METRES_PER_KM, f=0.0)
     ring = boundary(built(CLEAN, CLEAN_RADIUS_KM))
@@ -98,48 +125,74 @@ def test_the_cardinal_vertices_match_the_direct_geodesic_problem() -> None:
 
 
 def test_a_cap_crossing_the_antimeridian_is_drawn_in_two_parts() -> None:
-    # The case `ax.fill(..., transform=ccrs.Geodetic())` fills the complement of. Two parts and a
+    # The case a plotting library's geodetic transform fills the complement of. Two parts and a
     # longitude span reaching both limits is what a cut down the seam looks like.
-    shape = projected(built(SEAM, SEAM_RADIUS_KM))
-    assert len(shape.geoms) == SEAM_PARTS
-    west, _, east, _ = shape.bounds
+    parts = drawn(built(SEAM, SEAM_RADIUS_KM))
+    assert len(parts) == SEAM_PARTS
+    west, east = (
+        min(x for p in parts for x, _ in rings(p)),
+        max(x for p in parts for x, _ in rings(p)),
+    )
     assert (west, east) == (-SEAM_LON, SEAM_LON)
-    assert len(parts(shape)) == SEAM_CUT_VERTICES
+    assert sum(len(rings(p)) for p in parts) == CUT_VERTICES
 
 
-def test_a_cap_over_the_north_pole_is_closed_at_the_pole() -> None:
-    # The vertices the closing synthesises are the point of the two-object split: the ring is 721
-    # real points every one 3000 km out, and the drawn polygon is 725 including two at the pole,
-    # which is 1334.341 km from this centre and therefore on no boundary.
-    cap_over_pole = built(NORTH, NORTH_RADIUS_KM)
-    ring = boundary(cap_over_pole)
-    assert len(ring) == RING_VERTICES
-    assert {round(great_circle_km(NORTH, vertex), 6) for vertex in ring} == {NORTH_RADIUS_KM}
+@pytest.mark.parametrize(
+    ("centre", "radius_km", "pole", "far_lat"),
+    POLE_CASES,
+    ids=POLE_CASE_IDS,
+)
+def test_a_cap_over_a_pole_is_closed_at_that_pole(
+    centre: Coordinate,
+    radius_km: float,
+    pole: float,
+    far_lat: float,
+) -> None:
+    # The vertices the closing synthesises are the point of the two-object split: every one of the
+    # ring's 721 is the radius out, and the drawn polygon reaches the pole itself — 1334.341 km from
+    # the northern centre, and therefore on no boundary at all.
+    shape = built(centre, radius_km)
+    assert enclosed_poles(shape) == (pole,)
+    assert all(abs(vertex.lat) < POLE_LAT for vertex in boundary(shape))
 
-    shape = projected(cap_over_pole)
-    assert len(shape.geoms) == 1
-    vertices = parts(shape)
-    assert len(vertices) == POLE_CLOSED_VERTICES
-    assert sum(1 for _, lat in vertices if lat == POLE_LAT) == VERTICES_ON_THE_POLE
-    assert shape.bounds == pytest.approx((-SEAM_LON, 51.020, SEAM_LON, POLE_LAT), abs=1e-3)
+    parts = drawn(shape)
+    assert len(parts) == 1
+    vertices = rings(parts[0])
+    assert len(vertices) == CUT_VERTICES
+    assert any(lat == pole for _, lat in vertices)
+    assert parts[0].bounds == pytest.approx(
+        (-SEAM_LON, min(pole, far_lat), SEAM_LON, max(pole, far_lat)),
+        abs=1e-3,
+    )
 
 
-def test_a_cap_over_the_south_pole_is_closed_at_the_pole() -> None:
-    shape = projected(built(SOUTH, SOUTH_RADIUS_KM))
-    vertices = parts(shape)
-    assert len(vertices) == POLE_CLOSED_VERTICES
-    assert sum(1 for _, lat in vertices if lat == -POLE_LAT) == VERTICES_ON_THE_POLE
-    assert shape.bounds == pytest.approx((-SEAM_LON, -POLE_LAT, SEAM_LON, -44.027), abs=1e-3)
+def test_a_cap_holding_both_poles_is_the_world_less_what_it_misses() -> None:
+    # The case the winding cannot tell from no pole at all: the walk closes on itself either way,
+    # and what it bounds here is the one region the cap does *not* cover. Drawn as a polygon with a
+    # hole, so the hole's vertices are the cap's own boundary and the exterior is the world.
+    shape = built(WHOLE, WHOLE_RADIUS_KM)
+    assert enclosed_poles(shape) == (POLE_LAT, -POLE_LAT)
+
+    parts = drawn(shape)
+    assert len(parts) == 1
+    assert len(parts[0].exterior.coords) == WORLD_VERTICES
+    assert len(parts[0].interiors) == 1
+    assert parts[0].bounds == (-SEAM_LON, -POLE_LAT, SEAM_LON, POLE_LAT)
+    for lon, lat in parts[0].interiors[0].coords:
+        assert great_circle_km(WHOLE, Coordinate(lat=lat, lon=lon)) == pytest.approx(
+            WHOLE_RADIUS_KM,
+            abs=1e-6,
+        )
 
 
 def test_a_cap_crossing_nothing_synthesises_no_vertex() -> None:
     # The only case where one assertion would have done for both objects, and the reason it cannot
     # be the only case tested.
-    shape = projected(built(CLEAN, CLEAN_RADIUS_KM))
-    assert len(shape.geoms) == 1
-    assert len(parts(shape)) == RING_VERTICES
-    assert shape.bounds == pytest.approx((65.130, 0.322, 134.870, 59.678), abs=1e-3)
-    for lon, lat in parts(shape):
+    parts = drawn(built(CLEAN, CLEAN_RADIUS_KM))
+    assert len(parts) == 1
+    assert len(rings(parts[0])) == RING_VERTICES
+    assert parts[0].bounds == pytest.approx((65.130, 0.322, 134.870, 59.678), abs=1e-3)
+    for lon, lat in rings(parts[0]):
         assert great_circle_km(CLEAN, Coordinate(lat=lat, lon=lon)) == pytest.approx(
             CLEAN_RADIUS_KM,
             abs=1e-6,
@@ -149,6 +202,7 @@ def test_a_cap_crossing_nothing_synthesises_no_vertex() -> None:
 @pytest.mark.parametrize(("centre", "radius_km"), CASES, ids=CASE_IDS)
 def test_no_drawn_vertex_lies_outside_the_cap(centre: Coordinate, radius_km: float) -> None:
     # The one distance claim that survives synthesised vertices. Asserting each is *at* the radius
-    # would fail on precisely the two cases this primitive exists to get right.
-    for lon, lat in parts(projected(built(centre, radius_km))):
-        assert great_circle_km(centre, Coordinate(lat=lat, lon=lon)) <= radius_km + 1e-6
+    # would fail on precisely the cases this primitive exists to get right.
+    for polygon in drawn(built(centre, radius_km)):
+        for lon, lat in rings(polygon):
+            assert great_circle_km(centre, Coordinate(lat=lat, lon=lon)) <= radius_km + CUT_SLACK_KM

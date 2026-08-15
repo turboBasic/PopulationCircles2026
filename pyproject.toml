@@ -13,7 +13,6 @@ package = false
 
 [dependency-groups]
 dev = [
-  "cartopy>=0.25.0",
   "matplotlib>=3.11.1",
   "pydantic>=2.13.4",
   "pyproj>=3.7.2",
@@ -60,18 +59,9 @@ venvPath = "."
 venv = ".venv"
 # tests/ imports the scripts/ modules directly, the same resolution pytest's `pythonpath` gives them.
 extraPaths = ["scripts"]
-# cartopy ships no py.typed, so `import cartopy.crs` is reportMissingTypeStubs and every attribute
-# off it is Unknown. typings/cartopy/ declares the handful of symbols the renderer uses; this is
-# what makes them checked types rather than ignored lines.
-stubPath = "typings"
 
 [tool.pytest.ini_options]
-# `-m "not network"` is the default selection, not a suggestion: the marked test fetches Natural
-# Earth, and a suite CI runs may never reach the network. `mise run test:render` is what selects it.
-addopts = '-ra --strict-markers --strict-config -m "not network"'
+addopts = "-ra --strict-markers --strict-config"
 cache_dir = "build/pytest"
 testpaths = ["tests"]
 pythonpath = ["scripts"]
-markers = [
-  "network: reaches the network; deselected by default, run by `mise run test:render`",
-]

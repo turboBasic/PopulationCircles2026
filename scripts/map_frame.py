@@ -1,0 +1,102 @@
+from dataclasses import dataclass
+
+from circle_geometry import (
+    HALF_TURN_DEG,
+    METRES_PER_KM,
+    POLE_LAT,
+    QUAD_SEGS,
+    WORLD,
+    Cap,
+    cap,
+    geographic,
+    hemisphere_km,
+    projected_crs,
+)
+from pyproj import CRS, Transformer
+from shapely.geometry import MultiLineString, Point
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import transform
+
+PLATE_CARREE = "plate-carree"
+ORTHOGRAPHIC = "orthographic"
+PROJECTIONS = (PLATE_CARREE, ORTHOGRAPHIC)
+
+# The orthographic clip stops this far short of the limb, as a fraction of the radius reaching it —
+# 1 km on this sphere. Cutting a shape against a polygon synthesises vertices on lines straight in
+# longitude and latitude, and one of those lands measurably outside the arc it stands in for: 17 m
+# for the hemisphere itself. A point beyond the limb has no orthographic image, so PROJ answers
+# infinity and the geometry carrying it is lost rather than clipped. What the shave costs is a gap
+# of R(1 - cos) at the limb — 78 mm, on a figure 12 742 km across.
+LIMB_SHAVE = 1e-4
+
+GRATICULE_STEP_DEG = 30
+# A meridian and a parallel are straight only in the frame they are stated in, so each is walked at
+# this step rather than drawn end to end.
+GRATICULE_TRACE_DEG = 2
+
+
+@dataclass(frozen=True)
+class Frame:
+    # What the axes' own x and y are, and the transform reaching them from longitude and latitude.
+    crs: CRS
+    to_frame: Transformer
+    # What the frame can show, in longitude and latitude. Clipping against it is what keeps the far
+    # side of the globe off an orthographic figure.
+    visible: BaseGeometry
+    # The circle and the outline of the frame itself, both already in the frame's coordinates.
+    circle: BaseGeometry
+    horizon: BaseGeometry
+
+
+def plate_carree(built: Cap) -> Frame:
+    return Frame(
+        crs=built.geodetic,
+        to_frame=Transformer.from_crs(built.geodetic, built.geodetic, always_xy=True),
+        visible=WORLD,
+        circle=geographic(built),
+        horizon=WORLD,
+    )
+
+
+def orthographic(built: Cap) -> Frame:
+    # The circle reaches this frame through the projection it was built in rather than through
+    # longitude and latitude: the geographic form carries a cut down the ±180 meridian, and that
+    # meridian is not an edge of an orthographic figure, so drawing that form strokes a seam across
+    # the middle of the fill.
+    face = projected_crs("ortho", built.centre, built.earth_radius_km)
+    to_face = Transformer.from_crs(built.source, face, always_xy=True)
+    limb_km = hemisphere_km(built.earth_radius_km) * (1.0 - LIMB_SHAVE)
+    disc = Point(0.0, 0.0).buffer(limb_km * METRES_PER_KM, quad_segs=QUAD_SEGS)
+    return Frame(
+        crs=face,
+        to_frame=Transformer.from_crs(built.geodetic, face, always_xy=True),
+        visible=geographic(cap(built.centre, limb_km, built.earth_radius_km)),
+        circle=transform(to_face.transform, built.polygon.intersection(disc)),
+        horizon=transform(to_face.transform, disc),
+    )
+
+
+def frame(projection: str, built: Cap) -> Frame:
+    return orthographic(built) if projection == ORTHOGRAPHIC else plate_carree(built)
+
+
+def project(view: Frame, geometry: BaseGeometry) -> BaseGeometry:
+    return transform(view.to_frame.transform, geometry.intersection(view.visible))
+
+
+def trace(start: int, stop: int) -> list[int]:
+    return [*range(start, stop, GRATICULE_TRACE_DEG), stop]
+
+
+def graticule() -> MultiLineString:
+    # No parallel at either pole: one is a single point, and the meridians already meet on it.
+    lat_limit, lon_limit = int(POLE_LAT), int(HALF_TURN_DEG)
+    meridians = [
+        [(float(lon), float(lat)) for lat in trace(-lat_limit, lat_limit)]
+        for lon in range(-lon_limit, lon_limit + 1, GRATICULE_STEP_DEG)
+    ]
+    parallels = [
+        [(float(lon), float(lat)) for lon in trace(-lon_limit, lon_limit)]
+        for lat in range(-lat_limit + GRATICULE_STEP_DEG, lat_limit, GRATICULE_STEP_DEG)
+    ]
+    return MultiLineString(meridians + parallels)

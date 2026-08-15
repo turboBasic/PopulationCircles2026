@@ -46,6 +46,11 @@ repos:
       # This hook is the tripwire for every other geo format: one arriving for the first
       # time fails here until its LFS line exists, which is why the extension list lives
       # beside the check rather than in .gitattributes as a speculative catalogue.
+      #
+      # The list is binary formats only, and geojson's absence is a decision rather than an
+      # omission: a text vector file small enough to read on every render belongs in a Git
+      # blob, which is the trade data/README.md states under Data. check-added-large-files
+      # above is what still guards it, since nothing exempts a non-LFS file from that.
       - id: geo-data-lfs
         name: geospatial data is LFS-tracked
         language: system
