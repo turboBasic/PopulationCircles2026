@@ -6,7 +6,11 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # A snapshot records what another program emitted, so trailing whitespace in one is data. clap
+      # pads help output with it, and stripping it makes the snapshot disagree with the `--help` it
+      # was taken from — which is the whole assertion. Same reasoning as `.editorconfig`'s `[*.snap]`.
       - id: trailing-whitespace
+        exclude: '\.snap$'
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
