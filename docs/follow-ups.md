@@ -413,8 +413,8 @@ Identifiers are flat, sequential and never reused.
   compile of a tree stops being the tag someone is trying to ship. The evidence the paragraph above names
   becomes available before a release rather than during one, which is the whole of the mitigation.
 
-  That command is `mise run release:smoke` (2026-08-15): a `workflow_dispatch` on `release.yml` that runs
-  the build matrix and skips the two jobs a tag owns. The Condition's two greps are unmoved by it, which is
+  That command is `mise run release:smoke` (2026-08-15): it dispatches `.github/workflows/release-smoke.yml`,
+  which calls the same build a tag calls and declares none of the jobs a tag owns. The Condition's two greps are unmoved by it, which is
   the paragraph above holding rather than an exception to it — `ci.yml` is still `ubuntu-latest`, and a
   dispatch nobody runs proves nothing, which is why `CONTRIBUTING.md`'s Releasing section says when to.
 

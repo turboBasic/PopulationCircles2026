@@ -206,6 +206,10 @@ permission exists to make unnecessary, not the one it grants.
   because no shared `rust-ci.yml` exists yet; extracting one there is the intended next step, and
   until then this repo's `ci.yml` is the prototype for it. Do not fork Python-specific shared
   workflows to fake Rust support.
+- A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
+  call rather than a condition on the event
+  ([ADR 0010](../decisions/0010-a-scenario-workflow-wraps-a-shared-build.md)). `ci.yml` is the stated
+  exception, because `main`'s ruleset matches its required checks by the names a call would prefix.
 - Drive CI through mise tasks so what CI runs and what `mise run ci` runs cannot drift apart.
 - Lint, typecheck, test only.
 - Secrets via CI environment secrets or OIDC.

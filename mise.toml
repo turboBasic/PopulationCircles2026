@@ -283,8 +283,8 @@ depends = ["lint", "typecheck", "test"]
 # branch that is behind what is committed here.
 #
 # What it proves is compilation on `aarch64-apple-darwin`, the target `FU-12` records that no gate ever
-# compiles for. What it deliberately does not prove is the publish path: no tag exists, so the gate that
-# compares one against the manifest and the job that writes a Release are both skipped.
+# compiles for. What it deliberately does not prove is the publish path: `release-smoke.yml` calls the
+# build a tag calls and declares neither the gate nor the publish job (ADR 0010).
 [tasks."release:smoke"]
 description = "Compile both release legs on demand, macOS included, publishing nothing"
 run = "uv run python scripts/release_smoke.py"

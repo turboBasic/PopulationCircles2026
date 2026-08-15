@@ -6,20 +6,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-WORKFLOW = "release.yml"
+WORKFLOW = "release-smoke.yml"
 
-# One per leg of the release build matrix. Pinned here rather than read back off whatever the run
-# happened to upload, because what this command exists to prove is that the macOS leg produced
-# something: a run whose matrix had lost that leg would otherwise come back green with one artifact.
-# tests/test_release_smoke.py holds these against the workflow's own matrix.
+# One per leg of the build matrix `release-smoke.yml` calls. Pinned here rather than read back off
+# whatever the run happened to upload, because what this command exists to prove is that the macOS
+# leg produced something: a run whose matrix had lost that leg would otherwise come back green with
+# one artifact. tests/test_release_smoke.py holds these against the workflow's own matrix.
 ARTIFACTS = ("popcircles-aarch64-apple-darwin", "popcircles-x86_64-unknown-linux-gnu")
 
-# The one job granted write permission. On a dispatch it must be skipped, and that is checked rather
-# than trusted — the claim that a smoke leaves no Release behind rests on nothing else.
-PUBLISH_JOB = "Publish"
-
-# A skipped job is a reported conclusion here, not an absent one: `gate` and `publish` are both
-# skipped by design on a dispatch, so neither is a finding.
 UNEVENTFUL = frozenset({"success", "skipped"})
 
 APPEAR_TIMEOUT_S = 90
@@ -139,10 +133,6 @@ def findings(run_jobs: list[Job], uploaded: frozenset[str]) -> list[str]:
         if job.conclusion not in UNEVENTFUL
     ]
     found += [f"{name}: no such artifact on the run" for name in ARTIFACTS if name not in uploaded]
-    published = [job for job in run_jobs if job.name == PUBLISH_JOB and job.conclusion == "success"]
-    if published:
-        where = published[0].url
-        found.append(f"{PUBLISH_JOB}: ran on a dispatch, so this run may have published\n  {where}")
     return found
 
 

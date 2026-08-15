@@ -1,0 +1,18 @@
+# Issue #50: the release build on demand, so the first macOS compile of a tree is not the tag someone
+# is trying to ship. `FU-12` is why that gap exists — ADR 0006 weighed `macos-latest` in ci.yml and
+# declined it — and this is the evidence it asks for rather than a step toward taking it.
+#
+# It publishes nothing, and that is a property of this file: there is no tag, no publish job and no
+# write permission here to add one with (ADR 0010 decision 2). `mise run release:smoke` is the caller.
+
+name: Release smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-binaries.yml

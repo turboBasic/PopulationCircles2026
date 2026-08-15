@@ -81,7 +81,9 @@ Run it before cutting a tag, and after bumping a pinned toolchain. Nothing else 
 compiles for `aarch64-apple-darwin` — `ci.yml` is `ubuntu-latest` and, per ADR 0006, stays that way — so
 without it the first macOS compile of a tree is the tag you are trying to ship. It builds the branch as
 `origin` has it, takes about as long as a release, and leaves a run page and its two artifacts behind:
-no tag, no Release. It does not exercise the publish job, which only a tag reaches.
+no tag, no Release. It runs the same build a tag runs — `.github/workflows/release-smoke.yml` and
+`release.yml` call one `build-binaries.yml` — and neither the gate nor the publish job, which only a tag
+declares.
 
 1. Bump `version` in `[workspace.package]`, which is the only place it lives, and land it on `main` like
    any other change. Every report snapshot moves with it, because every document carries `tool_version`.
