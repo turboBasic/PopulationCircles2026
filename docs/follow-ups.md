@@ -491,7 +491,7 @@ Identifiers are flat, sequential and never reused.
   answer this repository has published came from a decimated table or from three certifying radii, and both
   are affordable at that rate.
 - **Condition** — a command that needs many full-resolution radii becomes something this repository asks
-  for: `smallest-for-share` or `sweep` at `--decimate 1` named in a mise task, in `README.md`'s Usage, or in
+  for: `smallest-for-share` or `sweep` at `--decimate 1` named in a mise task, in `USAGE.md`, or in
   an open issue's acceptance. Two dozen probes at 207 s is 90 minutes, and issue #18's per-country sweep is
   the first plausible caller — ninety-plus countries at full resolution is not that multiplied by one.
   The figure is re-measurable in one line, which is what keeps this checkable rather than remembered:

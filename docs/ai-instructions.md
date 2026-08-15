@@ -66,10 +66,12 @@ owner already holds it. Lowest first:
 | L5 entry points | routing only | `CLAUDE.md`, `.github/copilot-instructions.md` |
 
 Within L3, [`ai/platform.md`](ai/platform.md) wins wherever it and an application doc would
-conflict. `README.md` and `CONTRIBUTING.md` are the human layer and may restate what these files own,
-because a person reads them cold and once; where the two disagree, the instruction layer governs.
+conflict. `README.md`, `USAGE.md` and `CONTRIBUTING.md` are the human layer and may restate what these
+files own, each earning it by a way of being read that no owner serves: `README.md` is read first,
+`CONTRIBUTING.md` cold and once, `USAGE.md` with a terminal open and returned to. Where any of them and
+the instruction layer disagree, the instruction layer governs.
 `data/README.md` is an owner rather than a restater — the dataset registry and the fetching mechanics
-live there. Those are the only two licences to restate an owned fact; anywhere else, a restatement is
-a defect to correct at the owner. Granting a third takes a record in `docs/decisions/`, and the bar is
-a property of the reader — these two are "read first" and "read cold and once". That a human might
-read the file is true of everything here and grants nothing.
+live there. Those are the only licences to restate an owned fact; anywhere else, a restatement is
+a defect to correct at the owner. Granting a further one takes a record in `docs/decisions/`, and the
+bar is that reader property. That a human might read the file is true of everything here and grants
+nothing.
