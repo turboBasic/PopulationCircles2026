@@ -17,6 +17,7 @@ mise run lint       # lint
 mise run typecheck  # type-check
 mise run test       # test
 mise run ci         # all of the above — what CI runs
+mise run build      # the release binary, at target/release/popcircles
 ```
 
 Each task's description in `mise.toml` names what it actually runs; `mise run ci` is the check to

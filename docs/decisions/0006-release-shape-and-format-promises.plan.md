@@ -98,7 +98,7 @@ Six facts settled here rather than met mid-task:
 
 ## Phase 2 — the build task and the release job
 
-- [ ] **2.1 `mise run build` produces the release binary from the committed lock, and CONTRIBUTING's loop
+- [x] **2.1 `mise run build` produces the release binary from the committed lock, and CONTRIBUTING's loop
   names it.** The task wraps `cargo build --release --locked -p popcircles-cli` and states where the
   artifact lands; the existing `[profile.release]` is what it inherits, so nothing about the profile changes
   here. `--locked` because 2.2 publishes what this task builds: without it cargo may update `Cargo.lock`

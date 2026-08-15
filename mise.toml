@@ -57,6 +57,15 @@ run = [
 description = "Run the popcircles CLI, optimised"
 run = "cargo run --release -p popcircles-cli --"
 
+# The artifact a release attaches, at `target/release/popcircles`. `--locked` is what makes it provably
+# the commit's: the release job publishes what this task builds, and without the flag cargo may update
+# Cargo.lock during that build. The cost is that a manifest edit fails this task until `cargo` or `uv`
+# has updated the lock, which `platform.md` "Dependencies" asks for anyway. `cli` runs the binary and
+# builds it incidentally; this one is asked for the file.
+[tasks.build]
+description = "Build the release binary from the committed lock, at target/release/popcircles"
+run = "cargo build --release --locked -p popcircles-cli"
+
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
 run = [
