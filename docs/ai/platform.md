@@ -165,6 +165,18 @@ move — for a downstream discovery that is that issue, not the one in hand — 
 proposal is agreed. Quietly building something other than what the issue asks for is the failure this
 permission exists to make unnecessary, not the one it grants.
 
+### Milestones, epics and labels
+
+A milestone is one release increment, and it holds exactly one roadmap issue's sub-issues. That issue is the
+milestone's epic and its body describes what the milestone contains — an epic still describing what it used
+to contain is how a milestone acquires a second theme and twice the size without anyone deciding to. A
+sub-issue is one deliverable: its `## Goal` is the story, its `## Done when` the acceptance criteria.
+
+Every issue carries an area label, a `type:` and a `size:`. The types are `feature`, `enabler`, `debt` and
+`decision`; the sizes are `S`, `M` and `L`, read as about half a day, one to two days, three to five.
+**The sizes exist to balance milestones against each other and for nothing else.** They are bands, and a
+date derived from summing them is arithmetic on guesses.
+
 ## Git
 
 - Conventional Commits, commitizen's default types; the PR title is held to the same format. Both
