@@ -220,6 +220,16 @@ run = "cargo test --release --all-features --test decimated_search -- --ignored"
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
+# Not in `test` or `ci` for `test:raster`'s reason — it reads the registry raster, which a CI clone holds
+# only as a pointer — and it is the end-to-end one: the raster streamed into a table and the smallest
+# circle holding half the world searched for over it, checked against the published prior art. Selected by
+# target rather than by name so a second validation test needs no change here. It skips with a message
+# rather than failing when the raster is an unfetched pointer, which is why running it on a fresh clone is
+# harmless.
+[tasks."test:validate"]
+description = "Search the real raster for half the world and check it against the published result"
+run = "cargo test --release --all-features --test registry_validation -- --ignored"
+
 # None of the four are in `lint`, `test` or `ci`, and not on a condition a later change could satisfy: a
 # benchmark measures and asserts nothing, so there is no result for CI to be red about, and a figure
 # measured on a shared runner would be noise quoted to three digits. ADR 0009 decision 1 is the shape —

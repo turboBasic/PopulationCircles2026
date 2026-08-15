@@ -67,7 +67,7 @@ about what may be left unmeasured.
 **Model: Opus 5.** 2.2 is the one task here that can fail by passing: a validation test whose band is wide
 enough to admit a wrong answer looks exactly like one that works.
 
-- [ ] **2.1** Three `harness = false` bench targets under `crates/popcircles/benches/`, one per subject
+- [x] **2.1** Three `harness = false` bench targets under `crates/popcircles/benches/`, one per subject
   issue #10 names, with their `[[bench]]` entries in the library manifest and one mise task each plus a
   `bench` aggregate. `table_build.rs` streams a generated raster at the registry's own mix of nodata, zero
   and counts — so the build is measured on a plausible input and needs no LFS object — at three shapes, and
@@ -80,7 +80,7 @@ enough to admit a wrong answer looks exactly like one that works.
   `table build`; `cargo test --all-features` runs no benchmark; `mise run lint:rust` passes with
   `--all-targets` compiling all three; `rg -n 'criterion' Cargo.toml crates/*/Cargo.toml` is empty.
 
-- [ ] **2.2** `crates/popcircles/tests/registry_validation.rs` is the gated end-to-end run, with a
+- [x] **2.2** `crates/popcircles/tests/registry_validation.rs` is the gated end-to-end run, with a
   `test:validate` task. It streams the registry raster into a 5 arcmin table, checks the world total against
   the registry row, searches for the smallest circle holding half of it, and asserts the radius inside a
   40 km band, the centre inside a degree of Yunnan, the bracket the search proved, that the answer reaches
