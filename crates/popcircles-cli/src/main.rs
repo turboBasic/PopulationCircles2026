@@ -1,36 +1,35 @@
 mod args;
+mod commands;
 mod failure;
 mod observe;
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use anyhow::Context;
 use args::{
     CachedTableArgs, GridArgs, LedgerArgs, LogArgs, RasterSpecArgs, SearchArgs, SweepArgs,
     TableArgs, WindowArgs, parse_radius, parse_share,
 };
 use clap::{Parser, Subcommand};
+use commands::distance::distance_json;
+use commands::grid::describe_grid;
+use commands::table::{build_table, query_table};
+use commands::{CachedTable, make_room_for, serialised};
 use failure::{EXIT_FAILURE, Failure};
 use observe::{StderrLog, StderrProgress};
-use popcircles::bracket::Bracket;
 use popcircles::circle;
-use popcircles::geodesy::{LatLon, RadiusKm, great_circle_km};
+use popcircles::geodesy::{LatLon, RadiusKm};
 use popcircles::grid::{Col, Grid, Row};
 use popcircles::kernel::Kernel;
-use popcircles::raster::{PixelType, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
-    CircleReport, DistanceReport, Envelope, GridSummary, LedgerReport, MostPopulousReport,
-    Provenance, SmallestDocument, SmallestReport, SweepDocument, SweepShares, TableBuildReport,
-    TableQueryReport,
+    CircleReport, Envelope, LedgerReport, MostPopulousReport, SmallestDocument, SmallestReport,
+    SweepDocument, SweepShares,
 };
 use popcircles::search;
 use popcircles::smallest::cache::Ledger;
 use popcircles::smallest::{self, Share};
-use popcircles::table::cache::{Cache, Identity, Mapped};
-use popcircles::table::{Decimation, Table, Window, build};
+use popcircles::table::cache::Identity;
 
 /// Without an `about`, clap falls back to the description of the struct `Cli` flattens, and what a user
 /// read first was `LogArgs`'s reasoning, which this `about` is what closed.
@@ -223,152 +222,6 @@ fn run(command: Command) -> Result<String, Failure> {
     }
 }
 
-fn distance_json(from_lat: f64, from_lon: f64, to_lat: f64, to_lon: f64) -> anyhow::Result<String> {
-    let from = LatLon {
-        lat: from_lat,
-        lon: from_lon,
-    };
-    let to = LatLon {
-        lat: to_lat,
-        lon: to_lon,
-    };
-    let report = DistanceReport::new(from, to, great_circle_km(from, to));
-    serde_json::to_string(&Envelope::new(report)).context("serialising the distance report")
-}
-
-fn describe_grid(args: GridArgs) -> Result<String, Failure> {
-    let grid = args.grid().map_err(|error| Failure::grid(&error))?;
-    serialised(serde_json::to_string(&Envelope::new(GridSummary::from(
-        &grid,
-    ))))
-}
-
-fn build_table(
-    raster: &Path,
-    grid: GridArgs,
-    raster_spec: RasterSpecArgs,
-    table: &TableArgs,
-) -> Result<String, Failure> {
-    let grid = grid.grid().map_err(|error| Failure::grid(&error))?;
-    let decimation =
-        Decimation::new(grid, table.decimate).map_err(|error| Failure::table(&error))?;
-    let spec = RasterSpec {
-        grid,
-        epsg: raster_spec.epsg,
-        pixel: PixelType::Float32,
-        nodata: raster_spec.nodata,
-    };
-    let source = GeoTiffSource::open(raster, &spec).map_err(|error| Failure::raster(&error))?;
-
-    let cache = Cache::new(&table.cache);
-    make_room_for(&table.cache)?;
-
-    // Box 6's other half, and the reason it is not `CachedTable::open`'s record: this command opens no
-    // cache. After the file was opened rather than before, so the record names a raster that is there.
-    log::info!(
-        "reading {} at decimation {}",
-        raster.display(),
-        decimation.factor()
-    );
-
-    let mut writer = cache.writer().map_err(|error| Failure::cache(&error))?;
-    let mut progress = StderrProgress::new();
-    let built = build(source, decimation, &mut progress, |row| {
-        writer.write_row(row)
-    })
-    .map_err(|error| Failure::build(&error))?;
-    writer
-        .publish(&built)
-        .map_err(|error| Failure::cache(&error))?;
-    progress.finish();
-
-    // After `finish`, so the meter's own line is closed rather than written over.
-    log::info!(
-        "published {} and {}",
-        cache.header_path().display(),
-        cache.payload_path().display()
-    );
-
-    serialised(serde_json::to_string(&Envelope::new(
-        TableBuildReport::new(&built, cache.header_path(), cache.payload_path()),
-    )))
-}
-
-/// A cached table, opened and mapped, with the provenance a document declares it by.
-///
-/// The mapping is held rather than the cells, because a [`Table`] borrows from it: keeping the two
-/// together is what ties the lifetime of every query to the mapping through the compiler. Which is also
-/// why [`Self::table`] is a method and not something the resolver returns — a value cannot hold a borrow
-/// of its own field.
-#[derive(Debug)]
-struct CachedTable {
-    grid: Grid,
-    identity: Identity,
-    mapped: Mapped,
-    header: PathBuf,
-    payload: PathBuf,
-}
-
-impl CachedTable {
-    /// Resolves the flags to a mapped table: the declared grid, the decimation, the identity wanted, and
-    /// the cache opened against it.
-    ///
-    /// The one place a command reads a cache, so a command asks for a table rather than assembling the
-    /// path, the identity and the provenance of one for itself.
-    fn open(args: &CachedTableArgs) -> Result<Self, Failure> {
-        // Box 7's other half of "table build or load". The three `?`s below are exactly why the closing
-        // record is `Drop`'s: a cache that is absent still says how long finding that out took.
-        let _bracket = Bracket::open(module_path!(), "table load");
-
-        let source = args.grid.grid().map_err(|error| Failure::grid(&error))?;
-        let decimation =
-            Decimation::new(source, args.table.decimate).map_err(|error| Failure::table(&error))?;
-        let identity = Identity {
-            digest: args.digest,
-            decimation,
-        };
-
-        let cache = Cache::new(&args.table.cache);
-        let mapped = cache
-            .open(&identity)
-            .map_err(|error| Failure::cache(&error))?;
-
-        // Box 6's resolved input, here because this is already the one place a cache is opened. It names
-        // what a reader would otherwise reconstruct from four flags: which table, from where, and at what
-        // shape after the fold.
-        let grid = decimation.grid();
-        log::info!(
-            "table {:#018x} opened from {}: {} x {} cells, decimated by {}",
-            identity.digest,
-            args.table.cache.display(),
-            grid.width(),
-            grid.height(),
-            decimation.factor()
-        );
-
-        Ok(Self {
-            grid: *grid,
-            identity,
-            mapped,
-            header: cache.header_path().to_path_buf(),
-            payload: cache.payload_path().to_path_buf(),
-        })
-    }
-
-    /// The table over the mapping, and the only place in this crate one is constructed.
-    fn table(&self) -> Result<Table<'_>, Failure> {
-        let cells = self
-            .mapped
-            .cells()
-            .map_err(|error| Failure::cache(&error))?;
-        Table::new(self.grid, cells).map_err(|error| Failure::table(&error))
-    }
-
-    fn provenance(&self) -> Provenance {
-        Provenance::new(&self.identity, &self.header, &self.payload)
-    }
-}
-
 /// The cell holding `at`, or bad input naming the extent it is not on.
 ///
 /// A function of its own so both arms are testable without a table: what makes a coordinate bad input is
@@ -558,67 +411,6 @@ fn smallest_for_share(
         ),
         cached.provenance(),
     )))
-}
-
-fn query_table(cached: &CachedTableArgs, window: Option<Window>) -> Result<String, Failure> {
-    let cached = CachedTable::open(cached)?;
-    let view = cached.table()?;
-    let grid = cached.grid;
-
-    let (rows, cols) = match window {
-        Some(window) => view.covering(window).ok_or_else(|| {
-            Failure::bad_input(format!(
-                "the window is not on a {} x {} grid whose origin is (lat {}, lon {}); a coordinate \
-                 on the grid's outer southern or eastern boundary lies in no cell, and the whole \
-                 extent is what the query does with no window at all",
-                grid.width(),
-                grid.height(),
-                grid.origin().lat,
-                grid.origin().lon
-            ))
-        })?,
-        None => view.whole(),
-    };
-    let population = view.population(rows, cols);
-
-    // No provenance block, and that is not an omission: this document's own payload carries the digest
-    // and the grid, because the table is what the command is *about*. `report`'s module documentation
-    // owns that distinction.
-    serialised(serde_json::to_string(&Envelope::new(
-        TableQueryReport::new(
-            cached.identity.digest,
-            &grid,
-            window,
-            rows,
-            cols,
-            population,
-        ),
-    )))
-}
-
-/// Makes the directory a file this crate is about to write will live in.
-///
-/// Resolving where a generated file goes, and making room for it, is the shell's work — the library is
-/// handed a path and never asked where one should be. Both the cache and the ledger want it, which is why
-/// it is a function rather than a step inside either.
-fn make_room_for(file: &Path) -> Result<(), Failure> {
-    let Some(parent) = file
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    else {
-        return Ok(());
-    };
-    fs::create_dir_all(parent).map_err(|error| Failure {
-        code: EXIT_FAILURE,
-        message: format!(
-            "the directory {} could not be made: {error}",
-            parent.display()
-        ),
-    })
-}
-
-fn serialised(json: serde_json::Result<String>) -> Result<String, Failure> {
-    json.map_err(|error| Failure::new(EXIT_FAILURE, &error))
 }
 
 #[cfg(test)]
