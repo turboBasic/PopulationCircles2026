@@ -1,16 +1,3 @@
-# What a tag does, and nothing else: the gate a Release needs, the shared build, and the publish that
-# writes outside the run. ADR 0010 — the build is `build-binaries.yml` because `release-smoke.yml` asks
-# for the same one, and a scenario is told apart by which jobs its workflow declares rather than by a
-# condition on the event.
-#
-# Inline for the reason ci.yml is, one step further along: turboBasic/github-actions carries no release
-# workflow at all, so there is nothing to call. This is the second prototype for one, and like ci.yml it
-# is driven by mise tasks — `mise run ci` in the gate — so what a tag checks cannot drift from what a
-# clone checks.
-#
-# Every action here is pinned to a full SHA, `actions/*` included. `platform.md` "CI" allows a version tag
-# only for a reusable workflow call into turboBasic/github-actions, and there is no such call here.
-
 name: Release
 
 on:
@@ -21,14 +8,12 @@ permissions:
   contents: read
 
 env:
-  # ci.yml's reason, and a sharper one: without this a tag build clones the rasters, which is minutes and
-  # hundreds of megabytes on every leg of a job whose failure mode is a published release.
+  # Without this the checkout fetches the rasters, which is minutes and hundreds of megabytes.
   GIT_LFS_SKIP_SMUDGE: 1
 
 jobs:
-  # A tag can name any commit, and main's required checks say nothing about the one it points at. A red
-  # release cannot be unpublished the way a late one can be waited for, so the gate runs before anything
-  # is built — ADR 0006 decision 1.
+  # A tag can name any commit, and main's required checks say nothing about the one it points at.
+  # Checking before the build costs a slow release; skipping it risks one that cannot be recalled.
   gate:
     name: Gate
     runs-on: ubuntu-latest
@@ -43,9 +28,9 @@ jobs:
       - name: Sync Python tooling
         run: uv sync --locked
 
-      # ADR 0006 decision 3: the two agreeing is what makes `tool_version` in a published document mean
-      # the release it came from. Read through cargo rather than from the file, because what the binary
-      # compiles in is the version cargo resolves.
+      # The binary stamps its manifest version into every document, so a tag naming another version
+      # ships documents pointing at a release that does not exist. cargo answers rather than a grep,
+      # because the version is inherited from the workspace and this manifest does not carry it.
       - name: The tag names the version the manifest carries
         env:
           TAG: ${{ github.ref_name }}
@@ -82,9 +67,8 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # No --generate-notes: ADR 0006 decision 5 says the notes have to state what a release promises and
-      # what it may invalidate, and the first tag's are written by hand. This opens the body empty for a
-      # maintainer to fill; CONTRIBUTING's Releasing section is where that is asked for.
+      # No --generate-notes: the notes have to say what the release promises and what it invalidates,
+      # which no commit range yields, so the body opens empty for a maintainer to write.
       - name: Attach both artifacts to the Release
         env:
           GH_TOKEN: ${{ github.token }}
