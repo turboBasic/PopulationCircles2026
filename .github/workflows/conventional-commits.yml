@@ -1,8 +1,9 @@
 name: Conventional Commits
 
-# pull_request, not pull_request_target: the called workflow gates both jobs on
-# `github.event_name == 'pull_request'`, so pull_request_target skips them silently, and
-# its checkout would resolve the base ref rather than the commits under review.
+# pull_request, not pull_request_target: the called workflow's jobs run only on pull_request,
+# and a job that does not run is reported as skipped rather than failed, so nothing would say
+# the messages went unchecked. That event also checks out the base branch, which would leave
+# the range of commits to check empty.
 on:
   pull_request:
 
