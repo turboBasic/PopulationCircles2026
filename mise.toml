@@ -25,21 +25,21 @@ run = [
   "mise run git:ff-only",
 ]
 
-# A Git config setting overrides .lfsconfig, so a machine with a global lfs.fetchexclude
-# ignores the committed one. Repo-local config beats global, which makes this the layer
-# that actually holds. Clone-time is still on the user: GIT_LFS_SKIP_SMUDGE=1 git clone.
+# A global lfs.fetchexclude overrides the committed .lfsconfig, and repo-local config overrides
+# the global one, so this is the setting that decides. It applies from here on: a first clone
+# still needs GIT_LFS_SKIP_SMUDGE=1 to skip the data.
 [tasks."data:skip"]
 description = "Pin this clone to skip LFS data until data:pull asks for it"
 run = "git config --local lfs.fetchexclude '*'"
 
-# History is linear, and the ruleset on main is what enforces that. This only moves the failure
-# earlier: the accidental merge — `git pull` or `git merge main` on a diverged branch — fails here
-# instead of after a push, with nothing to rewrite. It is not a gate; `git merge --no-ff` overrides
-# it. Repo-local like data:skip, because a developer's global preference is theirs to set.
+# main's ruleset is what enforces linear history; this makes the accidental merge fail earlier, at
+# `git pull` or `git merge main` on a diverged branch, while there is nothing pushed to rewrite. It
+# is not a second gate, because `git merge --no-ff` still overrides it. Repo-local like data:skip,
+# because a developer's own global preference is theirs to set.
 #
-# fetch.prune is here rather than in a task of its own because it corrects the same clone-side gap:
-# the repository deletes a head branch when its PR merges, and without this the tracking ref for a
-# branch that no longer exists survives every later fetch.
+# fetch.prune is here rather than in a task of its own because it closes the same kind of clone-side
+# gap: the repository deletes a head branch when its PR merges, and without this the tracking ref for
+# that branch survives every later fetch.
 [tasks."git:ff-only"]
 description = "Refuse to create a merge commit in this clone, and drop refs the remote deleted"
 run = [
@@ -48,28 +48,26 @@ run = [
   "git config --local fetch.prune true",
 ]
 
-# --release for the reason `test:raster` and `test:slow` carry it, and this task's only caller makes it
-# safe: a person at a terminal. Nothing in CI, no task's `depends`, no hook and no test runs it. A pass
-# over the registry raster takes seconds optimised and minutes unoptimised, so a debug build here is how
-# a timing gets quoted an order of magnitude wrong. The cost is a slower compile after each edit, thin
-# LTO included; a fast inner loop is `cargo run` directly.
+# --release because a pass over the registry raster takes seconds optimised and minutes unoptimised, so
+# a debug build here is how a timing gets quoted an order of magnitude wrong. Only a person at a
+# terminal runs this task — no CI job, no `depends`, no hook, no test — so the slower compile after each
+# edit, thin LTO included, is paid by whoever asked for the timing. `cargo run` is the fast inner loop.
 [tasks.cli]
 description = "Run the popcircles CLI, optimised"
 run = "cargo run --release -p popcircles-cli --"
 
-# The artifact a release attaches, at `target/release/popcircles`. `--locked` is what makes it provably
-# the commit's: the release job publishes what this task builds, and without the flag cargo may update
-# Cargo.lock during that build. The cost is that a manifest edit fails this task until `cargo` or `uv`
-# has updated the lock, which `platform.md` "Dependencies" asks for anyway. `cli` runs the binary and
-# builds it incidentally; this one is asked for the file.
+# The file a release attaches, at `target/release/popcircles`. `--locked` is what ties that file to the
+# commit: the release job publishes what this task builds, and without the flag cargo may update
+# Cargo.lock while building it. The cost is that a manifest edit fails this task until the lock has
+# been updated. `cli` builds the binary incidentally; this task is asked for the file itself.
 [tasks.build]
 description = "Build the release binary from the committed lock, at target/release/popcircles"
 run = "cargo build --release --locked -p popcircles-cli"
 
-# In neither `lint` nor `ci`, and not on a condition a later change could satisfy: `coastlines()`
-# fetches Natural Earth from naturalearth.s3.amazonaws.com on first use, and nothing in CI may reach
-# the network. `--no-coastlines` draws the cap without it, which is the shape `test:render`'s
-# unmarked tests assert on; this task is the one a person runs to get a figure.
+# Never in `lint` or `ci`, and no later change can put it there: `coastlines()` fetches Natural Earth
+# from naturalearth.s3.amazonaws.com on first use, and nothing in CI may reach the network.
+# `--no-coastlines` draws the cap without that fetch, which is the shape the unmarked tests assert on.
+# This task is the one a person runs to get a figure.
 [tasks.render]
 description = "Render a map from a popcircles JSON document"
 run = "uv run python scripts/render_map.py"
@@ -86,19 +84,16 @@ run = [
 description = "Lint Rust with clippy, warnings are errors"
 run = "cargo clippy --all-targets --all-features -- -D warnings"
 
-# FU-10's fix. Three flags, each load-bearing, because the obvious spelling of this task gates nothing:
-# `-D warnings` because rustdoc *warns and exits 0*, so a task reading only the exit status passes a tree
-# with broken links in it — measured before #8, where seven warnings sat under a green `mise run ci`.
-# `--document-private-items` because without it rustdoc never reads a private item's doc comment, and this
-# crate keeps most of its reasoning there; with the plain form, a broken link inside `report.rs`'s own
-# helpers goes unreported. `--workspace` because the CLI has doc comments too.
+# Three flags, each load-bearing, because the obvious spelling of this task gates nothing. `-D warnings`
+# because rustdoc warns and exits 0, so a task reading only the exit status passes a tree with broken
+# links in it. `--document-private-items` because without it rustdoc never reads a private item's doc
+# comment, and this crate keeps most of its reasoning there — a broken link inside `report.rs`'s own
+# helpers would go unreported. Both crates, because the CLI has doc comments too.
 #
-# Two invocations rather than one `--workspace`, and the second's `--target-dir` is the whole point: since
-# ADR 0006 decision 4 named the binary `popcircles`, the bin target and the library share a crate name and
-# so `cargo doc --workspace` sends both to `target/doc/popcircles/` (cargo#6313). That is not the cosmetic
-# warning it reads as — the two runs document concurrently, and the second deletes the directory the first
-# is still writing into, which failed CI with `could not document popcircles` while passing locally, where
-# the ordering happened to serialise. Documenting the CLI into a directory of its own keeps both halves the
+# Two invocations rather than one `--workspace`, and the second's `--target-dir` is why. The binary and
+# the library share the crate name `popcircles`, so `cargo doc --workspace` sends both to
+# `target/doc/popcircles/` (cargo#6313). The two runs document concurrently, and the second deletes the
+# directory the first is still writing into. Giving the CLI a directory of its own keeps both halves the
 # flags above are for: the library's rendered output, and the CLI's links checked too.
 [tasks."lint:rustdoc"]
 description = "Lint rustdoc, broken intra-doc links are errors"
@@ -135,8 +130,8 @@ description = "Check Rust, TOML and Python are formatted"
 run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 
 # Puts the prek hook in CI; see `lint:lfs` for why. It matters more here than for the others: the hook
-# is what stands in for `unsafe_code = "forbid"` (ADR 0003 decision 5), so a branch pushed from a clone
-# where `prek install` never ran has to meet it too.
+# is what stands in for `unsafe_code = "forbid"`, so a branch pushed from a clone where `prek install`
+# never ran has to meet it too.
 [tasks."lint:unsafe"]
 description = "Check the one #[allow(unsafe_code)] is where ADR 0003 put it"
 run = "prek run --all-files single-unsafe-allow"
@@ -185,56 +180,52 @@ description = "Run the Rust and Python test suites"
 depends = ["test:python"]
 run = "cargo test --all-features"
 
-# Never in `lint` or `ci`, and not on a condition that could later be satisfied: CI clones with
-# GIT_LFS_SKIP_SMUDGE=1, so data/ there holds pointers and this test would have nothing to read.
-# --release because the pass is 933 120 000 cells and a debug build spends minutes on it. The
-# deselected set is no longer only about data: it also holds `test:slow`'s test, which needs time and
-# no raster, so this task runs that one too while `test:slow` runs it alone.
+# Never in `lint` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1,
+# so data/ there holds pointers and this test would have nothing to read. --release because the pass is
+# 933 120 000 cells and a debug build spends minutes on it. `--ignored` selects every deselected test,
+# `test:slow`'s among them, so this task runs that one too while `test:slow` runs it alone.
 [tasks."test:raster"]
 description = "Read the real population raster end to end (needs mise run data:pull)"
 run = "cargo test --release --all-features -- --ignored"
 
-# Not in `test` or `ci` for a reason `test:raster`'s data cannot be given: the shape is 933 120 000
-# cells and the pass takes twenty seconds in release, minutes in a debug build, and a suite that slow
-# stops being run. Selected by target rather than by name so adding a second slow test to the file
-# needs no change here.
+# Not in `test` or `ci`, for time rather than for data: the shape is 933 120 000 cells and the pass
+# takes twenty seconds in release, minutes in a debug build, and a suite that slow stops being run.
+# Selected by target rather than by name so adding a second slow test to the file needs no change here.
 [tasks."test:slow"]
 description = "Check the full-resolution summation table against an exact reference"
 run = "cargo test --release --all-features --test full_resolution_table -- --ignored"
 
-# Not in `test` or `ci` for `test:slow`'s reason and at a smaller scale: 74.7 MB of payload and a search
-# over a whole globe. What it pins that the unit tests cannot is that the bound prunes at a size where
-# pruning is the difference between seconds and hours, which is a claim about the algorithm rather than a
-# wall clock — so it belongs in a task and not in a benchmark.
+# Not in `test` or `ci` for time either, at a smaller scale: 74.7 MB of payload and a search over a whole
+# globe. What it pins and the unit tests cannot is that the bound prunes at a size where pruning is the
+# difference between seconds and hours. That is a claim about the algorithm rather than a wall clock,
+# which is why it is a test and not a benchmark.
 [tasks."test:search"]
 description = "Search the decimated grid's shape and check the bound prunes most of the globe"
 run = "cargo test --release --all-features --test decimated_search -- --ignored"
 
-# Not in `test` or `ci` for `test:slow`'s reason at a smaller scale: 74.7 MB of payload and 9 331 200 cells
-# streamed through the build, which is seconds of every run for a figure that moves only when the fold or
-# the bound does. What it pins that the unit tests cannot is that `smallest`'s predicate slack bounds the
-# fold's real error at a world's magnitude, where the sums round; on a fixture small enough for the default
-# suite every partial sum is exact and there is nothing to measure. Selected by target, so a second test in
-# the file needs no change here.
+# Not in `test` or `ci` for time either: 74.7 MB of payload and 9 331 200 cells streamed through the
+# build, which is seconds of every run for a figure that moves only when the fold or the bound does. What
+# it pins and the unit tests cannot is that `smallest`'s predicate slack bounds the fold's real error at a
+# world's magnitude, where the sums round; on a fixture small enough for the default suite every partial
+# sum is exact and there is nothing to measure. Selected by target, so a second test in the file needs no
+# change here.
 [tasks."test:fold"]
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
-# Not in `test` or `ci` for `test:raster`'s reason — it reads the registry raster, which a CI clone holds
-# only as a pointer — and it is the end-to-end one: the raster streamed into a table and the smallest
-# circle holding half the world searched for over it, checked against the published prior art. Selected by
-# target rather than by name so a second validation test needs no change here. It skips with a message
-# rather than failing when the raster is an unfetched pointer, which is why running it on a fresh clone is
-# harmless.
+# Not in `test` or `ci` because it reads the registry raster, which a CI clone holds only as a pointer.
+# It is the end-to-end one: the raster streamed into a table and the smallest circle holding half the
+# world searched for over it, checked against the published prior art. Selected by target rather than by
+# name so a second validation test needs no change here. When the raster is an unfetched pointer it skips
+# with a message rather than failing, which is why running it on a fresh clone is harmless.
 [tasks."test:validate"]
 description = "Search the real raster for half the world and check it against the published result"
 run = "cargo test --release --all-features --test registry_validation -- --ignored"
 
-# None of the four are in `lint`, `test` or `ci`, and not on a condition a later change could satisfy: a
-# benchmark measures and asserts nothing, so there is no result for CI to be red about, and a figure
-# measured on a shared runner would be noise quoted to three digits. ADR 0009 decision 1 is the shape —
-# `harness = false` targets timing with `std::time::Instant`, no benchmark dependency — and ADR 0009's
-# Context is where the figures these produced on one machine are recorded.
+# None of the four are in `lint`, `test` or `ci`, and no later change can put them there: a benchmark
+# measures and asserts nothing, so there is no result for CI to be red about, and a figure measured on a
+# shared runner would be noise quoted to three digits. Each is a `harness = false` target timing with
+# `std::time::Instant`, so no benchmark dependency is involved.
 [tasks."bench:table"]
 description = "Measure the summation table build, compensation and payload write separately"
 run = "cargo bench --bench table_build"
@@ -265,10 +256,10 @@ run = ["mise run bench:kernel", "mise run bench:circle"]
 description = "Run the Python test suite"
 run = "uv run pytest"
 
-# Not in `test` or `ci` for `test:raster`'s reason in another form: the marked test calls
-# `coastlines()`, which fetches Natural Earth from naturalearth.s3.amazonaws.com, and nothing in CI
-# may reach the network. Selected by marker rather than by file, so a second marked test needs no
-# change here. `pyproject.toml`'s `addopts` is what deselects it everywhere else.
+# Not in `test` or `ci`: the marked test calls `coastlines()`, which fetches Natural Earth from
+# naturalearth.s3.amazonaws.com, and nothing in CI may reach the network. Selected by marker rather
+# than by file, so a second marked test needs no change here. `pyproject.toml`'s `addopts` is what
+# deselects it everywhere else.
 [tasks."test:render"]
 description = "Render a full figure with coastlines (needs the network)"
 run = "uv run pytest -m network"
@@ -276,6 +267,18 @@ run = "uv run pytest -m network"
 [tasks.ci]
 description = "Run everything CI runs, locally"
 depends = ["lint", "typecheck", "test"]
+
+# Not in `ci` and no later change can put it there: it dispatches a workflow run and waits ten minutes on
+# two runners, which is a thing a person asks for before a tag rather than something every pull request
+# pays. It builds origin's ref and not this tree, so the script refuses a branch that is behind what is
+# committed here.
+#
+# What it proves is that the release build compiles for `aarch64-apple-darwin`, which no other gate does.
+# What it deliberately does not prove is the publish path: `release-smoke.yml` calls the same build a tag
+# calls, and declares neither the gate nor the publish job.
+[tasks."release:smoke"]
+description = "Compile both release legs on demand, macOS included, publishing nothing"
+run = "uv run python scripts/release_smoke.py"
 
 [tasks."data:pull"]
 description = "Fetch the Git LFS raster data that a normal clone deliberately skips"

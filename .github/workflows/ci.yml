@@ -1,7 +1,6 @@
 # Inline rather than a call into turboBasic/github-actions: its python-ci.yml is bound to
-# `uv sync --locked` and `uv run pre-commit`, which is neither Rust nor prek. Extracting a
-# shared rust-ci.yml there is the next step; keep this job driven by mise tasks so the
-# extraction is mechanical and so CI cannot drift from `mise run ci`.
+# `uv sync --locked` and `uv run pre-commit`, which is neither Rust nor prek. The steps are
+# mise tasks so that what CI runs and what `mise run ci` runs cannot drift apart.
 
 name: CI
 
