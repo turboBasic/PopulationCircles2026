@@ -158,19 +158,16 @@ Six facts settled here rather than met mid-task:
   separates them; `mise run lint:markdown` and `mise run lint:cspell` clean.
 
 - [x] **3.3 The register carries what this plan deliberately left, #28's boxes are ticked, and this plan is
-  closed.** Three new entries in [`../follow-ups.md`](../follow-ups.md), each with a condition a sweep can
-  answer: `FU-12`, no gate compiles this for Apple silicon while a release job ships a macOS artifact;
+  closed.** Two new entries in [`../follow-ups.md`](../follow-ups.md), each with a condition a sweep can
+  answer: `FU-12`, no gate compiles this for Apple silicon while a release job ships a macOS artifact; and
   `FU-13`, a release exists while no artifact is signed, so a macOS user is told to clear an attribute by
-  hand; and `FU-14`, the bin target and the library share a crate name and so collide in rustdoc's output.
-  Two of the three were costs ADR 0006 weighed in advance. `FU-14` was not: it surfaced in 1.2, because the
-  rename that made the artifact agree with the `tool` every document reports also made `cargo doc` write two
-  targets to one path. Tick the boxes of #28 that this plan discharged and leave the rest, without closing
-  the issue — the PR's `Closes #28` does that, per `platform.md` "Git". Then the status line above reads
-  `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section below holds the three identifiers.
-  Verify: `rg -n '^### FU-1[234]' docs/follow-ups.md` names all three; `gh issue view 28` shows the
-  build-task and ADR boxes ticked and the issue still open; this file's status line reads complete and its
-  Follow-ups section names `FU-12`, `FU-13` and `FU-14`.
+  hand. Tick the boxes of #28 that this plan discharged and leave the rest, without closing the issue — the
+  PR's `Closes #28` does that, per `platform.md` "Git". Then the status line above reads
+  `**Status: complete (YYYY-MM-DD).**` and the Follow-ups section below holds the two identifiers.
+  Verify: `rg -n '^### FU-1[23]' docs/follow-ups.md` names both; `gh issue view 28` shows the build-task and
+  ADR boxes ticked and the issue still open; this file's status line reads complete and its Follow-ups
+  section names `FU-12` and `FU-13`.
 
 ## Follow-ups
 
-Written by 3.3, in [`../follow-ups.md`](../follow-ups.md): `FU-12`, `FU-13`, `FU-14`.
+Written by 3.3, in [`../follow-ups.md`](../follow-ups.md): `FU-12`, `FU-13`.
