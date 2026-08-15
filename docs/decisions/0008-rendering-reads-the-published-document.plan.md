@@ -227,7 +227,7 @@ is a condition the repository can answer rather than a sentence that reads like 
   writes a PNG; `rg -n 'pyright: ignore' scripts/render_map.py` shows 3 lines, each with a reason;
   `mise run typecheck` and `mise run lint:python` pass.
 
-- [ ] **3.2** The attribution is checked rather than trusted: `tests/test_render_map.py` asserts the
+- [x] **3.2** The attribution is checked rather than trusted: `tests/test_render_map.py` asserts the
   citation constant appears in `data/README.md` with whitespace normalised, so the registry stays the
   owner of the text and a drift between the two fails a test instead of shipping a figure that
   credits nobody. The same module asserts the footer artist carries it, over a figure built without

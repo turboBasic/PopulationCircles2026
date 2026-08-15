@@ -64,6 +64,11 @@ extraPaths = ["scripts"]
 stubPath = "typings"
 
 [tool.pytest.ini_options]
-addopts = "-ra --strict-markers --strict-config"
+# `-m "not network"` is the default selection, not a suggestion: the marked test fetches Natural
+# Earth, and a suite CI runs may never reach the network. `mise run test:render` is what selects it.
+addopts = '-ra --strict-markers --strict-config -m "not network"'
 testpaths = ["tests"]
 pythonpath = ["scripts"]
+markers = [
+  "network: reaches the network; deselected by default, run by `mise run test:render`",
+]

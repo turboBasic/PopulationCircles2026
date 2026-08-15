@@ -224,6 +224,14 @@ run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored
 description = "Run the Python test suite"
 run = "uv run pytest"
 
+# Not in `test` or `ci` for `test:raster`'s reason in another form: the marked test calls
+# `coastlines()`, which fetches Natural Earth from naturalearth.s3.amazonaws.com, and nothing in CI
+# may reach the network. Selected by marker rather than by file, so a second marked test needs no
+# change here. `pyproject.toml`'s `addopts` is what deselects it everywhere else.
+[tasks."test:render"]
+description = "Render a full figure with coastlines (needs the network)"
+run = "uv run pytest -m network"
+
 [tasks.ci]
 description = "Run everything CI runs, locally"
 depends = ["lint", "typecheck", "test"]
