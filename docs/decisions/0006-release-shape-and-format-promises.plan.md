@@ -79,7 +79,7 @@ Six facts settled here rather than met mid-task:
   crates/popcircles/src/snapshots/*.snap` names ten files and `rg '0\.0\.0' crates/ docs/` returns nothing;
   `cargo publish --dry-run -p popcircles` fails naming `publish = false` rather than a registry error.
 
-- [ ] **1.2 The binary on disk is `popcircles`.** `[[bin]] name = "popcircles"` in the CLI crate, with
+- [x] **1.2 The binary on disk is `popcircles`.** `[[bin]] name = "popcircles"` in the CLI crate, with
   `tests/commands.rs:166` following it to `CARGO_BIN_EXE_popcircles`. `mise run cli` names the package and
   needs no change; check it anyway, because a `-p` that still resolves is not the same as a binary that
   still builds.

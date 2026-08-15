@@ -11,6 +11,13 @@ authors.workspace = true
 # the library going first, and neither is going.
 publish = false
 
+# ADR 0006 decision 4: without this the file takes the package name, and every document the CLI writes
+# already reports `popcircles`. It is also what fixes the usage line, which clap takes from the binary
+# rather than from `#[command(name = ...)]`.
+[[bin]]
+name = "popcircles"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 
