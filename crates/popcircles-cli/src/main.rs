@@ -1067,10 +1067,7 @@ fn exit_code_for_cache_error(error: &CacheError) -> u8 {
         CacheError::Absent { .. }
         | CacheError::FormatVersion { .. }
         | CacheError::ByteOrderMismatch { .. }
-        | CacheError::Digest { .. }
-        | CacheError::Width { .. }
-        | CacheError::Height { .. }
-        | CacheError::DecimationFactor { .. } => EXIT_MISSING_DATA,
+        | CacheError::NotThisTable(_) => EXIT_MISSING_DATA,
 
         CacheError::HeaderRead { .. }
         | CacheError::HeaderWrite { .. }
@@ -1117,11 +1114,7 @@ const fn exit_code_for_search_error(error: SearchError) -> u8 {
 /// one.
 fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
     match error {
-        LedgerError::FormatVersion { .. }
-        | LedgerError::Digest { .. }
-        | LedgerError::Width { .. }
-        | LedgerError::Height { .. }
-        | LedgerError::DecimationFactor { .. } => EXIT_MISSING_DATA,
+        LedgerError::FormatVersion { .. } | LedgerError::NotThisTable(_) => EXIT_MISSING_DATA,
 
         LedgerError::Read { .. }
         | LedgerError::Write { .. }
@@ -1151,6 +1144,8 @@ fn parse_share(value: &str) -> Result<Share, String> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use popcircles::table::cache::Mismatch;
+
     use super::*;
 
     #[test]
@@ -1220,10 +1215,10 @@ mod tests {
             EXIT_MISSING_DATA
         );
         assert_eq!(
-            exit_code_for_cache_error(&CacheError::Digest {
-                expected: 1,
+            exit_code_for_cache_error(&CacheError::NotThisTable(Mismatch::Digest {
+                wanted: 1,
                 found: 2
-            }),
+            })),
             EXIT_MISSING_DATA
         );
         assert_eq!(
@@ -1379,10 +1374,10 @@ mod tests {
         // The split `exit_code_for_cache_error` makes, for its reason: a ledger of another table is
         // answered by starting afresh, and one that does not hold together is not.
         assert_eq!(
-            exit_code_for_ledger_error(&LedgerError::Digest {
-                expected: 1,
+            exit_code_for_ledger_error(&LedgerError::NotThisTable(Mismatch::Digest {
+                wanted: 1,
                 found: 2
-            }),
+            })),
             EXIT_MISSING_DATA
         );
         assert_eq!(
@@ -1394,10 +1389,12 @@ mod tests {
         );
         // Through the search over radius, where a ledger's failure keeps its own class.
         assert_eq!(
-            exit_code_for_smallest_error(&SmallestError::Ledger(LedgerError::DecimationFactor {
-                expected: 10,
-                found: 1
-            })),
+            exit_code_for_smallest_error(&SmallestError::Ledger(LedgerError::NotThisTable(
+                Mismatch::DecimationFactor {
+                    wanted: 10,
+                    found: 1
+                }
+            ))),
             EXIT_MISSING_DATA
         );
         assert_eq!(

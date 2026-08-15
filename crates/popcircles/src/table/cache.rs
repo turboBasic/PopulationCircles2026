@@ -11,10 +11,12 @@ use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 
 use super::{BuiltTable, Decimation, padded_len};
+use crate::geodesy::wrap_lon;
+use crate::grid::BOUNDARY_TOLERANCE_DEG;
 
 /// Bumped when a change to the header's fields or the payload's layout is one an older reader would
 /// misread rather than refuse.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 const HEADER_SUFFIX: &str = ".header.json";
 const PAYLOAD_SUFFIX: &str = ".payload.bin";
@@ -55,7 +57,8 @@ impl fmt::Display for ByteOrder {
 /// One variant per ground, so a refusal says which of them fired: a caller that rebuilds on a digest
 /// mismatch and reports a moved payload as an error has to be able to tell the two apart, and a message
 /// reading only "stale cache" sends its reader to a hex editor. The same shape, and the same reason, as
-/// [`RasterError`](crate::raster::RasterError).
+/// [`RasterError`](crate::raster::RasterError). The grounds for not being this table are [`Mismatch`]'s,
+/// carried by one variant here because the ledger shares them.
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     #[error("no cache at {}: nothing has been published there", path.display())]
@@ -105,20 +108,12 @@ pub enum CacheError {
         found: ByteOrder,
     },
 
-    #[error(
-        "wanted the table of the cells digesting to {expected:#018x}; the header declares \
-         {found:#018x}"
-    )]
-    Digest { expected: u64, found: u64 },
-
-    #[error("wanted a {expected}-column table; the header declares {found}")]
-    Width { expected: u32, found: u32 },
-
-    #[error("wanted a {expected}-row table; the header declares {found}")]
-    Height { expected: u32, found: u32 },
-
-    #[error("wanted a table decimated by {expected}; the header declares {found}")]
-    DecimationFactor { expected: u32, found: u32 },
+    // The wrapper names the document and the ground says what differed, which is ADR 0007 decision 2's
+    // cost: the four per-ground variants this replaces each named the header in their own message, and a
+    // ground shared with the ledger cannot. A caller telling a digest miss from a moved grid matches one
+    // level deeper rather than losing the distinction.
+    #[error("the cache header does not describe the table wanted: {0}")]
+    NotThisTable(Mismatch),
 
     #[error("the header describes {expected} payload bytes; the payload stops after {found}")]
     PayloadTruncated { expected: usize, found: usize },
@@ -156,20 +151,168 @@ impl From<&BuiltTable> for Identity {
     }
 }
 
+/// Which of the grounds a document and an [`Identity`] disagree on.
+///
+/// The messages name what was wanted and what was found and no document, because both a cache header and
+/// a radius ledger wrap this and each names itself: ADR 0007 decision 2 puts the noun in the wrapper so a
+/// ground is added in one place rather than phrased twice.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+pub enum Mismatch {
+    #[error("wanted the table of the cells digesting to {wanted:#018x}; found {found:#018x}")]
+    Digest { wanted: u64, found: u64 },
+
+    #[error("wanted a {wanted}-column table; found {found}")]
+    Width { wanted: u32, found: u32 },
+
+    #[error("wanted a {wanted}-row table; found {found}")]
+    Height { wanted: u32, found: u32 },
+
+    #[error("wanted a table decimated by {wanted}; found {found}")]
+    DecimationFactor { wanted: u32, found: u32 },
+
+    #[error("wanted a grid whose origin latitude is {wanted}; found {found}")]
+    OriginLat { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose origin longitude is {wanted}; found {found}")]
+    OriginLon { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose longitude step is {wanted}; found {found}")]
+    LonStep { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose latitude step is {wanted}; found {found}")]
+    LatStep { wanted: f64, found: f64 },
+}
+
+/// What a document claims the table beside it is: the cells it was built from, how coarsely they were
+/// folded, and the whole grid it resolves coordinates against.
+///
+/// ADR 0007 decision 2's one type, serialised into both the cache header and the radius ledger with
+/// `#[serde(flatten)]`, so the comparison and its tolerance exist once. The grid recorded is the table's
+/// own and not the source's: given the factor the source's is determined, and the coarser one is what a
+/// query resolves against.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Attestation {
+    pub digest: u64,
+    pub width: u32,
+    pub height: u32,
+    pub decimation: u32,
+    pub origin_lat: f64,
+    pub origin_lon: f64,
+    pub lon_step: f64,
+    pub lat_step: f64,
+}
+
+impl Attestation {
+    #[must_use]
+    pub fn new(identity: &Identity) -> Self {
+        let grid = identity.decimation.grid();
+        let origin = grid.origin();
+        Self {
+            digest: identity.digest,
+            width: grid.width(),
+            height: grid.height(),
+            decimation: identity.decimation.factor(),
+            origin_lat: origin.lat,
+            origin_lon: origin.lon,
+            lon_step: grid.lon_step(),
+            lat_step: grid.lat_step(),
+        }
+    }
+
+    /// The digest, the dimensions and the factor exactly; the four geometry numbers within
+    /// `BOUNDARY_TOLERANCE_DEG`, longitude through [`wrap_lon`].
+    ///
+    /// A tolerance rather than the bit equality a JSON round trip would in fact give, per ADR 0007
+    /// decision 3: the raster reader compares a file's geotransform against a declared grid by exactly
+    /// this rule, so an exact comparison here would refuse a cache built over a raster that reader had
+    /// accepted.
+    ///
+    /// # Errors
+    /// [`Mismatch`], whose variants are the grounds, naming the first field that differs.
+    pub fn check(&self, wanted: &Identity) -> Result<(), Mismatch> {
+        if self.digest != wanted.digest {
+            return Err(Mismatch::Digest {
+                wanted: wanted.digest,
+                found: self.digest,
+            });
+        }
+
+        let grid = wanted.decimation.grid();
+        if self.width != grid.width() {
+            return Err(Mismatch::Width {
+                wanted: grid.width(),
+                found: self.width,
+            });
+        }
+        if self.height != grid.height() {
+            return Err(Mismatch::Height {
+                wanted: grid.height(),
+                found: self.height,
+            });
+        }
+        if self.decimation != wanted.decimation.factor() {
+            return Err(Mismatch::DecimationFactor {
+                wanted: wanted.decimation.factor(),
+                found: self.decimation,
+            });
+        }
+
+        let origin = grid.origin();
+        if (self.origin_lat - origin.lat).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::OriginLat {
+                wanted: origin.lat,
+                found: self.origin_lat,
+            });
+        }
+        // Through the seam, for the reader's reason: -180 and 180 are one meridian, and a document
+        // spelling the origin either way describes the same columns.
+        if wrap_lon(self.origin_lon - origin.lon).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::OriginLon {
+                wanted: origin.lon,
+                found: self.origin_lon,
+            });
+        }
+        if (self.lon_step - grid.lon_step()).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::LonStep {
+                wanted: grid.lon_step(),
+                found: self.lon_step,
+            });
+        }
+        if (self.lat_step - grid.lat_step()).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::LatStep {
+                wanted: grid.lat_step(),
+                found: self.lat_step,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// The one field a header of any version carries, so the version can be compared before the rest of the
+/// document is parsed at all.
+///
+/// ADR 0007 decision 4, and it rests on a default rather than a declaration: serde ignores keys a struct
+/// does not name, which is what lets this read a header of a shape this build has never seen. A
+/// `deny_unknown_fields` here would therefore refuse every real header, and
+/// `the_version_is_read_out_of_a_document_carrying_more` is the test that says so.
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct HeaderVersion {
+    format_version: u32,
+}
+
 /// What the payload beside it is a table of.
 ///
 /// `format_version` is declared first because serde emits struct fields in declaration order, so the
 /// field a reader needs before it can trust any other is the first one it meets — the same reason
-/// [`Envelope`](crate::report::Envelope) leads with its schema version. The dimensions and the factor
-/// sit here rather than inside the digest, per decision 3, so a mismatch in either is reported as
-/// itself instead of as an unexplained digest failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// [`Envelope`](crate::report::Envelope) leads with its schema version. The table's identity is the
+/// flattened [`Attestation`], so the header stays the flat object a person can read with `cat` and the
+/// comparison is not written here; `byte_order` is last and is the header's alone, because it describes a
+/// payload of raw f64 and a ledger's numbers are JSON text with no order to disagree about.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 struct Header {
     format_version: u32,
-    digest: u64,
-    width: u32,
-    height: u32,
-    decimation: u32,
+    #[serde(flatten)]
+    attestation: Attestation,
     byte_order: ByteOrder,
 }
 
@@ -177,57 +320,25 @@ impl Header {
     fn new(identity: &Identity) -> Self {
         Self {
             format_version: FORMAT_VERSION,
-            digest: identity.digest,
-            width: identity.decimation.grid().width(),
-            height: identity.decimation.grid().height(),
-            decimation: identity.decimation.factor(),
+            attestation: Attestation::new(identity),
             byte_order: ByteOrder::HOST,
         }
     }
 
-    /// The version and the byte order come first, and in that order: a header of another version may
-    /// mean every field after it differently, and a payload in the other order is not a number this
-    /// host can compare against anything.
+    /// The byte order comes before the identity: a payload in the other order is not a number this host
+    /// can compare against anything. The version is not compared here — [`Cache::checked_header`] reads
+    /// it out of the document before this struct is parsed, because a header of another version need not
+    /// parse into this shape at all.
     fn check(&self, wanted: &Identity) -> Result<(), CacheError> {
-        if self.format_version != FORMAT_VERSION {
-            return Err(CacheError::FormatVersion {
-                expected: FORMAT_VERSION,
-                found: self.format_version,
-            });
-        }
         if self.byte_order != ByteOrder::HOST {
             return Err(CacheError::ByteOrderMismatch {
                 expected: ByteOrder::HOST,
                 found: self.byte_order,
             });
         }
-        if self.digest != wanted.digest {
-            return Err(CacheError::Digest {
-                expected: wanted.digest,
-                found: self.digest,
-            });
-        }
-
-        let grid = wanted.decimation.grid();
-        if self.width != grid.width() {
-            return Err(CacheError::Width {
-                expected: grid.width(),
-                found: self.width,
-            });
-        }
-        if self.height != grid.height() {
-            return Err(CacheError::Height {
-                expected: grid.height(),
-                found: self.height,
-            });
-        }
-        if self.decimation != wanted.decimation.factor() {
-            return Err(CacheError::DecimationFactor {
-                expected: wanted.decimation.factor(),
-                found: self.decimation,
-            });
-        }
-        Ok(())
+        self.attestation
+            .check(wanted)
+            .map_err(CacheError::NotThisTable)
     }
 }
 
@@ -348,6 +459,21 @@ impl Cache {
                 }
             }
         })?;
+        // The version out of the document before the document, per ADR 0007 decision 4: a header of
+        // another version is not required to parse into this build's `Header`, so without this probe a
+        // bumped format reports as "not the JSON document this format is" and the constant is decoration.
+        let probed: HeaderVersion =
+            serde_json::from_slice(&document).map_err(|source| CacheError::HeaderSyntax {
+                path: self.header.clone(),
+                source,
+            })?;
+        if probed.format_version != FORMAT_VERSION {
+            return Err(CacheError::FormatVersion {
+                expected: FORMAT_VERSION,
+                found: probed.format_version,
+            });
+        }
+
         let header: Header =
             serde_json::from_slice(&document).map_err(|source| CacheError::HeaderSyntax {
                 path: self.header.clone(),
@@ -670,6 +796,182 @@ mod tests {
         }
     }
 
+    const DIGEST: u64 = 0xf17a_a802_a689_0f0c;
+
+    /// A grid that does not run pole to pole, which is what a fixture needs to move an origin latitude or
+    /// a step at all: `Grid::new` pins the origin of a whole-globe grid to the pole within the boundary
+    /// tolerance, so `grid(w, h)` is refused by the constructor before any comparison is reached.
+    fn sub_globe_grid(origin_lat: f64) -> Grid {
+        Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: origin_lat,
+                lon: -180.0,
+            },
+            90.0,
+            -10.0,
+        )
+        .expect("three ten-degree rows below 45 north stay on the globe")
+    }
+
+    fn identity_over(grid: Grid) -> Identity {
+        Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(grid),
+        }
+    }
+
+    /// What a build settled, asked for over a grid of the same shape whose columns start half a turn
+    /// away — the one geometry a caller can reach today, and the only field that differs.
+    fn half_turn_from(built: &BuiltTable) -> Identity {
+        let shifted = Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: 90.0,
+                lon: 0.0,
+            },
+            90.0,
+            -60.0,
+        )
+        .expect("a 4 x 3 whole-globe grid starting at the prime meridian is valid");
+        Identity {
+            digest: built.digest,
+            decimation: Decimation::none(shifted),
+        }
+    }
+
+    #[test]
+    fn an_attestation_accepts_the_identity_it_was_built_from() {
+        for grid in [grid(4, 3), sub_globe_grid(45.0)] {
+            let identity = identity_over(grid);
+            assert_eq!(Attestation::new(&identity).check(&identity), Ok(()));
+        }
+    }
+
+    /// One ground's case: the field to move, and what moving it has to be reported as.
+    type Ground = (fn(&mut Attestation), Mismatch);
+
+    #[test]
+    fn each_ground_is_reported_as_the_field_that_differs() {
+        let identity = identity_over(sub_globe_grid(45.0));
+        let attested = Attestation::new(&identity);
+
+        // One case per variant, so a ground added to `Mismatch` without a comparison behind it leaves
+        // this list short of the enum rather than passing.
+        let cases: [Ground; 8] = [
+            (
+                |a| a.digest ^= 1,
+                Mismatch::Digest {
+                    wanted: DIGEST,
+                    found: DIGEST ^ 1,
+                },
+            ),
+            (
+                |a| a.width += 1,
+                Mismatch::Width {
+                    wanted: 4,
+                    found: 5,
+                },
+            ),
+            (
+                |a| a.height += 1,
+                Mismatch::Height {
+                    wanted: 3,
+                    found: 4,
+                },
+            ),
+            (
+                |a| a.decimation = 2,
+                Mismatch::DecimationFactor {
+                    wanted: 1,
+                    found: 2,
+                },
+            ),
+            (
+                |a| a.origin_lat = 46.0,
+                Mismatch::OriginLat {
+                    wanted: 45.0,
+                    found: 46.0,
+                },
+            ),
+            (
+                |a| a.origin_lon = -90.0,
+                Mismatch::OriginLon {
+                    wanted: -180.0,
+                    found: -90.0,
+                },
+            ),
+            (
+                |a| a.lon_step = 45.0,
+                Mismatch::LonStep {
+                    wanted: 90.0,
+                    found: 45.0,
+                },
+            ),
+            (
+                |a| a.lat_step = -20.0,
+                Mismatch::LatStep {
+                    wanted: -10.0,
+                    found: -20.0,
+                },
+            ),
+        ];
+
+        for (perturb, expected) in cases {
+            let mut found = attested;
+            perturb(&mut found);
+            assert_eq!(found.check(&identity), Err(expected));
+        }
+    }
+
+    #[test]
+    fn a_geometry_within_the_readers_tolerance_is_the_same_grid() {
+        let identity = identity_over(sub_globe_grid(45.0));
+
+        // The registry raster's own spelling of its origin latitude is 1.16e-11 off the pole, and the
+        // raster reader accepts a file at that distance from a declared grid — so refusing a cache for
+        // the same distance would be two answers to one question.
+        let mut near = Attestation::new(&identity);
+        near.origin_lat += 1.16e-11;
+        assert_eq!(near.check(&identity), Ok(()));
+
+        let mut far = Attestation::new(&identity);
+        far.origin_lat += 1e-8;
+        assert_eq!(
+            far.check(&identity),
+            Err(Mismatch::OriginLat {
+                wanted: 45.0,
+                found: 45.0 + 1e-8
+            })
+        );
+    }
+
+    #[test]
+    fn an_origin_longitude_is_compared_through_the_seam() {
+        // -180 and 180 are one meridian, so the two spellings describe the same columns and neither is
+        // a stale cache.
+        let identity = identity_over(grid(4, 3));
+        let mut attested = Attestation::new(&identity);
+        attested.origin_lon = 180.0;
+        assert_eq!(attested.check(&identity), Ok(()));
+    }
+
+    #[test]
+    fn a_grid_differing_only_in_its_origin_latitude_is_refused() {
+        // Two grids the constructor accepts, identical but for the one number, which is the case a
+        // country mask makes reachable and a whole-globe fixture cannot express.
+        let attested = Attestation::new(&identity_over(sub_globe_grid(45.0)));
+        assert_eq!(
+            attested.check(&identity_over(sub_globe_grid(35.0))),
+            Err(Mismatch::OriginLat {
+                wanted: 35.0,
+                found: 45.0
+            })
+        );
+    }
+
     #[test]
     fn the_header_leads_with_its_format_version() {
         // On the text rather than on a parsed value, for `report.rs`'s reason: what needs pinning is
@@ -680,7 +982,7 @@ mod tests {
         publish(&cache, Decimation::none(grid(4, 3)));
         let document = fs::read_to_string(cache.header_path()).unwrap();
         assert!(
-            document.starts_with(r#"{"format_version":1,"#),
+            document.starts_with(r#"{"format_version":2,"#),
             "{document}"
         );
     }
@@ -734,13 +1036,13 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.digest ^= 1;
+        header.attestation.digest ^= 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Digest { expected, found })
-                if expected == built.digest && found == built.digest ^ 1
+            Err(CacheError::NotThisTable(Mismatch::Digest { wanted, found }))
+                if wanted == built.digest && found == built.digest ^ 1
         ));
     }
 
@@ -751,15 +1053,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.width += 1;
+        header.attestation.width += 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Width {
-                expected: 4,
+            Err(CacheError::NotThisTable(Mismatch::Width {
+                wanted: 4,
                 found: 5
-            })
+            }))
         ));
     }
 
@@ -770,15 +1072,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.height += 1;
+        header.attestation.height += 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Height {
-                expected: 3,
+            Err(CacheError::NotThisTable(Mismatch::Height {
+                wanted: 3,
                 found: 4
-            })
+            }))
         ));
     }
 
@@ -789,15 +1091,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.decimation = 2;
+        header.attestation.decimation = 2;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::DecimationFactor {
-                expected: 1,
+            Err(CacheError::NotThisTable(Mismatch::DecimationFactor {
+                wanted: 1,
                 found: 2
-            })
+            }))
         ));
     }
 
@@ -811,7 +1113,7 @@ mod tests {
         header.format_version = FORMAT_VERSION + 1;
         // The digest goes too, and the refusal still names the version: a header of another version is
         // not a document whose other fields this build knows how to compare.
-        header.digest ^= 1;
+        header.attestation.digest ^= 1;
         write_header(&cache, &header);
 
         assert!(matches!(
@@ -819,6 +1121,89 @@ mod tests {
             Err(CacheError::FormatVersion { expected, found })
                 if expected == FORMAT_VERSION && found == FORMAT_VERSION + 1
         ));
+    }
+
+    #[test]
+    fn a_v1_header_is_refused_for_its_version_and_not_for_its_syntax() {
+        // The document verbatim, because that is the whole of what is on disk from before ADR 0007 and
+        // no struct in this build can spell it. Parsed into the widened `Header` it fails with
+        // `missing field origin_lat` — `HeaderSyntax`, raised before any version is looked at — which is
+        // the failure the probe exists to prevent and the one issue #45 forbids.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        let v1 = format!(
+            r#"{{"format_version":1,"digest":{},"width":4,"height":3,"decimation":1,"byte_order":"little"}}"#,
+            built.digest
+        );
+        fs::write(cache.header_path(), v1).unwrap();
+
+        assert!(matches!(
+            cache.read(&Identity::from(&built)),
+            Err(CacheError::FormatVersion {
+                expected: 2,
+                found: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn the_version_is_read_out_of_a_document_carrying_more() {
+        // The property the probe rests on, named where it can fail: serde ignores keys a struct does not
+        // declare, so `HeaderVersion` reads a header of any shape. `deny_unknown_fields` on it would
+        // refuse every real document — and would fail this test, which says why, rather than a dozen
+        // that do not.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        publish(&cache, Decimation::none(grid(4, 3)));
+
+        let document = fs::read(cache.header_path()).unwrap();
+        let probed: HeaderVersion = serde_json::from_slice(&document).unwrap();
+        assert_eq!(probed.format_version, FORMAT_VERSION);
+        // And the document it read is one the probe declares eight keys less of.
+        assert!(document.len() > br#"{"format_version":2}"#.len());
+    }
+
+    #[test]
+    fn a_grid_the_table_was_not_built_over_is_refused() {
+        // The reachable case, and the one nothing caught before ADR 0007: same width, same height, same
+        // steps, same factor and the digest the build itself reported — with every column half a turn
+        // from where the table's are.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        assert!(matches!(
+            cache.read(&half_turn_from(&built)),
+            Err(CacheError::NotThisTable(Mismatch::OriginLon {
+                wanted,
+                found
+            })) if wanted == 0.0 && found == -180.0
+        ));
+    }
+
+    #[test]
+    fn a_refusal_names_the_cache_header_and_what_differed() {
+        // The wrapper's noun and the ground's numbers in one sentence, which is what the four collapsed
+        // variants used to say on their own and what nothing else now pins.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        let mut header = header_of(&built);
+        header.attestation.width += 1;
+        write_header(&cache, &header);
+        let dimension = cache.read(&Identity::from(&built)).unwrap_err().to_string();
+        assert!(dimension.contains("cache header"), "{dimension}");
+        assert!(dimension.contains("wanted a 4-column table"), "{dimension}");
+        assert!(dimension.contains("found 5"), "{dimension}");
+
+        write_header(&cache, &header_of(&built));
+        let geometry = cache.read(&half_turn_from(&built)).unwrap_err().to_string();
+        assert!(geometry.contains("cache header"), "{geometry}");
+        assert!(geometry.contains("origin longitude is 0"), "{geometry}");
+        assert!(geometry.contains("found -180"), "{geometry}");
     }
 
     #[test]

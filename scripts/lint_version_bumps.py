@@ -9,11 +9,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT_DIR = "crates/popcircles/src/snapshots"
 REPORT = "crates/popcircles/src/report.rs"
 
-# The two cache formats, and the blocks whose fields are their shape. Both structs of a ledger are
-# listed because `Probe` is what `Document.radii` holds, so a field of either moves the document.
+TABLE_CACHE = "crates/popcircles/src/table/cache.rs"
+LEDGER_CACHE = "crates/popcircles/src/smallest/cache.rs"
+
+# Each watched block, where it lives, and the files whose FORMAT_VERSION its shape governs. Both
+# structs of a ledger are listed because `Probe` is what `Document.radii` holds, so a field of
+# either moves the document. `Attestation` governs two, which is the pairing this table exists to
+# express: ADR 0007 flattens one shape into both documents, and a field added to it that bumped only
+# the constant in its own file would leave the other format's readers accepting a document they
+# misread.
 STRUCT_TRIGGERS = (
-    ("crates/popcircles/src/table/cache.rs", ("Header",)),
-    ("crates/popcircles/src/smallest/cache.rs", ("Document", "Probe")),
+    (TABLE_CACHE, "Header", (TABLE_CACHE,)),
+    (TABLE_CACHE, "Attestation", (TABLE_CACHE, LEDGER_CACHE)),
+    (LEDGER_CACHE, "Document", (LEDGER_CACHE,)),
+    (LEDGER_CACHE, "Probe", (LEDGER_CACHE,)),
 )
 
 _KEY_RE = re.compile(r'^\s*"([A-Za-z0-9_]+)"\s*:', re.MULTILINE)
@@ -103,28 +112,34 @@ def check_snapshots() -> list[Finding]:
 
 def check_structs() -> list[Finding]:
     findings: list[Finding] = []
-    for path, names in STRUCT_TRIGGERS:
+    for path, name, versioned in STRUCT_TRIGGERS:
         before, after = head(path), index(path)
         if before is None or after is None:
             continue
-        for name in names:
-            old, new = struct_fields(before, name), struct_fields(after, name)
-            if old is None:
-                continue
-            if new is None:
-                # Zero fires too, for `single-unsafe-allow`'s reason: a block renamed out from under
-                # this check leaves the check watching nothing and saying so nowhere.
-                detail = f"no struct {name} — point STRUCT_TRIGGERS at the name it has now"
-                findings.append(Finding(path, detail))
-                continue
-            if old == new or bumped(path, "FORMAT_VERSION"):
-                continue
-            # An added field fires this where a snapshot's key would not: serde ignores a key it
-            # does not know, so a build reading a header from a later format accepts the document
-            # and then maps a payload whose layout it has no reason to doubt.
-            moved = sorted(f"+{f}" for f in new - old) + sorted(f"-{f}" for f in old - new)
-            detail = f"fields {', '.join(moved)}, under an unchanged FORMAT_VERSION"
-            findings.append(Finding(f"{path} struct {name}", detail))
+        old, new = struct_fields(before, name), struct_fields(after, name)
+        if old is None:
+            continue
+        if new is None:
+            # Zero fires too, for `single-unsafe-allow`'s reason: a block renamed out from under
+            # this check leaves the check watching nothing and saying so nowhere.
+            detail = f"no struct {name} — point STRUCT_TRIGGERS at the name it has now"
+            findings.append(Finding(path, detail))
+            continue
+        if old == new:
+            continue
+        # Every constant the block governs, not just the one in its own file: a shape shared by two
+        # formats owes both bumps, and a finding names the ones that did not move.
+        missing = [file for file in versioned if not bumped(file, "FORMAT_VERSION")]
+        if not missing:
+            continue
+        # An added field fires this where a snapshot's key would not: serde ignores a key it
+        # does not know, so a build reading a header from a later format accepts the document
+        # and then maps a payload whose layout it has no reason to doubt.
+        moved = sorted(f"+{f}" for f in new - old) + sorted(f"-{f}" for f in old - new)
+        detail = (
+            f"fields {', '.join(moved)}, under an unchanged FORMAT_VERSION in {', '.join(missing)}"
+        )
+        findings.append(Finding(f"{path} struct {name}", detail))
     return findings
 
 

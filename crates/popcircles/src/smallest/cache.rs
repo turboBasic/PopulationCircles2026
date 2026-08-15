@@ -18,14 +18,18 @@ use serde::{Deserialize, Serialize};
 use super::RadiusLedger;
 use crate::grid::Grid;
 use crate::search::Candidate;
-use crate::table::cache::Identity;
+use crate::table::cache::{Attestation, Identity, Mismatch};
 
 /// Bumped when a change to the document's fields is one an older reader would misread rather than refuse.
 ///
 /// Additive growth bumps it too, unlike a wire format's version: `serde` ignores keys it does not know, so
 /// a build reading a later document would accept it and resume from radii it has half understood. That is
 /// `FU-06`'s reasoning for the table's header, and a ledger is the same kind of file.
-pub const FORMAT_VERSION: u32 = 1;
+///
+/// Its own constant and not the table's, per ADR 0007 decision 2: the two documents share an attestation
+/// and are separately versioned, which is what the `version-bumps` hook asks for both of when the shared
+/// shape moves.
+pub const FORMAT_VERSION: u32 = 2;
 
 /// One suffix, so an interrupted publication leaves a name the next one can name back.
 const TEMPORARY_SUFFIX: &str = ".tmp";
@@ -34,7 +38,8 @@ const TEMPORARY_SUFFIX: &str = ".tmp";
 ///
 /// One variant per ground, [`CacheError`](crate::table::cache::CacheError)'s reasoning: a caller that
 /// starts afresh on a digest mismatch and reports a broken file as an error has to be able to tell the two
-/// apart, and a message reading only "stale ledger" sends its reader to a hex editor.
+/// apart, and a message reading only "stale ledger" sends its reader to a hex editor. The grounds for not
+/// being this table are [`Mismatch`]'s, shared with the header rather than spelled again.
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
     #[error("the ledger at {} could not be read", path.display())]
@@ -61,20 +66,11 @@ pub enum LedgerError {
     #[error("this build reads format version {expected}; the ledger declares {found}")]
     FormatVersion { expected: u32, found: u32 },
 
-    #[error(
-        "wanted the radii of the table whose cells digest to {expected:#018x}; the ledger declares \
-         {found:#018x}"
-    )]
-    Digest { expected: u64, found: u64 },
-
-    #[error("wanted a {expected}-column table; the ledger declares {found}")]
-    Width { expected: u32, found: u32 },
-
-    #[error("wanted a {expected}-row table; the ledger declares {found}")]
-    Height { expected: u32, found: u32 },
-
-    #[error("wanted a table decimated by {expected}; the ledger declares {found}")]
-    DecimationFactor { expected: u32, found: u32 },
+    // The noun is the wrapper's and the ground is the attestation's, which is the half of the shared enum
+    // that had to be got right: a refusal here names the ledger where the header's names the header, and
+    // the two documents cannot drift into one message that reads for only one of them.
+    #[error("the ledger does not describe the table wanted: {0}")]
+    NotThisTable(Mismatch),
 
     #[error(
         "the ledger records a maximum at ({row}, {col}), which is not a cell of a {width} x {height} grid"
@@ -103,12 +99,23 @@ struct Probe {
     col: u32,
 }
 
+/// The one field a document of any version carries, so the version can be compared before the rest is
+/// parsed at all.
+///
+/// The table header's probe and this one are separate structs over the same property — serde ignoring keys
+/// a struct does not name — because a test of one says nothing about the other. ADR 0007 decision 4.
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct DocumentVersion {
+    format_version: u32,
+}
+
 /// The document.
 ///
 /// `format_version` is declared first because serde emits struct fields in declaration order, so the field
 /// a reader needs before it can trust any other is the first one it meets — the table's header and the
-/// report envelope both lead with theirs for the same reason. The digest, the dimensions and the factor are
-/// [`Identity`]'s, spelled out rather than nested so a mismatch in any one of them is reported as itself.
+/// report envelope both lead with theirs for the same reason. The table's identity is the flattened
+/// [`Attestation`], the header's own, so the two documents cannot key on different numbers again and the
+/// file stays flat enough to `cat`.
 ///
 /// **The share is not here, and neither is the spacing.** What a row records is the maximum over the
 /// table's cell centres at a radius, which is a property of the table alone: keying on the spacing would
@@ -117,10 +124,8 @@ struct Probe {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Document {
     format_version: u32,
-    digest: u64,
-    width: u32,
-    height: u32,
-    decimation: u32,
+    #[serde(flatten)]
+    attestation: Attestation,
     radii: Vec<Probe>,
 }
 
@@ -128,50 +133,18 @@ impl Document {
     fn new(identity: &Identity) -> Self {
         Self {
             format_version: FORMAT_VERSION,
-            digest: identity.digest,
-            width: identity.decimation.grid().width(),
-            height: identity.decimation.grid().height(),
-            decimation: identity.decimation.factor(),
+            attestation: Attestation::new(identity),
             radii: Vec::new(),
         }
     }
 
-    /// The version comes first, and for the table header's reason: a document of another version may mean
-    /// every field after it differently, so nothing else is compared until it agrees.
+    /// The attestation's comparison and nothing else. The version is not here — [`Ledger::open_or_empty`]
+    /// reads it out of the document before this struct is parsed, because a document of another version
+    /// need not parse into this shape at all.
     fn check(&self, wanted: &Identity) -> Result<(), LedgerError> {
-        if self.format_version != FORMAT_VERSION {
-            return Err(LedgerError::FormatVersion {
-                expected: FORMAT_VERSION,
-                found: self.format_version,
-            });
-        }
-        if self.digest != wanted.digest {
-            return Err(LedgerError::Digest {
-                expected: wanted.digest,
-                found: self.digest,
-            });
-        }
-
-        let grid = wanted.decimation.grid();
-        if self.width != grid.width() {
-            return Err(LedgerError::Width {
-                expected: grid.width(),
-                found: self.width,
-            });
-        }
-        if self.height != grid.height() {
-            return Err(LedgerError::Height {
-                expected: grid.height(),
-                found: self.height,
-            });
-        }
-        if self.decimation != wanted.decimation.factor() {
-            return Err(LedgerError::DecimationFactor {
-                expected: wanted.decimation.factor(),
-                found: self.decimation,
-            });
-        }
-        Ok(())
+        self.attestation
+            .check(wanted)
+            .map_err(LedgerError::NotThisTable)
     }
 }
 
@@ -223,6 +196,21 @@ impl Ledger {
                 });
             }
         };
+
+        // The version out of the document before the document, per ADR 0007 decision 4: a ledger of
+        // another version is not required to parse into this build's `Document`, so without this probe a
+        // bumped format reports as "not the JSON document this format is" and the constant is decoration.
+        let probed: DocumentVersion =
+            serde_json::from_slice(&bytes).map_err(|source| LedgerError::Syntax {
+                path: ledger.path.clone(),
+                source,
+            })?;
+        if probed.format_version != FORMAT_VERSION {
+            return Err(LedgerError::FormatVersion {
+                expected: FORMAT_VERSION,
+                found: probed.format_version,
+            });
+        }
 
         let document: Document =
             serde_json::from_slice(&bytes).map_err(|source| LedgerError::Syntax {
@@ -420,7 +408,7 @@ mod tests {
 
         let document = fs::read_to_string(ledger.path()).unwrap();
         assert!(
-            document.starts_with(r#"{"format_version":1,"#),
+            document.starts_with(r#"{"format_version":2,"#),
             "{document}"
         );
     }
@@ -472,7 +460,7 @@ mod tests {
         document.format_version = FORMAT_VERSION + 1;
         // The digest goes too, and the refusal still names the version: a document of another version is
         // not one whose other fields this build knows how to compare.
-        document.digest ^= 1;
+        document.attestation.digest ^= 1;
         write_document(&ledger, &document);
 
         assert!(matches!(
@@ -491,13 +479,13 @@ mod tests {
         let ledger = ledger_in(&directory, &identity);
 
         let mut document = document_of(&identity, Vec::new());
-        document.digest ^= 1;
+        document.attestation.digest ^= 1;
         write_document(&ledger, &document);
 
         assert!(matches!(
             reopen(&ledger, &identity),
-            Err(LedgerError::Digest { expected, found })
-                if expected == DIGEST && found == DIGEST ^ 1
+            Err(LedgerError::NotThisTable(Mismatch::Digest { wanted, found }))
+                if wanted == DIGEST && found == DIGEST ^ 1
         ));
     }
 
@@ -508,15 +496,15 @@ mod tests {
         let ledger = ledger_in(&directory, &identity);
 
         let mut document = document_of(&identity, Vec::new());
-        document.width += 1;
+        document.attestation.width += 1;
         write_document(&ledger, &document);
 
         assert!(matches!(
             reopen(&ledger, &identity),
-            Err(LedgerError::Width {
-                expected: 4,
+            Err(LedgerError::NotThisTable(Mismatch::Width {
+                wanted: 4,
                 found: 5
-            })
+            }))
         ));
     }
 
@@ -527,15 +515,15 @@ mod tests {
         let ledger = ledger_in(&directory, &identity);
 
         let mut document = document_of(&identity, Vec::new());
-        document.height += 1;
+        document.attestation.height += 1;
         write_document(&ledger, &document);
 
         assert!(matches!(
             reopen(&ledger, &identity),
-            Err(LedgerError::Height {
-                expected: 3,
+            Err(LedgerError::NotThisTable(Mismatch::Height {
+                wanted: 3,
                 found: 4
-            })
+            }))
         ));
     }
 
@@ -548,16 +536,110 @@ mod tests {
         let ledger = ledger_in(&directory, &identity);
 
         let mut document = document_of(&identity, Vec::new());
-        document.decimation = 2;
+        document.attestation.decimation = 2;
         write_document(&ledger, &document);
 
         assert!(matches!(
             reopen(&ledger, &identity),
-            Err(LedgerError::DecimationFactor {
-                expected: 1,
+            Err(LedgerError::NotThisTable(Mismatch::DecimationFactor {
+                wanted: 1,
                 found: 2
+            }))
+        ));
+    }
+
+    /// The same shape whose columns start half a turn away: the dimensions and the factor agree, so
+    /// nothing but the geometry can tell the two tables apart.
+    fn half_turn_identity() -> Identity {
+        let shifted = Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: 90.0,
+                lon: 0.0,
+            },
+            90.0,
+            -60.0,
+        )
+        .expect("a 4 x 3 whole-globe grid starting at the prime meridian is valid");
+        Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(shifted),
+        }
+    }
+
+    #[test]
+    fn a_ledger_filled_over_another_grid_is_refused() {
+        // The consequence ADR 0007 puts above a wrong sum: before this the dimensions matched, so every
+        // probe's row and column minted cleanly onto the new grid, `CentreOffGrid` never fired, and the
+        // resumed run published a centre whose population was measured half a turn away.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let mut ledger = ledger_in(&directory, &identity);
+        fill(&mut ledger, &identity);
+
+        assert!(matches!(
+            reopen(&ledger, &half_turn_identity()),
+            Err(LedgerError::NotThisTable(Mismatch::OriginLon { wanted, found }))
+                if wanted == 0.0 && found == -180.0
+        ));
+    }
+
+    #[test]
+    fn a_v1_document_is_refused_for_its_version_and_not_for_its_syntax() {
+        // The document verbatim, because no struct in this build spells the shape that is on disk from
+        // before ADR 0007. Parsed into the widened `Document` it fails with `missing field origin_lat`,
+        // which is `Syntax` and never reaches a version comparison.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+
+        let v1 = format!(
+            r#"{{"format_version":1,"digest":{DIGEST},"width":4,"height":3,"decimation":1,"radii":[]}}"#
+        );
+        fs::write(ledger.path(), v1).unwrap();
+
+        assert!(matches!(
+            reopen(&ledger, &identity),
+            Err(LedgerError::FormatVersion {
+                expected: 2,
+                found: 1
             })
         ));
+    }
+
+    #[test]
+    fn the_version_is_read_out_of_a_document_carrying_more() {
+        // The ledger's own probe, and its own test: the two probes are separate structs, so
+        // `deny_unknown_fields` on this one would refuse every real ledger while the header's test still
+        // passed.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let mut ledger = ledger_in(&directory, &identity);
+        ledger.put(500, candidate(&identity, 1, 2, 42.0)).unwrap();
+
+        let bytes = fs::read(ledger.path()).unwrap();
+        let probed: DocumentVersion = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(probed.format_version, FORMAT_VERSION);
+        assert!(bytes.len() > br#"{"format_version":2}"#.len());
+    }
+
+    #[test]
+    fn a_refusal_names_the_ledger_and_not_the_header() {
+        // The half of the shared enum a wrapper could quietly drop: the ground is the header's, and the
+        // noun has to be this document's.
+        let directory = TempDir::new().unwrap();
+        let identity = identity(4, 3);
+        let ledger = ledger_in(&directory, &identity);
+        write_document(&ledger, &document_of(&identity, Vec::new()));
+
+        let message = reopen(&ledger, &half_turn_identity())
+            .expect_err("a ledger over another grid is refused")
+            .to_string();
+        assert!(message.contains("ledger"), "{message}");
+        assert!(!message.contains("header"), "{message}");
+        assert!(message.contains("origin longitude is 0"), "{message}");
+        assert!(message.contains("found -180"), "{message}");
     }
 
     #[test]
