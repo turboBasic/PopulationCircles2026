@@ -26,6 +26,7 @@ taplo
 # --- Domain vocabulary ---
 antimeridian
 arcmin
+basemap
 binade
 binades
 arcsec
@@ -50,6 +51,7 @@ ulps
 Valeriepieris
 
 # --- Geospatial tooling and standards ---
+Carree
 EPSG
 GDAL
 grib
@@ -57,7 +59,9 @@ IEEEFP
 IUGG
 libgdal
 mbtiles
+naturalearth
 pmtiles
+pyogrio
 tiffinfo
 
 # --- Library and API identifiers ---
@@ -65,19 +69,26 @@ anstream
 anstyle
 bpaf
 bytemuck
+cartopy
+ccrs
 colortype
 corasick
 flate
+geoaxes
+geoms
 indicatif
 insta
 keepends
 libc
+lons
 mangen
 memmap
 miniz
 ndarray
 pread
 proptest
+SEGS
+skia
 splitmix
 thiserror
 weezl
