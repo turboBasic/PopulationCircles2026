@@ -7,6 +7,7 @@
 
 pub(crate) mod distance;
 pub(crate) mod grid;
+pub(crate) mod search;
 pub(crate) mod table;
 
 use std::fs;
