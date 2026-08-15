@@ -11,6 +11,7 @@ turboBasic
 actionlint
 binstall
 codesign
+iostat
 commitizen
 cspell
 mise

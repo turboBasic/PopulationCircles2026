@@ -108,7 +108,7 @@ enough to admit a wrong answer looks exactly like one that works.
   Verify: `rg -n 'is a later step|What is left is validation' README.md` is empty; `mise run lint:docs` and
   `mise run lint:markdown` pass.
 
-- [ ] **3.2** `docs/follow-ups.md` records what this work produced and corrects what it touched. `FU-08`
+- [x] **3.2** `docs/follow-ups.md` records what this work produced and corrects what it touched. `FU-08`
   gains a dated note: the curve it was waiting for exists, its premise that the ceiling is two orders of
   magnitude from the answer is wrong, and the entry stays `dormant` because no caller outside `search.rs`
   has chosen a spacing — the new gated test picks one, and it is a deselected fixture, which that entry
