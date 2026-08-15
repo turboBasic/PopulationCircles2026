@@ -174,7 +174,7 @@ Eight facts settled here rather than met mid-task:
   Verify: `cargo test -p popcircles-cli --test commands` runs 9 tests green; the new case's assertion on
   stdout is emptiness rather than a JSON document.
 
-- [ ] **3.3 `report.rs` says what is attested now.** The module note at `:24` and `Provenance`'s doc comment
+- [x] **3.3 `report.rs` says what is attested now.** The module note at `:24` and `Provenance`'s doc comment
   at `:118` stop naming `FU-11` as an open gap and say that the grid is attested by the cache that answered,
   in the same sense the digest and the factor are — the header binds it and opening one compares it.
   `docs/ai/application.md` needs nothing: its `table/cache.rs` clause names the header and the atomic

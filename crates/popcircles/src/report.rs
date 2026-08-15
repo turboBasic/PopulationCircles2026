@@ -21,11 +21,10 @@
 //! carries no provenance, because there the table is what the command is *about* rather than what it was
 //! answered from.
 //!
-//! **The `grid` in provenance is the grid the caller declared, not one the cache attested to.** A cache
-//! header binds a digest, a width, a height and a decimation factor — and no origin and no steps. So a
-//! table built over one geometry opens cleanly for a command declaring another, at which point every
-//! coordinate resolves to the wrong cell while the digest agrees. `digest` and `decimation` are the two
-//! fields a cache did compare. `FU-11` is the gap; closing it is a record's call.
+//! **The `grid` in provenance is attested, in the same sense `digest` and `decimation` are.** ADR 0007
+//! binds the whole geometry in the cache header, so opening one compares it and a table built over
+//! another grid is refused rather than answered from. What a document publishes is the caller's spelling
+//! of that geometry, which the header accepted within the tolerance the raster reader grants.
 //!
 //! # The documents
 //!
@@ -115,11 +114,10 @@ impl<T> Envelope<T> {
 
 /// The table a command answered from, and where it sits.
 ///
-/// Two of the three facts here are the cache's own and the third is not, which is why the distinction is
-/// documented rather than left to a reader: `digest` and `decimation` are what a cache **attested** to,
-/// because opening one compares both. `grid` is the grid the caller **declared** — the header binds a
-/// width, a height and a factor and no origin or step, so a table built over one geometry opens cleanly
-/// for a query declaring another. `FU-11` is that gap; closing it is a record's call.
+/// All three facts here are the cache's own: `digest`, `decimation` and `grid` are what opening a cache
+/// **attested** to, because ADR 0007 binds the whole geometry in the header and compares it. The geometry
+/// is compared within `BOUNDARY_TOLERANCE_DEG`, so what a document names is the caller's spelling of a
+/// grid the header accepted rather than the header's own bits.
 #[derive(Debug, Clone, Serialize)]
 pub struct Provenance {
     digest: String,
