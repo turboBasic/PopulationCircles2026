@@ -79,18 +79,30 @@ def test_constant_value_ignores_the_comment_above_it() -> None:
 def test_the_watched_blocks_are_the_ones_on_disk() -> None:
     # The triggers name blocks by string, so a rename in the crate leaves them naming nothing. The
     # hook fires on that, and this fails before a commit reaches it.
-    for path, names in lvb.STRUCT_TRIGGERS:
+    for path, name, _ in lvb.STRUCT_TRIGGERS:
         text = (lvb.REPO_ROOT / path).read_text(encoding="utf-8")
-        for name in names:
-            assert lvb.struct_fields(text, name), f"{path} has no struct {name}"
+        assert lvb.struct_fields(text, name), f"{path} has no struct {name}"
 
 
 def test_the_watched_constants_are_the_ones_on_disk() -> None:
     report = (lvb.REPO_ROOT / lvb.REPORT).read_text(encoding="utf-8")
     assert lvb.constant_value(report, "SCHEMA_VERSION")
-    for path, _ in lvb.STRUCT_TRIGGERS:
-        text = (lvb.REPO_ROOT / path).read_text(encoding="utf-8")
-        assert lvb.constant_value(text, "FORMAT_VERSION"), f"{path} has no FORMAT_VERSION"
+    for _, name, versioned in lvb.STRUCT_TRIGGERS:
+        assert versioned, f"struct {name} governs no constant"
+        for path in versioned:
+            text = (lvb.REPO_ROOT / path).read_text(encoding="utf-8")
+            assert lvb.constant_value(text, "FORMAT_VERSION"), f"{path} has no FORMAT_VERSION"
+
+
+def test_the_attestation_is_watched_against_both_format_versions() -> None:
+    # ADR 0007 decision 2 flattens one shape into two separately versioned documents, so a field
+    # added to it owes both bumps. The pairing is the whole reason a trigger names files rather than
+    # reading the constant beside the block, and dropping it would leave the ledger's readers
+    # unguarded while the hook still passed.
+    governed = {name: files for _, name, files in lvb.STRUCT_TRIGGERS}
+    assert set(governed["Attestation"]) == {lvb.TABLE_CACHE, lvb.LEDGER_CACHE}
+    assert governed["Header"] == (lvb.TABLE_CACHE,)
+    assert governed["Document"] == (lvb.LEDGER_CACHE,)
 
 
 def test_the_snapshot_directory_holds_snapshots_this_can_read() -> None:

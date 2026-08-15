@@ -153,7 +153,7 @@ Eight facts settled here rather than met mid-task:
 
 ## Phase 3 — the gate, the end-to-end refusal, and close-out
 
-- [ ] **3.1 The `version-bumps` hook requires both constants when the shared block moves.**
+- [x] **3.1 The `version-bumps` hook requires both constants when the shared block moves.**
   `STRUCT_TRIGGERS` carries, per watched block, the files whose `FORMAT_VERSION` its shape governs:
   `Header` the table's, `Document` and `Probe` the ledger's, and `Attestation` **both**. `bumped` is asked
   of every constant a trigger names, and a finding names the constants that did not move.
