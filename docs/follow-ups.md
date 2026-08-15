@@ -387,9 +387,10 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-12 - No gate compiles this for Apple silicon
 
-- **Status** — `due` (2026-08-15): met the moment `.github/workflows/release.yml` landed. **`due` here is a
-  standing accepted gap and not queued work**, which is the one place this register's statuses can mislead —
-  see the note under the Fix.
+- **Status** — `closed` (2026-08-15): not by the Fix, which is declined rather than pending, but by
+  `mise run release:smoke` putting the evidence it would have produced one command from anyone about to cut
+  a tag. The Condition below still reads true and is meant to — the gap stands, and ADR 0006 holds it. What
+  closed the entry is that nothing here is anyone's to discharge.
 - **Condition** — a release job builds a macOS artifact while no gate ever compiles for that target. Two
   greps: `rg -n 'macos' .github/workflows/release.yml` matching, and `rg -n 'runs-on|macos'
   .github/workflows/ci.yml` naming `ubuntu-latest` and nothing else. So the first time this code is compiled
@@ -398,25 +399,15 @@ Identifiers are flat, sequential and never reused.
   therefore surfaces when the tag already exists, which is the half of ADR 0006's cost that CONTRIBUTING's
   Releasing section has to give a recovery for rather than prevent.
 - **Fix** — `macos-latest` in `ci.yml`'s job as a matrix beside `ubuntu-latest`. ADR 0006 weighed this and
-  did not take it: the cost is a second runner on every pull request rather than on every tag, which is why
-  this is an entry and not a task. What would move it is evidence the gap bites — a release leg failing on
-  macOS where the Linux leg passed, which is a fact a run either shows or does not.
+  did not take it: the cost is a second runner on every pull request rather than on every tag. The
+  repository owner's ruling (2026-08-15) declines it rather than deferring it, so a later reader proposing
+  `macos-latest` is reopening a decision rather than discharging an obligation.
 
-  **The Fix above is declined rather than pending, and #50 is where the evidence comes from instead**
-  (2026-08-15, the repository owner's ruling). `ci.yml` stays `ubuntu-latest` and macOS is compiled at
-  release time only: a second runner on every pull request buys less than the same evidence asked for on
-  demand. So this entry is not waiting for someone to notice it, and a later reader proposing `macos-latest`
-  is reopening a decision rather than discharging an obligation.
-
-  What #50 changes about the Condition is nothing — it is a command a person runs, not a gate, so the two
-  greps keep matching and this entry keeps standing. What it changes is the cost of the gap: the first macOS
-  compile of a tree stops being the tag someone is trying to ship. The evidence the paragraph above names
-  becomes available before a release rather than during one, which is the whole of the mitigation.
-
-  That command is `mise run release:smoke` (2026-08-15): it dispatches `.github/workflows/release-smoke.yml`,
-  which calls the same build a tag calls and declares none of the jobs a tag owns. The Condition's two greps are unmoved by it, which is
-  the paragraph above holding rather than an exception to it — `ci.yml` is still `ubuntu-latest`, and a
-  dispatch nobody runs proves nothing, which is why `CONTRIBUTING.md`'s Releasing section says when to.
+  What stands in its place is `mise run release:smoke`, which dispatches
+  `.github/workflows/release-smoke.yml` — the same build a tag calls, with none of the jobs a tag owns. It
+  is a command a person runs and not a gate, which is why it closes this entry without touching the
+  Condition, and why `CONTRIBUTING.md`'s Releasing section has to say when to run it: a dispatch nobody
+  runs proves nothing.
 
 ### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
 
