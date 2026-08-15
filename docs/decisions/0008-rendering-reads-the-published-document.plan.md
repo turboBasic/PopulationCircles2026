@@ -174,7 +174,7 @@ test is what stands between a seam artefact and a figure nobody checks.
   Verify: `mise run typecheck` passes; `mise run lint:docs` passes with `typings/` tracked;
   `rg -n 'Any' typings/` returns nothing.
 
-- [ ] **2.3** `scripts/circle_document.py` turns a document into frozen pydantic models, refusing what
+- [x] **2.3** `scripts/circle_document.py` turns a document into frozen pydantic models, refusing what
   it cannot honestly draw: a `schema_version` above the one it knows, an unrecognised `document` kind,
   and an `earth_model.model` that is not `"sphere"`. Frozen models rather than frozen dataclasses
   because every one of those three refusals is a validation a dataclass performs nowhere, so the
