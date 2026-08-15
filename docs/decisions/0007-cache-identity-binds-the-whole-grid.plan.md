@@ -165,7 +165,7 @@ Eight facts settled here rather than met mid-task:
   with only `table/cache.rs`'s constant moved it still fails naming `smallest/cache.rs`; with both moved it
   passes, and the scratch edit reverts clean.
 
-- [ ] **3.2 A command declaring another grid is refused end to end.** A case in
+- [x] **3.2 A command declaring another grid is refused end to end.** A case in
   `crates/popcircles-cli/tests/commands.rs` modelled on
   `a_digest_naming_another_table_is_missing_data_and_prints_nothing`: the fixture's own cache, queried with
   every flag as built except an origin longitude a half turn away, exits `EXIT_MISSING_DATA`, prints nothing

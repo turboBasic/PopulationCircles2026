@@ -160,6 +160,18 @@ impl Fixture {
         let flags = self.flags_at(&hexadecimal(self.digest), level);
         run_with(&flags, command, rest)
     }
+
+    /// The same invocation with one number substituted, so a case declaring another grid differs from a
+    /// success case in that number and nothing else — not in the digest, the dimensions or the steps.
+    fn run_at_origin_lon(&self, lon: &str, command: &str, rest: &[&str]) -> Output {
+        let mut flags = self.flags(&hexadecimal(self.digest));
+        let at = flags
+            .iter()
+            .position(|flag| flag == "--origin-lon")
+            .expect("the flag list declares an origin longitude");
+        flags[at + 1] = lon.to_string();
+        run_with(&flags, command, rest)
+    }
 }
 
 fn run_with(flags: &[String], command: &str, rest: &[&str]) -> Output {
@@ -364,6 +376,24 @@ fn a_digest_naming_another_table_is_missing_data_and_prints_nothing() {
     // Nothing on stdout, which is what makes a consumer's parse failure impossible rather than confusing.
     assert!(output.stdout.is_empty(), "{output:?}");
     assert!(!output.stderr.is_empty(), "a failure says why");
+}
+
+#[test]
+fn a_grid_the_cache_was_not_built_over_is_missing_data_and_prints_nothing() {
+    // The whole of ADR 0007 in one invocation: every flag a success case passes, with the columns half a
+    // turn from where the table's are. The digest is the one the build reported, the width, the height,
+    // the steps and the factor all agree, and before this the command answered with a population.
+    let fixture = Fixture::build();
+    let output = fixture.run_at_origin_lon(
+        "0",
+        "population-at",
+        &["--lat", "48", "--lon", "11", "--radius-km", "1200"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    // And the refusal names the number that differed rather than sending its reader to a hex editor.
+    let complaint = String::from_utf8_lossy(&output.stderr);
+    assert!(complaint.contains("origin longitude"), "{complaint}");
 }
 
 #[test]
