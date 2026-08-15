@@ -361,16 +361,20 @@ Identifiers are flat, sequential and never reused.
   this is an entry and not a task. What would move it is evidence the gap bites — a release leg failing on
   macOS where the Linux leg passed, which is a fact a run either shows or does not.
 
-### FU-13 - A published binary is unsigned, and a user is told to clear an attribute by hand
+### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
 
-- **Status** — `dormant` (2026-08-15): the condition needs a release to exist, and none does. Nothing has
-  fired the release workflow.
-- **Condition** — a Release exists while no artifact is signed. The sweep is `gh release list` returning at
-  least one release, together with `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml`
-  returning nothing. The consequence is already written down: `README.md`'s Releases section tells a macOS
-  user to run `xattr -d com.apple.quarantine` on the download, which is a documented workaround for an
-  unsigned binary rather than a property of the tool. The entry exists because that instruction reads as
-  normal once it has sat in a README for a while, and it is not.
+- **Status** — `dormant` (2026-08-15): the condition needs a release to exist, and none does. The workflow
+  has been fired once, against a pre-release tag since deleted along with its Release.
+- **Condition** — a Release exists while no artifact carries a Developer ID signature. The sweep is
+  `gh release list` returning at least one release, together with
+  `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml` returning nothing. Not "unsigned":
+  the dry run measured `codesign -dv` on the published macOS asset as `Signature=adhoc` with
+  `TeamIdentifier=not set`, which is the linker's default and is what lets it run on Apple silicon at all.
+  What is missing is the identity Gatekeeper will accept. The consequence is written down in `README.md`'s
+  Releases section, which tells a macOS user to clear `com.apple.quarantine` off a browser download —
+  measured too: quarantined, the binary is killed with "Apple could not verify"; with the attribute gone it
+  runs. That is a documented workaround for a missing identity rather than a property of the tool, and the
+  entry exists because such an instruction reads as normal once it has sat in a README for a while.
 - **Fix** — sign and notarize the macOS artifact in the publish job, which drops the README line rather
   than explaining it better. ADR 0006 put it out of scope for a reason that is a prerequisite and not a
   preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by

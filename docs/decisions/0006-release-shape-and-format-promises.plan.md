@@ -7,8 +7,10 @@ created: 2026-08-15
 
 **Status: complete (2026-08-15).** Carries [ADR 0006](0006-release-shape-and-format-promises.md) into
 the tree, which is the remaining work of issue #28. It builds the process and does **not** publish a
-release: the tag waits on #9, #10 and #45, so the last thing this plan leaves behind is a workflow nobody
-has fired.
+release: the tag waits on #9, #10 and #45, so what this plan leaves behind is a workflow that has never
+run for a version anyone keeps. It has run once — a `v0.1.0-rc.1` dry run on a scratch branch, whose
+Release, tag and branch were deleted after both artifacts were downloaded and checked. That is what turned
+three of this file's claims from reasoning into measurement, and corrected a fourth in `README.md`.
 
 Measured on this tree before drafting: 253 Rust tests and 34 Python tests passing, `mise run ci` green.
 

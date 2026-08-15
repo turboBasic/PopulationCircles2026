@@ -196,12 +196,19 @@ A [release][releases] attaches two binaries, each named by its target triple wit
 | `popcircles-aarch64-apple-darwin` | macOS on Apple silicon |
 | `popcircles-x86_64-unknown-linux-gnu` | Linux on x86-64 |
 
-Neither is signed or notarized, so macOS quarantines the download and refuses to run it. Clearing the
-attribute is the whole of the fix:
+Neither carries a Developer ID signature and neither is notarized, which costs you something only on
+macOS and only depending on how you fetched it. **A browser download** is tagged
+`com.apple.quarantine`, and Gatekeeper then kills the binary with "Apple could not verify … is free of
+malware" — offering to move it to the Bin, which you do not want. Clearing the attribute is the whole of
+the fix:
 
 ```sh
 xattr -d com.apple.quarantine popcircles-aarch64-apple-darwin
 ```
+
+**A download with `curl`, `wget` or `gh release download` is not tagged** and runs as it is. Nothing here
+depends on Gatekeeper being disabled: the macOS binary is ad-hoc signed, which is what the linker does by
+default and what lets it run on Apple silicon at all.
 
 **What a release promises is the wire format, and only that.** The `schema_version` the JSON documents
 carry is a contract across releases, so a renderer or any other consumer may rely on it. The summation
