@@ -21,7 +21,7 @@ def top_level_roots() -> frozenset[str]:
 
 
 # The scope of the housekeeping sweep's "Duplication" check (.claude/skills/housekeeping/SKILL.md):
-# the instruction layer, .claude/skills/, the two documents in .github/, README.md, CONTRIBUTING.md.
+# the instruction layer, .claude/skills/, the two documents in .github/, and the human layer.
 # docs/decisions/ is a valid *target* for a pointer but is never itself scanned: it is frozen once
 # accepted or complete, so a pointer it contains cannot be fixed to satisfy this lint.
 def scope_files() -> list[Path]:
@@ -31,6 +31,7 @@ def scope_files() -> list[Path]:
         REPO_ROOT / ".github" / "copilot-instructions.md",
         REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md",
         REPO_ROOT / "README.md",
+        REPO_ROOT / "USAGE.md",
         REPO_ROOT / "CONTRIBUTING.md",
     ]
     globbed = [
@@ -47,6 +48,7 @@ ROOT_FILE_ALLOWLIST = frozenset(
         "Cargo.toml",
         "pyproject.toml",
         "README.md",
+        "USAGE.md",
         "CONTRIBUTING.md",
         "CLAUDE.md",
         "LICENSE",
@@ -56,7 +58,7 @@ ROOT_FILE_ALLOWLIST = frozenset(
 # docs/ai/platform.md's own rule: "Committed configuration sits at the repository root and
 # documents itself" (its opening paragraph names mise.toml, Cargo.toml, pyproject.toml,
 # .pre-commit-config.yaml, .lfsconfig outright); the rest here are the same kind of thing, plus
-# the human-layer files GitHub already surfaces on the repo homepage without help from this list.
+# the human layer docs/ai-instructions.md "Layering" names, which are documents and not roots.
 STRUCTURE_EXEMPT_ROOTS = frozenset(
     {
         "mise.toml",
@@ -75,6 +77,7 @@ STRUCTURE_EXEMPT_ROOTS = frozenset(
         ".cspell",
         ".vscode",
         "README.md",
+        "USAGE.md",
         "CONTRIBUTING.md",
         "LICENSE",
     }
