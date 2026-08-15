@@ -6,6 +6,10 @@ expression: "Envelope::new(TableBuildReport::new(&built,\nPath::new(\"out/table.
   "schema_version": 1,
   "tool": "popcircles",
   "tool_version": "0.1.0",
+  "earth_model": {
+    "model": "sphere",
+    "radius_km": 6371.0088
+  },
   "result": {
     "digest": "0x3a5d5e3b082f2fb7",
     "decimation": 1,

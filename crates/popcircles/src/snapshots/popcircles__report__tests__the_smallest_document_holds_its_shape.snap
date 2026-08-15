@@ -6,6 +6,10 @@ expression: "Envelope::new(SmallestReport::new(&found, &grid))"
   "schema_version": 1,
   "tool": "popcircles",
   "tool_version": "0.1.0",
+  "earth_model": {
+    "model": "sphere",
+    "radius_km": 6371.0088
+  },
   "result": {
     "radius_km": 2639,
     "centre": {

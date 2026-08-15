@@ -10,6 +10,14 @@
 //! understand, and `provenance` precedes `result` for the same reason one step out: what produced a
 //! document is read before the document.
 //!
+//! # The earth model, and why it is published
+//!
+//! [`EarthModel`] attests **which sphere every distance in this document was measured on**. A radius, a
+//! great-circle distance and a cap's boundary are all that number's, so a consumer drawing the answer on
+//! another earth model is drawing a different figure — and drawing it without complaint, which is why the
+//! model is a field rather than a thing a renderer assumes. `geodesy.rs` owns the model
+//! ([`EARTH_RADIUS_KM`]); this block is a publication of that owner, so a consumer needs no copy of it.
+//!
 //! # Provenance, and what it does not attest
 //!
 //! [`Provenance`] is where a document's **identity** lives: which table it was answered from, and where
@@ -56,7 +64,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::geodesy::{LatLon, RadiusKm, wrap_lon};
+use crate::geodesy::{EARTH_RADIUS_KM, LatLon, RadiusKm, wrap_lon};
 use crate::grid::{Col, Grid, Row};
 use crate::raster::CellTallies;
 use crate::search::{MostPopulous, SearchStats};
@@ -68,6 +76,25 @@ use crate::table::{BuiltTable, ColSpan, RowBand, Window};
 /// whose meaning moved. A new field does not bump it.
 pub const SCHEMA_VERSION: u32 = 1;
 
+/// The earth model every distance in a document was measured on.
+///
+/// `model` names the shape and `radius_km` is that shape's one parameter, so a consumer reads the pair
+/// rather than inferring an ellipsoid from a missing field. Both are read from `geodesy.rs`, which is why
+/// `Self::SPHERE` is the only value this crate constructs.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct EarthModel {
+    model: &'static str,
+    radius_km: f64,
+}
+
+impl EarthModel {
+    /// The model `geodesy.rs` holds, read from its constant rather than restated.
+    const SPHERE: Self = Self {
+        model: "sphere",
+        radius_km: EARTH_RADIUS_KM,
+    };
+}
+
 /// Every document the program writes.
 ///
 /// `schema_version` is declared first because serde emits struct fields in declaration order, so a
@@ -78,6 +105,7 @@ pub struct Envelope<T> {
     schema_version: u32,
     tool: &'static str,
     tool_version: &'static str,
+    earth_model: EarthModel,
     #[serde(skip_serializing_if = "Option::is_none")]
     provenance: Option<Provenance>,
     result: T,
@@ -93,6 +121,7 @@ impl<T> Envelope<T> {
             // the caller's name would make one document's producer unidentifiable from another's.
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            earth_model: EarthModel::SPHERE,
             provenance: None,
             result,
         }
@@ -106,6 +135,7 @@ impl<T> Envelope<T> {
             schema_version: SCHEMA_VERSION,
             tool: env!("CARGO_PKG_NAME"),
             tool_version: env!("CARGO_PKG_VERSION"),
+            earth_model: EarthModel::SPHERE,
             provenance: Some(provenance),
             result,
         }

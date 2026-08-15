@@ -114,7 +114,7 @@ withdrawn later.
   Verify: `mise run lint:docs` passes with the new record in the tree, and `rg -l 'ADR <NNNN>' docs/`
   names exactly the record and this plan — each referring to the other by the number the record took.
 
-- [ ] **1.2** `Envelope` publishes the earth model: an `EarthModel { model, radius_km }` emitted
+- [x] **1.2** `Envelope` publishes the earth model: an `EarthModel { model, radius_km }` emitted
   between `tool_version` and `provenance`, whose `model` is `"sphere"` and whose `radius_km` is
   `geodesy::EARTH_RADIUS_KM` — read from the constant, so this is a publication of the owner and not
   a second copy. `report.rs`'s module documentation says what the field attests: which earth model
