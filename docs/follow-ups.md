@@ -18,7 +18,8 @@ Prose that cannot meet that bar is not a follow-up and does not belong here.
 - `retired` — the entry can never fire; the entry says why.
 
 Closed and retired entries stay in the register, so a reader can tell "never fired" from "cannot
-fire".
+fire". They sit under their own heading below the live ones, because a sweep and a reader both want the
+`dormant` and `due` entries and neither should page through the discharged ones to reach them.
 
 An entry that goes `due` gets an issue in the next milestone, and the Status names it. Where the Fix needs
 something nobody has — a paid identity, an account, hardware — it stays here and out of a milestone, and the
@@ -38,6 +39,196 @@ An entry is a level-three heading, `FU-NN - <title>`, followed by three fields:
 Identifiers are flat, sequential and never reused.
 
 ## Entries
+
+### FU-08 - Nothing couples the search's initial spacing to a measured figure
+
+- **Status** — `dormant`.
+- **Condition** — a caller outside `search.rs` itself **chooses** the search's initial spacing. Choosing is
+  what fires it, not calling: a caller that takes a spacing as a parameter and forwards it has made no
+  choice, and the number it passes on is still its own caller's. The sweep is therefore two-part —
+  `rg -n 'most_populous\(' crates/popcircles-cli/src crates/popcircles/src --glob '!search.rs'` for the call
+  sites, and for each one, whether the spacing it passes is a literal or a constant rather than something it
+  was given.
+
+  On 2026-08-14 that names exactly one call site, `crates/popcircles/src/smallest.rs`, and it forwards: the
+  parameter arrives from its own caller untouched, and `smallest.rs` declares no spacing of its own —
+  `rg -n 'NonZeroU32::new' crates/popcircles/src/smallest.rs` matches only inside its tests. So #7 came and
+  went without firing this. #8 is where it fires, when a command surface has to put a number in a flag's
+  default or in a help string.
+
+  **#8 came and went without firing it either** (2026-08-14). The three commands that drive a search take
+  `--spacing` as a **required** flag with no default, and its help string names no figure — checkable as
+  `cargo run -p popcircles-cli -- most-populous --help` carrying no digit on the `--spacing` line. A command
+  that takes a spacing and forwards it has made no choice, which is the distinction this Condition draws, so
+  the entry is recorded as still dormant rather than left to read as an oversight. The note is here for the
+  reason the #7 one is: silence in a register is ambiguous, and a later reader should be able to tell "the
+  surface arrived and did not choose" from "nobody looked".
+
+  `crates/popcircles/tests/decimated_search.rs` is deliberately outside the sweep. It picks 32, but a
+  deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
+  sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
+  `smallest.rs` are outside it for the same reason.
+  `crates/popcircles/tests/registry_validation.rs` joins that exclusion (2026-08-15). It picks 256, on the
+  plateau issue #10's sweep measured, and it is a deselected fixture for the same reason the two above are.
+
+  **The curve this entry was waiting for exists, and it corrects the Condition's own arithmetic**
+  (2026-08-15, issue #10's spacing sweep). Swept over the
+  5 arcmin table at 200, 800, 3 300 and 8 000 km, the wall clock falls **monotonically** with spacing in
+  every row and flattens from about 256 — a sixteenth of the grid's width — rather than peaking at a knee.
+  The pruning *fraction* falls with it, from 97.3% at spacing 8 to 77.2% at 256, so the figure the Condition
+  reasons from is the one that must not be maximised: a fine first level prunes almost every block it makes
+  and pays for making them. What the search costs is circles evaluated, and at 3 300 km that is 4 447 at
+  spacing 8 against 390 at 256.
+
+  So "the ceiling is a sanity limit, two orders of magnitude away from the answer" is wrong, and the Fix
+  below is right for a reason it did not claim: the ceiling is the neighbourhood of the answer, and clamping
+  against it is the derivation rather than a guard on one. Nothing else about the entry changes.
+
+- **Fix** — a derivation of the initial spacing from the radius and the grid, in `search` beside the loop
+  that consumes it, bounded above by the ceiling `slack_km` already documents: once `radius + slack` reaches
+  half the circumference the widened circle is the whole sphere, every bound equals the raster's total and
+  the level prunes nothing, so a spacing past that point is strictly wasted work. The figure inside that
+  ceiling is #10's to measure — 32 on the k=10 shape prunes 86.9% of blocks at a 200 km radius, which is one
+  point and not a curve. The entry exists so the first caller does not silently become the default, and it
+  cannot be discharged by a benchmark alone: what it wants is a function of the two inputs, not a constant
+  that happened to measure well once.
+
+### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
+
+- **Status** — `due` (2026-08-15): `v0.1.0` is published, so both halves of the condition read true —
+  `gh release list` returns it, and `release.yml` names no signing tool. The published macOS asset was
+  measured on the day: `gh release download` leaves it carrying `com.apple.provenance` and no
+  `com.apple.quarantine`, and it runs and reports `popcircles 0.1.0`. That is the README's claim holding,
+  not the identity arriving.
+- **Condition** — a Release exists while no artifact carries a Developer ID signature. The sweep is
+  `gh release list` returning at least one release, together with
+  `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml` returning nothing. Not "unsigned":
+  the dry run measured `codesign -dv` on the published macOS asset as `Signature=adhoc` with
+  `TeamIdentifier=not set`, which is the linker's default and is what lets it run on Apple silicon at all.
+  What is missing is the identity Gatekeeper will accept. The consequence is written down in `README.md`'s
+  Releases section, which tells a macOS user to clear `com.apple.quarantine` off a browser download —
+  measured too: quarantined, the binary is killed with "Apple could not verify"; with the attribute gone it
+  runs. That is a documented workaround for a missing identity rather than a property of the tool, and the
+  entry exists because such an instruction reads as normal once it has sat in a README for a while.
+- **Fix** — sign and notarize the macOS artifact in the publish job, which drops the README line rather
+  than explaining it better. It was put out of scope for a reason that is a prerequisite and not a
+  preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
+  anyone who does not hold the account. Until then the honest form is the documented attribute, which is
+  why the entry's condition is about a release existing rather than about the README's wording.
+
+### FU-14 - A dataset's grid step approaches the tolerance two grids are one within
+
+- **Status** — `dormant` (2026-08-15): the registry holds one dataset, at 0.008333° — six orders of
+  magnitude above the constant.
+- **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
+  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
+  resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
+  what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — a cache
+  compares the geometry within it while the dimensions compare exactly — so a cell small enough
+  to land in that gap makes a stale cache indistinguishable from the right one, which is the failure
+  [ADR 0005](decisions/0005-derived-artefacts-are-keyed-and-refused.md) exists to catch.
+- **Fix** — a record, not a smaller number chosen in passing. The constant is shared with the raster reader
+  by design (`grid.rs` says why a second copy would be two answers to one question), so tightening it for
+  the cache alone reintroduces exactly what that comment forbids, and tightening it for both changes what
+  rasters the reader accepts. What a record has to weigh is that 1e-9° is scaled to a measured rounding in
+  the registry raster's own geotransform, and a dataset fine enough to fire this would bring a measurement
+  of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
+  on the four numbers, and a per-caller tolerance.
+
+### FU-15 - cartopy is built from source because no cp314 wheel exists
+
+- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day the renderer landed.
+  `uv pip install --only-binary :all: --python-version 3.14 cartopy` answers "all versions of cartopy have
+  no usable wheels", and a cold `uv sync --locked --reinstall-package cartopy` prints
+  `Building cartopy==0.25.0` and takes 25.55 s here.
+- **Condition** — that same command resolves. It is a one-line sweep with a yes-or-no answer, and it fires
+  the day cartopy publishes a cp314 wheel: nothing about this repository has to change for it to become
+  true, which is why the entry exists rather than a task. `uv pip install --only-binary :all:
+  --python-version 3.14 pydantic` is the contrast — that one resolves today, so the cost is cartopy's
+  alone.
+- **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
+  The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
+  outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
+  tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
+  that figure, so the entry firing is what licenses removing the step rather than guessing at it.
+
+### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
+
+- **Status** — `dormant` (2026-08-15): the registry holds one dataset, so one citation is the whole
+  mapping and a constant is indistinguishable from one.
+- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row. The sweep is the
+  count of registry entries in that file against the number of citations `scripts/render_map.py` holds:
+  one and one today. A second dataset makes `CITATION` the citation of whichever raster happens to have
+  been first, and a figure rendered from the other one then credits the wrong source while
+  `tests/test_render_map.py` still passes — the test asserts the constant appears in the registry, which
+  stays true of the wrong entry.
+- **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
+  choose between them. That second half is the reason this is an entry and not a task: `report`'s
+  `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
+  came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
+  fires this adds that field first, additively, and the entry is where the two halves are recorded
+  together.
+
+### FU-17 - The full-resolution search is page faults, not arithmetic
+
+- **Status** — `dormant` (2026-08-15): measured under issue #10, and dormant rather than due
+  because nothing in the tree asks for the runs that make it hurt. One radius at 30 arcsec is 207 s of which
+  **13.4 s is CPU**, with `iostat` reporting ~7 000 transfers a second against the 7.5 GB payload. Every
+  answer this repository has published came from a decimated table or from three certifying radii, and both
+  are affordable at that rate.
+- **Condition** — a command that needs many full-resolution radii becomes something this repository asks
+  for: `smallest-for-share` or `sweep` at `--decimate 1` named in a mise task, in `USAGE.md`, or in
+  an open issue's acceptance. Two dozen probes at 207 s is 90 minutes, and issue #18's per-country sweep is
+  the first plausible caller — ninety-plus countries at full resolution is not that multiplied by one.
+  The figure is re-measurable in one line, which is what keeps this checkable rather than remembered:
+  `/usr/bin/time -l` around a `most-populous --decimate 1` run, and the entry has fired as long as user plus
+  system time stays under a fifth of real.
+- **Fix** — a record, because the candidates are algorithm changes rather than tuning. What the measurement
+  says is that locality is the cost: `circle::population` walks a kernel's rows for one centre, and
+  consecutive table rows are 345 KB apart, so one evaluation touches ~111 MB of scattered pages and the next
+  centre re-walks the same stride one column over. Inverting that loop — one row band, every candidate column
+  in it, before moving on — reuses each page across a whole level instead of once, and is a change nobody
+  could have justified without this figure. It is not free: it changes the order the fold adds
+  in, which `search`'s determinism tests pin and `application.md` "Determinism" makes a stated rule, so a
+  record has to weigh a changed answer's bits against the wall clock. Prefetching or `madvise` are the
+  cheaper half-measures a record should rule on beside it, and neither touches the order.
+
+### FU-18 - Diagnostics are line-oriented and nothing consumes them as data
+
+- **Status** — `dormant` (2026-08-15): every diagnostic this repository emits is read by a person. The `log`
+  facade puts them behind a seam where the library emits
+  records and the binary alone chooses a stream, a level and a format, which is what makes the line-oriented
+  form a choice rather than an accident — and the right one while the reader is human.
+- **Condition** — something in the tree parses a diagnostic rather than displaying it: a mise task, a
+  script under `scripts/`, a workflow step or a test that greps, cuts or regex-matches what the CLI writes
+  to stderr in order to obtain a value. `rg -n 'stderr' mise.toml .github/workflows/ scripts/` naming a
+  step that extracts rather than shows is the sweep. The day one exists the log is an interface, and an
+  interface whose shape is a formatting decision breaks the first time the wording is improved.
+- **Fix** — decide, and record the decision rather than reach for `tracing` by reflex. The consumer may be
+  better served by the JSON document on stdout, which is already versioned and already a contract, than by
+  structure in a stream that is not; where it genuinely wants the diagnostic, structured fields on the few
+  emissions that have a consumer may be the whole of it. Replacing the facade reaches
+  every emission site and changes what a person watching a run sees — weighable, but not to be paid for a
+  consumer that does not exist. Issue #64 is the scheduled look at this question; this entry is what fires
+  if that issue closes with "not yet".
+
+### FU-19 - The record shape is machine-checkable and unchecked
+
+- **Status** — `dormant` (2026-08-15): [ADR 0001](decisions/0001-a-record-carries-one-ruling.md) caps a
+  record at 80 lines, allows it one `scope:` from a closed list and forbids a numbered decision list, and
+  the housekeeping sweep is the only thing that looks. Every record in the directory was written to those
+  rules by the pass that adopted them, so nothing has yet had the chance to drift.
+- **Condition** — any record exceeds that 80-line ceiling, carries a
+  `scope:` value absent from the closed list in the `write-adr` skill, or carries none at all.
+  `wc -l docs/decisions/*.md` and `rg -n '^scope:' docs/decisions/` answer both halves,
+  and either answering wrong means the rules held for exactly as long as someone was watching.
+- **Fix** — a check in `scripts/lint_docs.py`, wired into `mise run lint:docs` the way the pointer and
+  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It asserts the line count
+  and the `scope:` value over every record, since none is exempt. The numbered-list rule
+  is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
+  guesses at the difference is worse than the sweep reading the file.
+
+## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
 
@@ -225,59 +416,6 @@ Identifiers are flat, sequential and never reused.
   `cell_area_km2` and the CLI's `distance` all pass kilometres as `f64` — and with two callers the
   newtype is the cheaper side of that trade rather than merely the more principled one.
 
-### FU-08 - Nothing couples the search's initial spacing to a measured figure
-
-- **Status** — `dormant`.
-- **Condition** — a caller outside `search.rs` itself **chooses** the search's initial spacing. Choosing is
-  what fires it, not calling: a caller that takes a spacing as a parameter and forwards it has made no
-  choice, and the number it passes on is still its own caller's. The sweep is therefore two-part —
-  `rg -n 'most_populous\(' crates/popcircles-cli/src crates/popcircles/src --glob '!search.rs'` for the call
-  sites, and for each one, whether the spacing it passes is a literal or a constant rather than something it
-  was given.
-
-  On 2026-08-14 that names exactly one call site, `crates/popcircles/src/smallest.rs`, and it forwards: the
-  parameter arrives from its own caller untouched, and `smallest.rs` declares no spacing of its own —
-  `rg -n 'NonZeroU32::new' crates/popcircles/src/smallest.rs` matches only inside its tests. So #7 came and
-  went without firing this. #8 is where it fires, when a command surface has to put a number in a flag's
-  default or in a help string.
-
-  **#8 came and went without firing it either** (2026-08-14). The three commands that drive a search take
-  `--spacing` as a **required** flag with no default, and its help string names no figure — checkable as
-  `cargo run -p popcircles-cli -- most-populous --help` carrying no digit on the `--spacing` line. A command
-  that takes a spacing and forwards it has made no choice, which is the distinction this Condition draws, so
-  the entry is recorded as still dormant rather than left to read as an oversight. The note is here for the
-  reason the #7 one is: silence in a register is ambiguous, and a later reader should be able to tell "the
-  surface arrived and did not choose" from "nobody looked".
-
-  `crates/popcircles/tests/decimated_search.rs` is deliberately outside the sweep. It picks 32, but a
-  deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
-  sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
-  `smallest.rs` are outside it for the same reason.
-  `crates/popcircles/tests/registry_validation.rs` joins that exclusion (2026-08-15). It picks 256, on the
-  plateau issue #10's sweep measured, and it is a deselected fixture for the same reason the two above are.
-
-  **The curve this entry was waiting for exists, and it corrects the Condition's own arithmetic**
-  (2026-08-15, issue #10's spacing sweep). Swept over the
-  5 arcmin table at 200, 800, 3 300 and 8 000 km, the wall clock falls **monotonically** with spacing in
-  every row and flattens from about 256 — a sixteenth of the grid's width — rather than peaking at a knee.
-  The pruning *fraction* falls with it, from 97.3% at spacing 8 to 77.2% at 256, so the figure the Condition
-  reasons from is the one that must not be maximised: a fine first level prunes almost every block it makes
-  and pays for making them. What the search costs is circles evaluated, and at 3 300 km that is 4 447 at
-  spacing 8 against 390 at 256.
-
-  So "the ceiling is a sanity limit, two orders of magnitude away from the answer" is wrong, and the Fix
-  below is right for a reason it did not claim: the ceiling is the neighbourhood of the answer, and clamping
-  against it is the derivation rather than a guard on one. Nothing else about the entry changes.
-
-- **Fix** — a derivation of the initial spacing from the radius and the grid, in `search` beside the loop
-  that consumes it, bounded above by the ceiling `slack_km` already documents: once `radius + slack` reaches
-  half the circumference the widened circle is the whole sphere, every bound equals the raster's total and
-  the level prunes nothing, so a spacing past that point is strictly wasted work. The figure inside that
-  ceiling is #10's to measure — 32 on the k=10 shape prunes 86.9% of blocks at a 200 km radius, which is one
-  point and not a curve. The entry exists so the first caller does not silently become the default, and it
-  cannot be discharged by a benchmark alone: what it wants is a function of the two inputs, not a constant
-  that happened to measure well once.
-
 ### FU-09 - The predicate slack is reported and nothing acts on it
 
 - **Status** — `closed` (2026-08-14):
@@ -416,138 +554,3 @@ Identifiers are flat, sequential and never reused.
   is a command a person runs and not a gate, which is why it closes this entry without touching the
   Condition, and why `CONTRIBUTING.md`'s Releasing section has to say when to run it: a dispatch nobody
   runs proves nothing.
-
-### FU-13 - A published binary carries no Developer ID, and a user is told to clear an attribute by hand
-
-- **Status** — `due` (2026-08-15): `v0.1.0` is published, so both halves of the condition read true —
-  `gh release list` returns it, and `release.yml` names no signing tool. The published macOS asset was
-  measured on the day: `gh release download` leaves it carrying `com.apple.provenance` and no
-  `com.apple.quarantine`, and it runs and reports `popcircles 0.1.0`. That is the README's claim holding,
-  not the identity arriving.
-- **Condition** — a Release exists while no artifact carries a Developer ID signature. The sweep is
-  `gh release list` returning at least one release, together with
-  `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml` returning nothing. Not "unsigned":
-  the dry run measured `codesign -dv` on the published macOS asset as `Signature=adhoc` with
-  `TeamIdentifier=not set`, which is the linker's default and is what lets it run on Apple silicon at all.
-  What is missing is the identity Gatekeeper will accept. The consequence is written down in `README.md`'s
-  Releases section, which tells a macOS user to clear `com.apple.quarantine` off a browser download —
-  measured too: quarantined, the binary is killed with "Apple could not verify"; with the attribute gone it
-  runs. That is a documented workaround for a missing identity rather than a property of the tool, and the
-  entry exists because such an instruction reads as normal once it has sat in a README for a while.
-- **Fix** — sign and notarize the macOS artifact in the publish job, which drops the README line rather
-  than explaining it better. It was put out of scope for a reason that is a prerequisite and not a
-  preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
-  anyone who does not hold the account. Until then the honest form is the documented attribute, which is
-  why the entry's condition is about a release existing rather than about the README's wording.
-
-### FU-14 - A dataset's grid step approaches the tolerance two grids are one within
-
-- **Status** — `dormant` (2026-08-15): the registry holds one dataset, at 0.008333° — six orders of
-  magnitude above the constant.
-- **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
-  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
-  resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
-  what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — a cache
-  compares the geometry within it while the dimensions compare exactly — so a cell small enough
-  to land in that gap makes a stale cache indistinguishable from the right one, which is the failure
-  [ADR 0005](decisions/0005-derived-artefacts-are-keyed-and-refused.md) exists to catch.
-- **Fix** — a record, not a smaller number chosen in passing. The constant is shared with the raster reader
-  by design (`grid.rs` says why a second copy would be two answers to one question), so tightening it for
-  the cache alone reintroduces exactly what that comment forbids, and tightening it for both changes what
-  rasters the reader accepts. What a record has to weigh is that 1e-9° is scaled to a measured rounding in
-  the registry raster's own geotransform, and a dataset fine enough to fire this would bring a measurement
-  of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
-  on the four numbers, and a per-caller tolerance.
-
-### FU-15 - cartopy is built from source because no cp314 wheel exists
-
-- **Status** — `dormant` (2026-08-15): measured in a clean environment on the day the renderer landed.
-  `uv pip install --only-binary :all: --python-version 3.14 cartopy` answers "all versions of cartopy have
-  no usable wheels", and a cold `uv sync --locked --reinstall-package cartopy` prints
-  `Building cartopy==0.25.0` and takes 25.55 s here.
-- **Condition** — that same command resolves. It is a one-line sweep with a yes-or-no answer, and it fires
-  the day cartopy publishes a cp314 wheel: nothing about this repository has to change for it to become
-  true, which is why the entry exists rather than a task. `uv pip install --only-binary :all:
-  --python-version 3.14 pydantic` is the contrast — that one resolves today, so the cost is cartopy's
-  alone.
-- **Fix** — drop the `~/.cache/uv` cache step from `.github/workflows/ci.yml` and the comment beside it.
-  The cache is there for exactly one reason, stated in that comment, and it is the kind of step that
-  outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
-  tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
-  that figure, so the entry firing is what licenses removing the step rather than guessing at it.
-
-### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
-
-- **Status** — `dormant` (2026-08-15): the registry holds one dataset, so one citation is the whole
-  mapping and a constant is indistinguishable from one.
-- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row. The sweep is the
-  count of registry entries in that file against the number of citations `scripts/render_map.py` holds:
-  one and one today. A second dataset makes `CITATION` the citation of whichever raster happens to have
-  been first, and a figure rendered from the other one then credits the wrong source while
-  `tests/test_render_map.py` still passes — the test asserts the constant appears in the registry, which
-  stays true of the wrong entry.
-- **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
-  choose between them. That second half is the reason this is an entry and not a task: `report`'s
-  `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
-  came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
-  fires this adds that field first, additively, and the entry is where the two halves are recorded
-  together.
-
-### FU-17 - The full-resolution search is page faults, not arithmetic
-
-- **Status** — `dormant` (2026-08-15): measured under issue #10, and dormant rather than due
-  because nothing in the tree asks for the runs that make it hurt. One radius at 30 arcsec is 207 s of which
-  **13.4 s is CPU**, with `iostat` reporting ~7 000 transfers a second against the 7.5 GB payload. Every
-  answer this repository has published came from a decimated table or from three certifying radii, and both
-  are affordable at that rate.
-- **Condition** — a command that needs many full-resolution radii becomes something this repository asks
-  for: `smallest-for-share` or `sweep` at `--decimate 1` named in a mise task, in `USAGE.md`, or in
-  an open issue's acceptance. Two dozen probes at 207 s is 90 minutes, and issue #18's per-country sweep is
-  the first plausible caller — ninety-plus countries at full resolution is not that multiplied by one.
-  The figure is re-measurable in one line, which is what keeps this checkable rather than remembered:
-  `/usr/bin/time -l` around a `most-populous --decimate 1` run, and the entry has fired as long as user plus
-  system time stays under a fifth of real.
-- **Fix** — a record, because the candidates are algorithm changes rather than tuning. What the measurement
-  says is that locality is the cost: `circle::population` walks a kernel's rows for one centre, and
-  consecutive table rows are 345 KB apart, so one evaluation touches ~111 MB of scattered pages and the next
-  centre re-walks the same stride one column over. Inverting that loop — one row band, every candidate column
-  in it, before moving on — reuses each page across a whole level instead of once, and is a change nobody
-  could have justified without this figure. It is not free: it changes the order the fold adds
-  in, which `search`'s determinism tests pin and `application.md` "Determinism" makes a stated rule, so a
-  record has to weigh a changed answer's bits against the wall clock. Prefetching or `madvise` are the
-  cheaper half-measures a record should rule on beside it, and neither touches the order.
-
-### FU-18 - Diagnostics are line-oriented and nothing consumes them as data
-
-- **Status** — `dormant` (2026-08-15): every diagnostic this repository emits is read by a person. The `log`
-  facade puts them behind a seam where the library emits
-  records and the binary alone chooses a stream, a level and a format, which is what makes the line-oriented
-  form a choice rather than an accident — and the right one while the reader is human.
-- **Condition** — something in the tree parses a diagnostic rather than displaying it: a mise task, a
-  script under `scripts/`, a workflow step or a test that greps, cuts or regex-matches what the CLI writes
-  to stderr in order to obtain a value. `rg -n 'stderr' mise.toml .github/workflows/ scripts/` naming a
-  step that extracts rather than shows is the sweep. The day one exists the log is an interface, and an
-  interface whose shape is a formatting decision breaks the first time the wording is improved.
-- **Fix** — decide, and record the decision rather than reach for `tracing` by reflex. The consumer may be
-  better served by the JSON document on stdout, which is already versioned and already a contract, than by
-  structure in a stream that is not; where it genuinely wants the diagnostic, structured fields on the few
-  emissions that have a consumer may be the whole of it. Replacing the facade reaches
-  every emission site and changes what a person watching a run sees — weighable, but not to be paid for a
-  consumer that does not exist. Issue #64 is the scheduled look at this question; this entry is what fires
-  if that issue closes with "not yet".
-
-### FU-19 - The record shape is machine-checkable and unchecked
-
-- **Status** — `dormant` (2026-08-15): [ADR 0001](decisions/0001-a-record-carries-one-ruling.md) caps a
-  record at 80 lines, allows it one `scope:` from a closed list and forbids a numbered decision list, and
-  the housekeeping sweep is the only thing that looks. Every record in the directory was written to those
-  rules by the pass that adopted them, so nothing has yet had the chance to drift.
-- **Condition** — any record exceeds that 80-line ceiling, carries a
-  `scope:` value absent from the closed list in the `write-adr` skill, or carries none at all.
-  `wc -l docs/decisions/*.md` and `rg -n '^scope:' docs/decisions/` answer both halves,
-  and either answering wrong means the rules held for exactly as long as someone was watching.
-- **Fix** — a check in `scripts/lint_docs.py`, wired into `mise run lint:docs` the way the pointer and
-  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It asserts the line count
-  and the `scope:` value over every record, since none is exempt. The numbered-list rule
-  is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
-  guesses at the difference is worse than the sweep reading the file.
