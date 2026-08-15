@@ -214,7 +214,7 @@ test is what stands between a seam artefact and a figure nobody checks.
 modules Phase 2 leaves. 3.3 edits the instruction layer and writes two register entries, where the bar
 is a condition the repository can answer rather than a sentence that reads like one.
 
-- [ ] **3.1** `scripts/render_map.py` renders a map from a document path and writes it where it is
+- [x] **3.1** `scripts/render_map.py` renders a map from a document path and writes it where it is
   told: `--input` and `--output` both required, `--projection` taking `plate-carree` (the default,
   and the projection the viral maps used) or `orthographic` centred on the circle. It draws the cap
   through `add_geometries`, marks the centre, titles the figure from the document's own figures, and
