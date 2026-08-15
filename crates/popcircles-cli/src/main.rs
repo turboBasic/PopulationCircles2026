@@ -1,11 +1,11 @@
 mod args;
 mod failure;
+mod observe;
 
 use std::fs;
-use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Context;
 use args::{
@@ -14,13 +14,12 @@ use args::{
 };
 use clap::{Parser, Subcommand};
 use failure::{EXIT_FAILURE, Failure};
-use log::{LevelFilter, Metadata, Record};
+use observe::{StderrLog, StderrProgress};
 use popcircles::bracket::Bracket;
 use popcircles::circle;
 use popcircles::geodesy::{LatLon, RadiusKm, great_circle_km};
 use popcircles::grid::{Col, Grid, Row};
 use popcircles::kernel::Kernel;
-use popcircles::progress::Progress;
 use popcircles::raster::{PixelType, RasterSpec, geotiff::GeoTiffSource};
 use popcircles::report::{
     CircleReport, DistanceReport, Envelope, GridSummary, LedgerReport, MostPopulousReport,
@@ -622,123 +621,11 @@ fn serialised(json: serde_json::Result<String>) -> Result<String, Failure> {
     json.map_err(|error| Failure::new(EXIT_FAILURE, &error))
 }
 
-/// Progress on stderr, which is the sink's other half: the library reports through a sink,
-/// and choosing the stream is this crate's business.
-///
-/// One line, redrawn per whole percent, and silent when stderr is not a terminal — a redraw in a log
-/// file is a hundred lines of carriage returns.
-#[derive(Debug)]
-struct StderrProgress {
-    interactive: bool,
-    percent: Option<u64>,
-}
-
-impl StderrProgress {
-    fn new() -> Self {
-        Self {
-            interactive: std::io::stderr().is_terminal(),
-            percent: None,
-        }
-    }
-
-    fn finish(&mut self) {
-        if self.interactive && self.percent.is_some() {
-            eprintln!();
-        }
-    }
-}
-
-impl Progress for StderrProgress {
-    fn advance(&mut self, done: u64, total: u64) {
-        if !self.interactive || total == 0 {
-            return;
-        }
-        let percent = done * 100 / total;
-        if self.percent == Some(percent) {
-            return;
-        }
-        self.percent = Some(percent);
-
-        // A meter that cannot be drawn is not worth failing a build over: the document on stdout is
-        // the result, and this is only how far it has got.
-        let mut stderr = std::io::stderr();
-        let _ = write!(stderr, "\r{percent:>3}% of {total} rows");
-        let _ = stderr.flush();
-    }
-}
-
-/// One record per line on stderr: the library emits through the facade and
-/// this crate is the only place a diagnostic reaches a stream.
-///
-/// The elapsed figure is what makes a duration a subtraction over two lines, and it is milliseconds since
-/// the process started rather than a wall-clock time — the weaker of the two deliberately, because a
-/// monotonic elapsed figure is in `std` and a formatted timestamp is a datetime library.
-#[derive(Debug)]
-struct StderrLog {
-    started: Instant,
-    level: LevelFilter,
-    interactive: bool,
-}
-
-/// A record rendered, split out from the writing so the format is pinned by a test rather than by reading
-/// a process's stderr. It is what box 7's subtraction rests on.
-fn line(elapsed: Duration, record: &Record<'_>) -> String {
-    format!(
-        "{:>6}ms {:<5} {}: {}",
-        elapsed.as_millis(),
-        record.level(),
-        record.target(),
-        record.args()
-    )
-}
-
-impl StderrLog {
-    /// Installs it, and leaves the process's level alone if something already has.
-    ///
-    /// The `Result` is handled rather than unwrapped for `StderrProgress::advance`'s reason one level up: a
-    /// diagnostic that cannot be printed is not a reason to lose the document on stdout.
-    fn install(started: Instant, level: LevelFilter) {
-        let logger = Self {
-            started,
-            level,
-            interactive: std::io::stderr().is_terminal(),
-        };
-        if log::set_boxed_logger(Box::new(logger)).is_ok() {
-            log::set_max_level(level);
-        }
-    }
-}
-
-impl log::Log for StderrLog {
-    /// Against the filter this value holds, not `log::max_level()`. The latter is process-global and
-    /// `cargo test` runs a binary's unit tests as parallel threads in one process, so a check built on it
-    /// would answer according to whichever test called `set_max_level` last.
-    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        metadata.level() <= self.level
-    }
-
-    fn log(&self, record: &Record<'_>) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
-        // `StderrProgress::advance` leaves the cursor mid-line by design, so the meter's line is erased
-        // before a record lands on top of it. The knowledge runs one way and that is the point: a logger
-        // that clears a line something may have drawn learns nothing about the meter, where a meter
-        // redrawn after a record would have to hold the logger.
-        let clear = if self.interactive { "\r\x1b[2K" } else { "" };
-        let mut stderr = std::io::stderr();
-        let _ = writeln!(stderr, "{clear}{}", line(self.started.elapsed(), record));
-    }
-
-    fn flush(&self) {
-        let _ = std::io::stderr().flush();
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use log::LevelFilter;
+
     use crate::failure::EXIT_BAD_INPUT;
 
     use super::*;
@@ -943,40 +830,6 @@ mod tests {
         let neither = Cli::try_parse_from(["popcircles", "distance", "0", "0", "0", "90"])
             .expect("the level defaults");
         assert_eq!(neither.log.log_level, LevelFilter::Info);
-    }
-
-    #[test]
-    fn a_record_renders_to_the_line_a_duration_is_subtracted_from() {
-        let rendered = line(
-            Duration::from_millis(1234),
-            &Record::builder()
-                .level(log::Level::Info)
-                .target("popcircles::table")
-                .args(format_args!("built 18 rows"))
-                .build(),
-        );
-        assert_eq!(rendered, "  1234ms INFO  popcircles::table: built 18 rows");
-    }
-
-    #[test]
-    fn a_level_filters_the_records_beneath_it() {
-        use log::Log;
-
-        let logger = StderrLog {
-            started: Instant::now(),
-            level: LevelFilter::Warn,
-            interactive: false,
-        };
-        let at = |level| {
-            logger.enabled(
-                &Metadata::builder()
-                    .level(level)
-                    .target("popcircles::table")
-                    .build(),
-            )
-        };
-        assert!(!at(log::Level::Info));
-        assert!(at(log::Level::Error));
     }
 
     #[test]
