@@ -1,0 +1,17 @@
+---
+source: crates/popcircles-cli/tests/help.rs
+expression: help_for(path)
+---
+Describe a north-up grid without reading any raster
+
+Usage: popcircles grid describe [OPTIONS] --width <WIDTH> --height <HEIGHT> --origin-lat <ORIGIN_LAT> --origin-lon <ORIGIN_LON> --lon-step <LON_STEP> --lat-step <LAT_STEP>
+
+Options:
+      --log-level <LEVEL>        How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress meter, which answers how far a run has got rather than what happened [default: info]
+      --width <WIDTH>            
+      --height <HEIGHT>          
+      --origin-lat <ORIGIN_LAT>  
+      --origin-lon <ORIGIN_LON>  
+      --lon-step <LON_STEP>      
+      --lat-step <LAT_STEP>      
+  -h, --help                     Print help

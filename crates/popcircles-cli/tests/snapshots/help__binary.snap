@@ -1,0 +1,22 @@
+---
+source: crates/popcircles-cli/tests/help.rs
+expression: help_for(path)
+---
+Find the smallest circle on the globe containing a given share of world population, by great-circle radius rather than by area on a projected map.
+
+Usage: popcircles [OPTIONS] <COMMAND>
+
+Commands:
+  distance            Great-circle distance between two coordinates, in kilometres
+  grid                Raster grid geometry
+  table               The summation table and its on-disk cache
+  population-at       The population inside a circle of a given ground radius about a coordinate
+  most-populous       The most populous circle of a fixed ground radius, over every cell centre of the grid
+  smallest-for-share  The smallest circle whose population reaches a share of the table's own total
+  sweep               The smallest circle for each of a range of shares, over one ledger
+  help                Print this message or the help of the given subcommand(s)
+
+Options:
+      --log-level <LEVEL>  How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress meter, which answers how far a run has got rather than what happened [default: info]
+  -h, --help               Print help
+  -V, --version            Print version

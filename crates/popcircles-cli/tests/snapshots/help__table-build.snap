@@ -1,0 +1,22 @@
+---
+source: crates/popcircles-cli/tests/help.rs
+expression: help_for(path)
+---
+Build a summation table from a raster and publish it to the cache
+
+Usage: popcircles table build [OPTIONS] --raster <RASTER> --width <WIDTH> --height <HEIGHT> --origin-lat <ORIGIN_LAT> --origin-lon <ORIGIN_LON> --lon-step <LON_STEP> --lat-step <LAT_STEP> --nodata <NODATA> --epsg <EPSG>
+
+Options:
+      --log-level <LEVEL>        How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress meter, which answers how far a run has got rather than what happened [default: info]
+      --raster <RASTER>          The raster to read. Its tags must agree with the grid declared below
+      --width <WIDTH>            
+      --height <HEIGHT>          
+      --origin-lat <ORIGIN_LAT>  
+      --origin-lon <ORIGIN_LON>  
+      --lon-step <LON_STEP>      
+      --lat-step <LAT_STEP>      
+      --nodata <NODATA>          The nodata sentinel the file declares, compared bit for bit
+      --epsg <EPSG>              
+      --cache <CACHE>            Both cache files are this path plus a suffix. Under `out/` by default, which is gitignored — a generated table is never committed [default: out/table]
+      --decimate <DECIMATE>      Fold every k by k block of cells into one table cell. Must divide both grid dimensions [default: 1]
+  -h, --help                     Print help

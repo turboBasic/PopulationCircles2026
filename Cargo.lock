@@ -359,6 +359,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "insta",
  "log",
  "popcircles",
  "serde_json",

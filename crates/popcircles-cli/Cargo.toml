@@ -30,8 +30,10 @@ log.workspace = true
 popcircles = { path = "../popcircles" }
 serde_json.workspace = true
 
-# The one dev-dependency: `tests/commands.rs` builds a real cache to run the binary against, and a
-# temporary directory is what keeps that out of the working tree. The binary itself is reached through
-# `CARGO_BIN_EXE_*`, which is std, so no command runner is needed.
+# `tests/commands.rs` builds a real cache to run the binary against, and a temporary directory is what
+# keeps that out of the working tree. `tests/help.rs` pins every help surface, which is eleven strings no
+# one wants to read inline. The binary itself is reached through `CARGO_BIN_EXE_*`, which is std, so no
+# command runner is needed.
 [dev-dependencies]
+insta.workspace = true
 tempfile.workspace = true

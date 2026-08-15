@@ -1,0 +1,23 @@
+---
+source: crates/popcircles-cli/tests/help.rs
+expression: help_for(path)
+---
+The population inside a circle of a given ground radius about a coordinate
+
+Usage: popcircles population-at [OPTIONS] --width <WIDTH> --height <HEIGHT> --origin-lat <ORIGIN_LAT> --origin-lon <ORIGIN_LON> --lon-step <LON_STEP> --lat-step <LAT_STEP> --digest <DIGEST> --lat <LAT> --lon <LON> --radius-km <RADIUS_KM>
+
+Options:
+      --log-level <LEVEL>        How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress meter, which answers how far a run has got rather than what happened [default: info]
+      --width <WIDTH>            
+      --height <HEIGHT>          
+      --origin-lat <ORIGIN_LAT>  
+      --origin-lon <ORIGIN_LON>  
+      --lon-step <LON_STEP>      
+      --lat-step <LAT_STEP>      
+      --cache <CACHE>            Both cache files are this path plus a suffix. Under `out/` by default, which is gitignored — a generated table is never committed [default: out/table]
+      --decimate <DECIMATE>      Fold every k by k block of cells into one table cell. Must divide both grid dimensions [default: 1]
+      --digest <DIGEST>          The digest a build reported, which is what names the table wanted
+      --lat <LAT>                The circle's centre. It is snapped to the centre of the cell containing it, which the document publishes beside the coordinate asked for
+      --lon <LON>                
+      --radius-km <RADIUS_KM>    The circle's ground radius: a great-circle arc on the sphere, never a distance in degrees
+  -h, --help                     Print help

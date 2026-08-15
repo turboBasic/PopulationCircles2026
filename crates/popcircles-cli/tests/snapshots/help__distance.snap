@@ -1,0 +1,17 @@
+---
+source: crates/popcircles-cli/tests/help.rs
+expression: help_for(path)
+---
+Great-circle distance between two coordinates, in kilometres
+
+Usage: popcircles distance [OPTIONS] <FROM_LAT> <FROM_LON> <TO_LAT> <TO_LON>
+
+Arguments:
+  <FROM_LAT>  
+  <FROM_LON>  
+  <TO_LAT>    
+  <TO_LON>    
+
+Options:
+      --log-level <LEVEL>  How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress meter, which answers how far a run has got rather than what happened [default: info]
+  -h, --help               Print help
