@@ -10,8 +10,9 @@ is what makes the answer differ from the familiar viral versions. Also renders t
 on-disk cache, the circular kernels a circle is measured through, the population inside one such
 circle, the most populous circle of a fixed radius, and the smallest circle holding a given share of a
 population — resumable across runs — are implemented and tested, with a command line over that search
-and maps rendered from what it publishes. What is left is validation against the published results, and
-the same question restricted to a single country.
+and maps rendered from what it publishes. The answer for half the world has been run against the real
+raster at full resolution and checked against the published prior art ([Validation](#validation)). What
+is left is the same question restricted to a single country.
 
 ## Getting started
 
@@ -168,10 +169,10 @@ $ search sweep --from 10 --to 50 --step 20 --spacing 32 --ledger out/radii.json
 A ledger describing another table is refused rather than resumed from, which is why there is no way to
 turn it off.
 
-**These figures are a decimated table's, not the answer.** The 5 arcmin grid is a tenth of the raster's
-resolution in each direction, so a radius here is good to about the width of one of its cells. Comparing
-against the published 3300 km result is a later step's job, and this section is a demonstration that the
-commands run rather than a claim that they are right.
+**These figures are a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
+each direction, so a radius here is good to about the width of one of its cells — which for half the
+world turns out to be no error at all. [Validation](#validation) is where that was checked at full
+resolution.
 
 ### Maps
 
@@ -211,6 +212,117 @@ to a file draws none — the meter is silent when stderr is not a terminal. Both
 stdout stays exactly one JSON document at every level.
 
 `mise run cli -- --help` has the full command and flag reference.
+
+## Validation
+
+Half the world's population — half of this raster's own 7 757 982 599 persons — is held by a circle of
+**3 360 km** centred at 28.84 N, 100.66 E, in western Yunnan. Measured 2026-08-15 on the full 30
+arc-second grid, and it is a bracket rather than an estimate: 3 360 km reaches half by 655 480 persons and
+3 359 km falls 75 397 short. Both were computed, and the summation slack between them is 0.2 of a person.
+
+The published prior art is Danny Quah's ~3 300 km, and the [Valeriepieris circle][valeriepieris] before
+it. **The 60 km is explained rather than tuned away**, by four things and no defect:
+
+- the raster is 2020 and the published figures are earlier, over a world 4% smaller;
+- half of *this* dataset is not half of the world, and the target is always the dataset's own total;
+- distances here are great-circle arcs on a sphere of 6 371.0088 km, published in every document's
+  `earth_model`;
+- the answer is the best cell centre, not the best point — and at 30 arc-seconds that mesh is 926 m.
+
+[ADR 0009](docs/decisions/0009-validation-brackets-cheap-and-certifies-dear.md) holds the measurements,
+including what the search actually spends its time on: at full resolution it is **6.5% CPU** and the rest
+is page faults against a 7.5 GB table. `mise run test:validate` is the end-to-end run against the real
+raster, and it skips with a message when the raster has not been fetched.
+
+## Choosing the inputs
+
+If you just want a good answer without reading further: **build at `--decimate 2` and search with
+`--spacing 1280`.** That gives the same radius as the full-resolution run, a centre within a kilometre of
+it, and takes 34 seconds instead of about an hour.
+
+### The five words you need
+
+- **Raster** — the population data as a giant image. One pixel ("cell") holds how many people live in it.
+  The full one is 43200 × 21600 cells, about 933 million of them, each roughly 1 km across at the equator.
+- **Decimation** — coarsening that image before searching, by averaging blocks of cells together.
+  `--decimate 10` turns 10 × 10 cells into one, leaving a 4320 × 2160 image. Fewer cells, faster
+  everything, blurrier answer.
+- **Summation table** — a running-totals table built once from the raster. It is what makes the search
+  possible at all: with it, the population of *any* rectangle is four lookups instead of adding up a
+  million cells. It costs 8 bytes per cell on disk, which is where the sizes below come from.
+- **Spacing** — how coarsely the search sweeps the globe on its first pass. The program tests candidate
+  circle centres in square blocks of this many cells, then splits the promising blocks and looks closer.
+- **Pruning** — throwing away a whole block without testing the centres inside it. The program can prove
+  that no centre in a block can beat the best one found so far, so it skips all of them. This is what
+  makes the search finish; without it you would test 933 million centres one at a time.
+
+### What costs time
+
+Three things, in order of how much they matter:
+
+1. **Whether the summation table fits in RAM.** This is a cliff, not a slope. Below it the program reads
+   the table at memory speed; above it every lookup may wait for the disk, and the search spends **94% of
+   its time waiting** rather than calculating. On a 16 GB machine the 7 GB full-resolution table is over
+   the cliff and the 1.8 GB one is comfortably under it — which is the whole reason the recommendation
+   above is not "use everything".
+2. **How many cells the image has.** Four times the cells is roughly four times the search, as long as you
+   stay under the cliff.
+3. **The radius you are looking for.** A big circle covers more rows of the image, and the program does one
+   rectangle lookup per row. A 3300 km circle spans 356 rows of the 5 arcmin image but 7130 rows of the
+   full one.
+
+Spacing is deliberately *not* on that list. It changes the time and never the answer, and past a certain
+coarseness it stops changing even the time — see below.
+
+### What limits precision
+
+Also three things, and the surprise is that only one of them matters here:
+
+- **The radius is reported in whole kilometres**, because that is the step the search takes. You get a
+  proved bracket rather than an estimate: "3360 km holds half, 3359 km does not", both actually computed.
+- **The centre is the best cell, not the best point.** Nothing between cell centres is ever tested, so a
+  coarser image can only place the centre within one of its own cells.
+- **Arithmetic error is irrelevant.** Adding billions of numbers loses a little precision, and the program
+  publishes exactly how much: **0.06 of a person** out of 3.9 billion at 1 arcmin. That is eleven correct
+  significant figures. It is never the thing limiting your answer.
+
+Measured on the real raster, for half the world's population — every row an actual run, on a 16 GB M2 Pro:
+
+| `--decimate` | Cell size | Table | Build | Search | Radius | Centre error |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10 | 9.3 km | 71 MB | 11 s | 0.9 s | 3360 km | 6.3 km |
+| 4 | 3.7 km | 445 MB | 15 s | 5.0 s | 3360 km | 1.8 km |
+| **2** | **1.9 km** | **1.8 GB** | **16 s** | **18 s** | **3360 km** | **0.6 km** |
+| 1 | 0.9 km | 7.0 GB | 18 s | ~1 hour† | 3360 km | — (the reference) |
+
+† Estimated, not measured: a single radius near the answer took 247–292 s, and a full search probes 24 of
+them. Everything else in the table was run end to end.
+
+**All four agree on the radius.** Resolution buys you centre placement and nothing else, and it buys it at
+about 4× the cost per halving of the cell. The last step — 1 arcmin to full — costs roughly 200× the time
+for half a kilometre of centre, because it is the step that goes over the RAM cliff.
+
+### Choosing spacing
+
+Use **1/16 of the image width**: 256 at `--decimate 10`, 640 at 4, 1280 at 2. The rule of thumb behind it
+is that a block should be about as wide on the ground as the radius you are searching for.
+
+Below that the search does redundant work; above it nothing improves. Measured at 3300 km on the 4320-wide
+image, counting the circles actually tested:
+
+| `--spacing` | Circles tested |
+| --- | --- |
+| 8 | 4447 |
+| 32 | 910 |
+| 128 | 424 |
+| 256 | 390 |
+| 1024 | 371 |
+| 4319 | 379 |
+
+The counter-intuitive part: the *percentage* of blocks pruned falls the whole way, from 97% to 77%, while
+the program gets faster. A fine first pass prunes nearly everything it looks at — but only because it
+created so many blocks to look at. Percentage pruned is the wrong thing to optimise; circles tested is the
+cost.
 
 ## Releases
 

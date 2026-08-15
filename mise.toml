@@ -220,6 +220,47 @@ run = "cargo test --release --all-features --test decimated_search -- --ignored"
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
+# Not in `test` or `ci` for `test:raster`'s reason — it reads the registry raster, which a CI clone holds
+# only as a pointer — and it is the end-to-end one: the raster streamed into a table and the smallest
+# circle holding half the world searched for over it, checked against the published prior art. Selected by
+# target rather than by name so a second validation test needs no change here. It skips with a message
+# rather than failing when the raster is an unfetched pointer, which is why running it on a fresh clone is
+# harmless.
+[tasks."test:validate"]
+description = "Search the real raster for half the world and check it against the published result"
+run = "cargo test --release --all-features --test registry_validation -- --ignored"
+
+# None of the four are in `lint`, `test` or `ci`, and not on a condition a later change could satisfy: a
+# benchmark measures and asserts nothing, so there is no result for CI to be red about, and a figure
+# measured on a shared runner would be noise quoted to three digits. ADR 0009 decision 1 is the shape —
+# `harness = false` targets timing with `std::time::Instant`, no benchmark dependency — and ADR 0009's
+# Context is where the figures these produced on one machine are recorded.
+[tasks."bench:table"]
+description = "Measure the summation table build, compensation and payload write separately"
+run = "cargo bench --bench table_build"
+
+[tasks."bench:kernel"]
+description = "Measure circular kernel construction, the only step computing geodesic distance"
+run = "cargo bench --bench kernel"
+
+# Reports a resident figure always and a mapped one only when a full-resolution table is under `out/`,
+# which it names the command for rather than building behind the caller. The pair is the point: at 7.5 GB
+# a four-corner query is a page fault, and the resident figure alone describes a run nobody has.
+[tasks."bench:circle"]
+description = "Measure circle evaluation, resident and through a mapped full-resolution table"
+run = "cargo bench --bench circle"
+
+# `run` steps rather than `depends`, and that is the whole point of the task: `depends` resolves in
+# parallel, so the two benchmarks would contend for the same cores and page cache and report figures
+# nobody should quote — measured, the kernel numbers moved by more than a factor of two between a solo run
+# and a concurrent one. Steps run in order, so each has the machine to itself.
+#
+# `bench:table` is deliberately not in here: it writes a 7.5 GB payload to measure what the write costs,
+# and a task that runs every benchmark should not be the one that fills a disk. Run it by name.
+[tasks.bench]
+description = "Run the benchmarks that write nothing, one at a time"
+run = ["mise run bench:kernel", "mise run bench:circle"]
+
 [tasks."test:python"]
 description = "Run the Python test suite"
 run = "uv run pytest"

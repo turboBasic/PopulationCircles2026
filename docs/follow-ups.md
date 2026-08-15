@@ -248,6 +248,22 @@ Identifiers are flat, sequential and never reused.
   deselected fixture choosing a spacing to exercise pruning is a fixture and not a default, and widening the
   sweep to catch it would leave this entry permanently `due` with nothing to do about it. The unit fixtures in
   `smallest.rs` are outside it for the same reason.
+  `crates/popcircles/tests/registry_validation.rs` joins that exclusion (2026-08-15). It picks 256, on the
+  plateau ADR 0009 measured, and it is a deselected fixture for the same reason the two above are.
+
+  **The curve this entry was waiting for exists, and it corrects the Condition's own arithmetic**
+  (2026-08-15, [ADR 0009](decisions/0009-validation-brackets-cheap-and-certifies-dear.md)). Swept over the
+  5 arcmin table at 200, 800, 3 300 and 8 000 km, the wall clock falls **monotonically** with spacing in
+  every row and flattens from about 256 — a sixteenth of the grid's width — rather than peaking at a knee.
+  The pruning *fraction* falls with it, from 97.3% at spacing 8 to 77.2% at 256, so the figure the Condition
+  reasons from is the one that must not be maximised: a fine first level prunes almost every block it makes
+  and pays for making them. What the search costs is circles evaluated, and at 3 300 km that is 4 447 at
+  spacing 8 against 390 at 256.
+
+  So "the ceiling is a sanity limit, two orders of magnitude away from the answer" is wrong, and the Fix
+  below is right for a reason it did not claim: the ceiling is the neighbourhood of the answer, and clamping
+  against it is the derivation rather than a guard on one. Nothing else about the entry changes.
+
 - **Fix** — a derivation of the initial spacing from the radius and the grid, in `search` beside the loop
   that consumes it, bounded above by the ceiling `slack_km` already documents: once `radius + slack` reaches
   half the circumference the widened circle is the whole sphere, every bound equals the raster's total and
@@ -456,3 +472,28 @@ Identifiers are flat, sequential and never reused.
   came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
   fires this adds that field first, additively, and the entry is where the two halves are recorded
   together.
+
+### FU-17 - The full-resolution search is page faults, not arithmetic
+
+- **Status** — `dormant` (2026-08-15): measured in
+  [ADR 0009](decisions/0009-validation-brackets-cheap-and-certifies-dear.md), and dormant rather than due
+  because nothing in the tree asks for the runs that make it hurt. One radius at 30 arcsec is 207 s of which
+  **13.4 s is CPU**, with `iostat` reporting ~7 000 transfers a second against the 7.5 GB payload. Every
+  answer this repository has published came from a decimated table or from three certifying radii, and both
+  are affordable at that rate.
+- **Condition** — a command that needs many full-resolution radii becomes something this repository asks
+  for: `smallest-for-share` or `sweep` at `--decimate 1` named in a mise task, in `README.md`'s Usage, or in
+  an open issue's acceptance. Two dozen probes at 207 s is 90 minutes, and issue #18's per-country sweep is
+  the first plausible caller — ninety-plus countries at full resolution is not that multiplied by one.
+  The figure is re-measurable in one line, which is what keeps this checkable rather than remembered:
+  `/usr/bin/time -l` around a `most-populous --decimate 1` run, and the entry has fired as long as user plus
+  system time stays under a fifth of real.
+- **Fix** — a record, because the candidates are algorithm changes rather than tuning. What the measurement
+  says is that locality is the cost: `circle::population` walks a kernel's rows for one centre, and
+  consecutive table rows are 345 KB apart, so one evaluation touches ~111 MB of scattered pages and the next
+  centre re-walks the same stride one column over. Inverting that loop — one row band, every candidate column
+  in it, before moving on — reuses each page across a whole level instead of once, and is the change ADR 0009
+  says nobody could have justified without this figure. It is not free: it changes the order the fold adds
+  in, which `search`'s determinism tests pin and `application.md` "Determinism" makes a stated rule, so a
+  record has to weigh a changed answer's bits against the wall clock. Prefetching or `madvise` are the
+  cheaper half-measures a record should rule on beside it, and neither touches the order.

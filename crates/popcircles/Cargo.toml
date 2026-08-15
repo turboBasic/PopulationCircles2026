@@ -31,3 +31,23 @@ insta.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
 weezl.workspace = true
+
+# ADR 0009 decision 1: a benchmark is a `harness = false` target measuring with `std::time::Instant`, and
+# adds no dependency. `test = false` on each is what keeps `cargo test` from running a benchmark as a
+# test — with `harness = false` and no `main` that takes libtest's flags, a bench target under
+# `cargo test` would fail on the arguments the harness passes it. `cargo clippy --all-targets` still
+# compiles and lints all three.
+[[bench]]
+name = "table_build"
+harness = false
+test = false
+
+[[bench]]
+name = "kernel"
+harness = false
+test = false
+
+[[bench]]
+name = "circle"
+harness = false
+test = false
