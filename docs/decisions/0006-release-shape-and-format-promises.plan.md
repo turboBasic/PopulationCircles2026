@@ -145,7 +145,7 @@ Six facts settled here rather than met mid-task:
   Verify: `rg -n 'quarantine|sha256' README.md` matches; `rg -n 'schema_version' README.md` matches in a
   sentence naming what may be invalidated; `mise run lint:docs` and `mise run lint:markdown` clean.
 
-- [ ] **3.2 A maintainer can cut a release, and knows what to do when one fails.** `CONTRIBUTING.md` gains a
+- [x] **3.2 A maintainer can cut a release, and knows what to do when one fails.** `CONTRIBUTING.md` gains a
   Releasing section: bump `[workspace.package]`'s version, land it, tag `vX.Y.Z` on the merged commit, push
   the tag. Then the two failure cases, which differ on one fact — whether the publish job ran. A run that
   failed before it published left no Release, so the tag is retractable: re-run the workflow if the cause
