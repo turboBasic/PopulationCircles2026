@@ -11,6 +11,8 @@ use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 
 use super::{BuiltTable, Decimation, padded_len};
+use crate::geodesy::wrap_lon;
+use crate::grid::BOUNDARY_TOLERANCE_DEG;
 
 /// Bumped when a change to the header's fields or the payload's layout is one an older reader would
 /// misread rather than refuse.
@@ -153,6 +155,143 @@ impl From<&BuiltTable> for Identity {
             digest: built.digest,
             decimation: built.decimation,
         }
+    }
+}
+
+/// Which of the grounds a document and an [`Identity`] disagree on.
+///
+/// The messages name what was wanted and what was found and no document, because both a cache header and
+/// a radius ledger wrap this and each names itself: ADR 0007 decision 2 puts the noun in the wrapper so a
+/// ground is added in one place rather than phrased twice.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+pub enum Mismatch {
+    #[error("wanted the table of the cells digesting to {wanted:#018x}; found {found:#018x}")]
+    Digest { wanted: u64, found: u64 },
+
+    #[error("wanted a {wanted}-column table; found {found}")]
+    Width { wanted: u32, found: u32 },
+
+    #[error("wanted a {wanted}-row table; found {found}")]
+    Height { wanted: u32, found: u32 },
+
+    #[error("wanted a table decimated by {wanted}; found {found}")]
+    DecimationFactor { wanted: u32, found: u32 },
+
+    #[error("wanted a grid whose origin latitude is {wanted}; found {found}")]
+    OriginLat { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose origin longitude is {wanted}; found {found}")]
+    OriginLon { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose longitude step is {wanted}; found {found}")]
+    LonStep { wanted: f64, found: f64 },
+
+    #[error("wanted a grid whose latitude step is {wanted}; found {found}")]
+    LatStep { wanted: f64, found: f64 },
+}
+
+/// What a document claims the table beside it is: the cells it was built from, how coarsely they were
+/// folded, and the whole grid it resolves coordinates against.
+///
+/// ADR 0007 decision 2's one type, serialised into both the cache header and the radius ledger with
+/// `#[serde(flatten)]`, so the comparison and its tolerance exist once. The grid recorded is the table's
+/// own and not the source's: given the factor the source's is determined, and the coarser one is what a
+/// query resolves against.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Attestation {
+    pub digest: u64,
+    pub width: u32,
+    pub height: u32,
+    pub decimation: u32,
+    pub origin_lat: f64,
+    pub origin_lon: f64,
+    pub lon_step: f64,
+    pub lat_step: f64,
+}
+
+impl Attestation {
+    #[must_use]
+    pub fn new(identity: &Identity) -> Self {
+        let grid = identity.decimation.grid();
+        let origin = grid.origin();
+        Self {
+            digest: identity.digest,
+            width: grid.width(),
+            height: grid.height(),
+            decimation: identity.decimation.factor(),
+            origin_lat: origin.lat,
+            origin_lon: origin.lon,
+            lon_step: grid.lon_step(),
+            lat_step: grid.lat_step(),
+        }
+    }
+
+    /// The digest, the dimensions and the factor exactly; the four geometry numbers within
+    /// `BOUNDARY_TOLERANCE_DEG`, longitude through [`wrap_lon`].
+    ///
+    /// A tolerance rather than the bit equality a JSON round trip would in fact give, per ADR 0007
+    /// decision 3: the raster reader compares a file's geotransform against a declared grid by exactly
+    /// this rule, so an exact comparison here would refuse a cache built over a raster that reader had
+    /// accepted.
+    ///
+    /// # Errors
+    /// [`Mismatch`], whose variants are the grounds, naming the first field that differs.
+    pub fn check(&self, wanted: &Identity) -> Result<(), Mismatch> {
+        if self.digest != wanted.digest {
+            return Err(Mismatch::Digest {
+                wanted: wanted.digest,
+                found: self.digest,
+            });
+        }
+
+        let grid = wanted.decimation.grid();
+        if self.width != grid.width() {
+            return Err(Mismatch::Width {
+                wanted: grid.width(),
+                found: self.width,
+            });
+        }
+        if self.height != grid.height() {
+            return Err(Mismatch::Height {
+                wanted: grid.height(),
+                found: self.height,
+            });
+        }
+        if self.decimation != wanted.decimation.factor() {
+            return Err(Mismatch::DecimationFactor {
+                wanted: wanted.decimation.factor(),
+                found: self.decimation,
+            });
+        }
+
+        let origin = grid.origin();
+        if (self.origin_lat - origin.lat).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::OriginLat {
+                wanted: origin.lat,
+                found: self.origin_lat,
+            });
+        }
+        // Through the seam, for the reader's reason: -180 and 180 are one meridian, and a document
+        // spelling the origin either way describes the same columns.
+        if wrap_lon(self.origin_lon - origin.lon).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::OriginLon {
+                wanted: origin.lon,
+                found: self.origin_lon,
+            });
+        }
+        if (self.lon_step - grid.lon_step()).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::LonStep {
+                wanted: grid.lon_step(),
+                found: self.lon_step,
+            });
+        }
+        if (self.lat_step - grid.lat_step()).abs() > BOUNDARY_TOLERANCE_DEG {
+            return Err(Mismatch::LatStep {
+                wanted: grid.lat_step(),
+                found: self.lat_step,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -668,6 +807,162 @@ mod tests {
             ByteOrder::Little => ByteOrder::Big,
             ByteOrder::Big => ByteOrder::Little,
         }
+    }
+
+    const DIGEST: u64 = 0xf17a_a802_a689_0f0c;
+
+    /// A grid that does not run pole to pole, which is what a fixture needs to move an origin latitude or
+    /// a step at all: `Grid::new` pins the origin of a whole-globe grid to the pole within the boundary
+    /// tolerance, so `grid(w, h)` is refused by the constructor before any comparison is reached.
+    fn sub_globe_grid(origin_lat: f64) -> Grid {
+        Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: origin_lat,
+                lon: -180.0,
+            },
+            90.0,
+            -10.0,
+        )
+        .expect("three ten-degree rows below 45 north stay on the globe")
+    }
+
+    fn identity_over(grid: Grid) -> Identity {
+        Identity {
+            digest: DIGEST,
+            decimation: Decimation::none(grid),
+        }
+    }
+
+    #[test]
+    fn an_attestation_accepts_the_identity_it_was_built_from() {
+        for grid in [grid(4, 3), sub_globe_grid(45.0)] {
+            let identity = identity_over(grid);
+            assert_eq!(Attestation::new(&identity).check(&identity), Ok(()));
+        }
+    }
+
+    /// One ground's case: the field to move, and what moving it has to be reported as.
+    type Ground = (fn(&mut Attestation), Mismatch);
+
+    #[test]
+    fn each_ground_is_reported_as_the_field_that_differs() {
+        let identity = identity_over(sub_globe_grid(45.0));
+        let attested = Attestation::new(&identity);
+
+        // One case per variant, so a ground added to `Mismatch` without a comparison behind it leaves
+        // this list short of the enum rather than passing.
+        let cases: [Ground; 8] = [
+            (
+                |a| a.digest ^= 1,
+                Mismatch::Digest {
+                    wanted: DIGEST,
+                    found: DIGEST ^ 1,
+                },
+            ),
+            (
+                |a| a.width += 1,
+                Mismatch::Width {
+                    wanted: 4,
+                    found: 5,
+                },
+            ),
+            (
+                |a| a.height += 1,
+                Mismatch::Height {
+                    wanted: 3,
+                    found: 4,
+                },
+            ),
+            (
+                |a| a.decimation = 2,
+                Mismatch::DecimationFactor {
+                    wanted: 1,
+                    found: 2,
+                },
+            ),
+            (
+                |a| a.origin_lat = 46.0,
+                Mismatch::OriginLat {
+                    wanted: 45.0,
+                    found: 46.0,
+                },
+            ),
+            (
+                |a| a.origin_lon = -90.0,
+                Mismatch::OriginLon {
+                    wanted: -180.0,
+                    found: -90.0,
+                },
+            ),
+            (
+                |a| a.lon_step = 45.0,
+                Mismatch::LonStep {
+                    wanted: 90.0,
+                    found: 45.0,
+                },
+            ),
+            (
+                |a| a.lat_step = -20.0,
+                Mismatch::LatStep {
+                    wanted: -10.0,
+                    found: -20.0,
+                },
+            ),
+        ];
+
+        for (perturb, expected) in cases {
+            let mut found = attested;
+            perturb(&mut found);
+            assert_eq!(found.check(&identity), Err(expected));
+        }
+    }
+
+    #[test]
+    fn a_geometry_within_the_readers_tolerance_is_the_same_grid() {
+        let identity = identity_over(sub_globe_grid(45.0));
+
+        // The registry raster's own spelling of its origin latitude is 1.16e-11 off the pole, and the
+        // raster reader accepts a file at that distance from a declared grid — so refusing a cache for
+        // the same distance would be two answers to one question.
+        let mut near = Attestation::new(&identity);
+        near.origin_lat += 1.16e-11;
+        assert_eq!(near.check(&identity), Ok(()));
+
+        let mut far = Attestation::new(&identity);
+        far.origin_lat += 1e-8;
+        assert_eq!(
+            far.check(&identity),
+            Err(Mismatch::OriginLat {
+                wanted: 45.0,
+                found: 45.0 + 1e-8
+            })
+        );
+    }
+
+    #[test]
+    fn an_origin_longitude_is_compared_through_the_seam() {
+        // -180 and 180 are one meridian, so the two spellings describe the same columns and neither is
+        // a stale cache.
+        let identity = identity_over(grid(4, 3));
+        let mut attested = Attestation::new(&identity);
+        attested.origin_lon = 180.0;
+        assert_eq!(attested.check(&identity), Ok(()));
+    }
+
+    #[test]
+    fn a_grid_differing_only_in_its_origin_latitude_is_refused() {
+        // Two grids the constructor accepts, identical but for the one number, which is the case a
+        // country mask makes reachable and a whole-globe fixture cannot express.
+        let attested = Attestation::new(&identity_over(sub_globe_grid(45.0)));
+        assert_eq!(
+            attested.check(&identity_over(sub_globe_grid(35.0))),
+            Err(Mismatch::OriginLat {
+                wanted: 35.0,
+                found: 45.0
+            })
+        );
     }
 
     #[test]

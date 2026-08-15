@@ -91,7 +91,7 @@ Eight facts settled here rather than met mid-task:
 
 ## Phase 1 — the attestation, and the table's header on it
 
-- [ ] **1.1 An attestation exists in `table/cache.rs`, built from an `&Identity` and compared against one.**
+- [x] **1.1 An attestation exists in `table/cache.rs`, built from an `&Identity` and compared against one.**
   A `pub struct Attestation` carrying `digest`, `width`, `height`, `decimation`, `origin_lat`, `origin_lon`,
   `lon_step`, `lat_step`, deriving `Serialize`, `Deserialize`, `Debug`, `Clone`, `Copy` and `PartialEq`;
   `Attestation::new(&Identity)`; and `check(&self, wanted: &Identity) -> Result<(), Mismatch>` beside a
