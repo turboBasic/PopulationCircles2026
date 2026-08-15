@@ -509,3 +509,22 @@ Identifiers are flat, sequential and never reused.
   in, which `search`'s determinism tests pin and `application.md` "Determinism" makes a stated rule, so a
   record has to weigh a changed answer's bits against the wall clock. Prefetching or `madvise` are the
   cheaper half-measures a record should rule on beside it, and neither touches the order.
+
+### FU-18 - Diagnostics are line-oriented and nothing consumes them as data
+
+- **Status** — `dormant` (2026-08-15): every diagnostic this repository emits is read by a person.
+  [ADR 0004](decisions/0004-diagnostics-through-log.md) put them behind a facade so the library emits
+  records and the binary alone chooses a stream, a level and a format, which is what makes the line-oriented
+  form a choice rather than an accident — and the right one while the reader is human.
+- **Condition** — something in the tree parses a diagnostic rather than displaying it: a mise task, a
+  script under `scripts/`, a workflow step or a test that greps, cuts or regex-matches what the CLI writes
+  to stderr in order to obtain a value. `rg -n 'stderr' mise.toml .github/workflows/ scripts/` naming a
+  step that extracts rather than shows is the sweep. The day one exists the log is an interface, and an
+  interface whose shape is a formatting decision breaks the first time the wording is improved.
+- **Fix** — decide, and record the decision rather than reach for `tracing` by reflex. The consumer may be
+  better served by the JSON document on stdout, which is already versioned and already a contract, than by
+  structure in a stream that is not; where it genuinely wants the diagnostic, structured fields on the few
+  emissions that have a consumer may be the whole of it. Replacing the facade supersedes ADR 0004, reaches
+  every emission site, and changes what a person watching a run sees — weighable, but not to be paid for a
+  consumer that does not exist. Issue #64 is the scheduled look at this question; this entry is what fires
+  if that issue closes with "not yet".
