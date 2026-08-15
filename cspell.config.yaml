@@ -25,9 +25,7 @@ dictionaries:
 ignorePaths:
   - .git/**
   - .cspell/**
-  - .ruff_cache/**
-  - .pytest_cache/**
-  - target/**
+  - build/**
   - "**/__pycache__/**"
   - "**/.venv/**"
   - uv.lock
