@@ -1067,10 +1067,7 @@ fn exit_code_for_cache_error(error: &CacheError) -> u8 {
         CacheError::Absent { .. }
         | CacheError::FormatVersion { .. }
         | CacheError::ByteOrderMismatch { .. }
-        | CacheError::Digest { .. }
-        | CacheError::Width { .. }
-        | CacheError::Height { .. }
-        | CacheError::DecimationFactor { .. } => EXIT_MISSING_DATA,
+        | CacheError::NotThisTable(_) => EXIT_MISSING_DATA,
 
         CacheError::HeaderRead { .. }
         | CacheError::HeaderWrite { .. }
@@ -1151,6 +1148,8 @@ fn parse_share(value: &str) -> Result<Share, String> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use popcircles::table::cache::Mismatch;
+
     use super::*;
 
     #[test]
@@ -1220,10 +1219,10 @@ mod tests {
             EXIT_MISSING_DATA
         );
         assert_eq!(
-            exit_code_for_cache_error(&CacheError::Digest {
-                expected: 1,
+            exit_code_for_cache_error(&CacheError::NotThisTable(Mismatch::Digest {
+                wanted: 1,
                 found: 2
-            }),
+            })),
             EXIT_MISSING_DATA
         );
         assert_eq!(

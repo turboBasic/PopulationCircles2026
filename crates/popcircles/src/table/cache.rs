@@ -16,7 +16,7 @@ use crate::grid::BOUNDARY_TOLERANCE_DEG;
 
 /// Bumped when a change to the header's fields or the payload's layout is one an older reader would
 /// misread rather than refuse.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 const HEADER_SUFFIX: &str = ".header.json";
 const PAYLOAD_SUFFIX: &str = ".payload.bin";
@@ -57,7 +57,8 @@ impl fmt::Display for ByteOrder {
 /// One variant per ground, so a refusal says which of them fired: a caller that rebuilds on a digest
 /// mismatch and reports a moved payload as an error has to be able to tell the two apart, and a message
 /// reading only "stale cache" sends its reader to a hex editor. The same shape, and the same reason, as
-/// [`RasterError`](crate::raster::RasterError).
+/// [`RasterError`](crate::raster::RasterError). The grounds for not being this table are [`Mismatch`]'s,
+/// carried by one variant here because the ledger shares them.
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     #[error("no cache at {}: nothing has been published there", path.display())]
@@ -107,20 +108,12 @@ pub enum CacheError {
         found: ByteOrder,
     },
 
-    #[error(
-        "wanted the table of the cells digesting to {expected:#018x}; the header declares \
-         {found:#018x}"
-    )]
-    Digest { expected: u64, found: u64 },
-
-    #[error("wanted a {expected}-column table; the header declares {found}")]
-    Width { expected: u32, found: u32 },
-
-    #[error("wanted a {expected}-row table; the header declares {found}")]
-    Height { expected: u32, found: u32 },
-
-    #[error("wanted a table decimated by {expected}; the header declares {found}")]
-    DecimationFactor { expected: u32, found: u32 },
+    // The wrapper names the document and the ground says what differed, which is ADR 0007 decision 2's
+    // cost: the four per-ground variants this replaces each named the header in their own message, and a
+    // ground shared with the ledger cannot. A caller telling a digest miss from a moved grid matches one
+    // level deeper rather than losing the distinction.
+    #[error("the cache header does not describe the table wanted: {0}")]
+    NotThisTable(Mismatch),
 
     #[error("the header describes {expected} payload bytes; the payload stops after {found}")]
     PayloadTruncated { expected: usize, found: usize },
@@ -295,20 +288,31 @@ impl Attestation {
     }
 }
 
+/// The one field a header of any version carries, so the version can be compared before the rest of the
+/// document is parsed at all.
+///
+/// ADR 0007 decision 4, and it rests on a default rather than a declaration: serde ignores keys a struct
+/// does not name, which is what lets this read a header of a shape this build has never seen. A
+/// `deny_unknown_fields` here would therefore refuse every real header, and
+/// `the_version_is_read_out_of_a_document_carrying_more` is the test that says so.
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct HeaderVersion {
+    format_version: u32,
+}
+
 /// What the payload beside it is a table of.
 ///
 /// `format_version` is declared first because serde emits struct fields in declaration order, so the
 /// field a reader needs before it can trust any other is the first one it meets — the same reason
-/// [`Envelope`](crate::report::Envelope) leads with its schema version. The dimensions and the factor
-/// sit here rather than inside the digest, per decision 3, so a mismatch in either is reported as
-/// itself instead of as an unexplained digest failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// [`Envelope`](crate::report::Envelope) leads with its schema version. The table's identity is the
+/// flattened [`Attestation`], so the header stays the flat object a person can read with `cat` and the
+/// comparison is not written here; `byte_order` is last and is the header's alone, because it describes a
+/// payload of raw f64 and a ledger's numbers are JSON text with no order to disagree about.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 struct Header {
     format_version: u32,
-    digest: u64,
-    width: u32,
-    height: u32,
-    decimation: u32,
+    #[serde(flatten)]
+    attestation: Attestation,
     byte_order: ByteOrder,
 }
 
@@ -316,57 +320,25 @@ impl Header {
     fn new(identity: &Identity) -> Self {
         Self {
             format_version: FORMAT_VERSION,
-            digest: identity.digest,
-            width: identity.decimation.grid().width(),
-            height: identity.decimation.grid().height(),
-            decimation: identity.decimation.factor(),
+            attestation: Attestation::new(identity),
             byte_order: ByteOrder::HOST,
         }
     }
 
-    /// The version and the byte order come first, and in that order: a header of another version may
-    /// mean every field after it differently, and a payload in the other order is not a number this
-    /// host can compare against anything.
+    /// The byte order comes before the identity: a payload in the other order is not a number this host
+    /// can compare against anything. The version is not compared here — [`Cache::checked_header`] reads
+    /// it out of the document before this struct is parsed, because a header of another version need not
+    /// parse into this shape at all.
     fn check(&self, wanted: &Identity) -> Result<(), CacheError> {
-        if self.format_version != FORMAT_VERSION {
-            return Err(CacheError::FormatVersion {
-                expected: FORMAT_VERSION,
-                found: self.format_version,
-            });
-        }
         if self.byte_order != ByteOrder::HOST {
             return Err(CacheError::ByteOrderMismatch {
                 expected: ByteOrder::HOST,
                 found: self.byte_order,
             });
         }
-        if self.digest != wanted.digest {
-            return Err(CacheError::Digest {
-                expected: wanted.digest,
-                found: self.digest,
-            });
-        }
-
-        let grid = wanted.decimation.grid();
-        if self.width != grid.width() {
-            return Err(CacheError::Width {
-                expected: grid.width(),
-                found: self.width,
-            });
-        }
-        if self.height != grid.height() {
-            return Err(CacheError::Height {
-                expected: grid.height(),
-                found: self.height,
-            });
-        }
-        if self.decimation != wanted.decimation.factor() {
-            return Err(CacheError::DecimationFactor {
-                expected: wanted.decimation.factor(),
-                found: self.decimation,
-            });
-        }
-        Ok(())
+        self.attestation
+            .check(wanted)
+            .map_err(CacheError::NotThisTable)
     }
 }
 
@@ -487,6 +459,21 @@ impl Cache {
                 }
             }
         })?;
+        // The version out of the document before the document, per ADR 0007 decision 4: a header of
+        // another version is not required to parse into this build's `Header`, so without this probe a
+        // bumped format reports as "not the JSON document this format is" and the constant is decoration.
+        let probed: HeaderVersion =
+            serde_json::from_slice(&document).map_err(|source| CacheError::HeaderSyntax {
+                path: self.header.clone(),
+                source,
+            })?;
+        if probed.format_version != FORMAT_VERSION {
+            return Err(CacheError::FormatVersion {
+                expected: FORMAT_VERSION,
+                found: probed.format_version,
+            });
+        }
+
         let header: Header =
             serde_json::from_slice(&document).map_err(|source| CacheError::HeaderSyntax {
                 path: self.header.clone(),
@@ -835,6 +822,26 @@ mod tests {
         }
     }
 
+    /// What a build settled, asked for over a grid of the same shape whose columns start half a turn
+    /// away — the one geometry a caller can reach today, and the only field that differs.
+    fn half_turn_from(built: &BuiltTable) -> Identity {
+        let shifted = Grid::new(
+            4,
+            3,
+            LatLon {
+                lat: 90.0,
+                lon: 0.0,
+            },
+            90.0,
+            -60.0,
+        )
+        .expect("a 4 x 3 whole-globe grid starting at the prime meridian is valid");
+        Identity {
+            digest: built.digest,
+            decimation: Decimation::none(shifted),
+        }
+    }
+
     #[test]
     fn an_attestation_accepts_the_identity_it_was_built_from() {
         for grid in [grid(4, 3), sub_globe_grid(45.0)] {
@@ -975,7 +982,7 @@ mod tests {
         publish(&cache, Decimation::none(grid(4, 3)));
         let document = fs::read_to_string(cache.header_path()).unwrap();
         assert!(
-            document.starts_with(r#"{"format_version":1,"#),
+            document.starts_with(r#"{"format_version":2,"#),
             "{document}"
         );
     }
@@ -1029,13 +1036,13 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.digest ^= 1;
+        header.attestation.digest ^= 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Digest { expected, found })
-                if expected == built.digest && found == built.digest ^ 1
+            Err(CacheError::NotThisTable(Mismatch::Digest { wanted, found }))
+                if wanted == built.digest && found == built.digest ^ 1
         ));
     }
 
@@ -1046,15 +1053,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.width += 1;
+        header.attestation.width += 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Width {
-                expected: 4,
+            Err(CacheError::NotThisTable(Mismatch::Width {
+                wanted: 4,
                 found: 5
-            })
+            }))
         ));
     }
 
@@ -1065,15 +1072,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.height += 1;
+        header.attestation.height += 1;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::Height {
-                expected: 3,
+            Err(CacheError::NotThisTable(Mismatch::Height {
+                wanted: 3,
                 found: 4
-            })
+            }))
         ));
     }
 
@@ -1084,15 +1091,15 @@ mod tests {
         let built = publish(&cache, Decimation::none(grid(4, 3)));
 
         let mut header = header_of(&built);
-        header.decimation = 2;
+        header.attestation.decimation = 2;
         write_header(&cache, &header);
 
         assert!(matches!(
             cache.read(&Identity::from(&built)),
-            Err(CacheError::DecimationFactor {
-                expected: 1,
+            Err(CacheError::NotThisTable(Mismatch::DecimationFactor {
+                wanted: 1,
                 found: 2
-            })
+            }))
         ));
     }
 
@@ -1106,7 +1113,7 @@ mod tests {
         header.format_version = FORMAT_VERSION + 1;
         // The digest goes too, and the refusal still names the version: a header of another version is
         // not a document whose other fields this build knows how to compare.
-        header.digest ^= 1;
+        header.attestation.digest ^= 1;
         write_header(&cache, &header);
 
         assert!(matches!(
@@ -1114,6 +1121,89 @@ mod tests {
             Err(CacheError::FormatVersion { expected, found })
                 if expected == FORMAT_VERSION && found == FORMAT_VERSION + 1
         ));
+    }
+
+    #[test]
+    fn a_v1_header_is_refused_for_its_version_and_not_for_its_syntax() {
+        // The document verbatim, because that is the whole of what is on disk from before ADR 0007 and
+        // no struct in this build can spell it. Parsed into the widened `Header` it fails with
+        // `missing field origin_lat` — `HeaderSyntax`, raised before any version is looked at — which is
+        // the failure the probe exists to prevent and the one issue #45 forbids.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        let v1 = format!(
+            r#"{{"format_version":1,"digest":{},"width":4,"height":3,"decimation":1,"byte_order":"little"}}"#,
+            built.digest
+        );
+        fs::write(cache.header_path(), v1).unwrap();
+
+        assert!(matches!(
+            cache.read(&Identity::from(&built)),
+            Err(CacheError::FormatVersion {
+                expected: 2,
+                found: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn the_version_is_read_out_of_a_document_carrying_more() {
+        // The property the probe rests on, named where it can fail: serde ignores keys a struct does not
+        // declare, so `HeaderVersion` reads a header of any shape. `deny_unknown_fields` on it would
+        // refuse every real document — and would fail this test, which says why, rather than a dozen
+        // that do not.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        publish(&cache, Decimation::none(grid(4, 3)));
+
+        let document = fs::read(cache.header_path()).unwrap();
+        let probed: HeaderVersion = serde_json::from_slice(&document).unwrap();
+        assert_eq!(probed.format_version, FORMAT_VERSION);
+        // And the document it read is one the probe declares eight keys less of.
+        assert!(document.len() > br#"{"format_version":2}"#.len());
+    }
+
+    #[test]
+    fn a_grid_the_table_was_not_built_over_is_refused() {
+        // The reachable case, and the one nothing caught before ADR 0007: same width, same height, same
+        // steps, same factor and the digest the build itself reported — with every column half a turn
+        // from where the table's are.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        assert!(matches!(
+            cache.read(&half_turn_from(&built)),
+            Err(CacheError::NotThisTable(Mismatch::OriginLon {
+                wanted,
+                found
+            })) if wanted == 0.0 && found == -180.0
+        ));
+    }
+
+    #[test]
+    fn a_refusal_names_the_cache_header_and_what_differed() {
+        // The wrapper's noun and the ground's numbers in one sentence, which is what the four collapsed
+        // variants used to say on their own and what nothing else now pins.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        let mut header = header_of(&built);
+        header.attestation.width += 1;
+        write_header(&cache, &header);
+        let dimension = cache.read(&Identity::from(&built)).unwrap_err().to_string();
+        assert!(dimension.contains("cache header"), "{dimension}");
+        assert!(dimension.contains("wanted a 4-column table"), "{dimension}");
+        assert!(dimension.contains("found 5"), "{dimension}");
+
+        write_header(&cache, &header_of(&built));
+        let geometry = cache.read(&half_turn_from(&built)).unwrap_err().to_string();
+        assert!(geometry.contains("cache header"), "{geometry}");
+        assert!(geometry.contains("origin longitude is 0"), "{geometry}");
+        assert!(geometry.contains("found -180"), "{geometry}");
     }
 
     #[test]

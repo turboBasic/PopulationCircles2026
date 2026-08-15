@@ -106,7 +106,7 @@ Eight facts settled here rather than met mid-task:
   `rg -n '1e-9|1e-09' crates/popcircles/src/table/cache.rs` returns nothing, which is what makes the
   constant's owner the only owner.
 
-- [ ] **1.2 The cache header is the attestation, at `FORMAT_VERSION = 2`, and its version is read before the
+- [x] **1.2 The cache header is the attestation, at `FORMAT_VERSION = 2`, and its version is read before the
   document.** `Header` declares `format_version`, then the attestation with `#[serde(flatten)]`, then
   `byte_order`; it loses its derived `Eq` and keeps `Copy`. `checked_header` parses a `format_version`-only
   struct first, compares it, and only then parses the `Header` — with a comment at the probe saying it rests
