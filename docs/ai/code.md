@@ -11,6 +11,12 @@ those levels cannot express, and loosening one to clear an error is a non-negoti
   escape hatch.
 - **`unwrap()` and `expect()`** are acceptable in tests, and in a `main` that is documenting an
   invariant. Not in library paths: return `Result` and propagate with `?`.
+- **A lint exemption names only the lints the code under it actually trips.** Not the set a
+  neighbouring module needed: a test module reaching for `expect_err` alone takes
+  `clippy::expect_used` and stops there. An exemption listing a lint nothing beneath it triggers
+  reads as a policy about the module rather than a fact about its code, and it stops being
+  reviewable — nobody can tell which entries are load-bearing. The count of exemptions is not the
+  measure and never was; a module gaining tests of its own gains one legitimately.
 - **Errors:** a concrete error enum per crate boundary (`thiserror` when it earns its place),
   `anyhow`-style context only at the binary edge. Never `panic!` for an expected failure.
 - **Numeric casts are the sharpest edge in this codebase.** Make every conversion explicit and state

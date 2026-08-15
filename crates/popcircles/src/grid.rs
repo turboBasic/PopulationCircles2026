@@ -416,12 +416,12 @@ fn index_from_offset(offset: f64, limit: u32) -> Option<u32> {
     Some(floored as u32)
 }
 
-// unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this
-// narrow exemption; docs/ai/code.md allows both in tests. float_cmp is here because these
+// expect is warn at workspace level and lint:rust runs --all-targets, so tests need this
+// narrow exemption; docs/ai/code.md allows it in tests. float_cmp is here because these
 // assertions pin that the constructor stored its arguments verbatim — bit-exact equality is the
 // property, not an approximation of one.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+#[allow(clippy::expect_used, clippy::float_cmp)]
 mod tests {
     use proptest::prelude::*;
 

@@ -60,6 +60,9 @@ impl Drop for Bracket {
     }
 }
 
+// expect is warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
+// exemption; docs/ai/code.md allows it in tests. expect_used alone, because the tests below take a
+// lock and read a captured record and never unwrap.
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
