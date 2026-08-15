@@ -89,6 +89,7 @@ indicatif
 insta
 keepends
 libc
+libtest
 lons
 mangen
 markersize
@@ -119,6 +120,7 @@ rescope
 restater
 unfetched
 unfireable
+widenings
 
 # --- Data sources ---
 CIESIN

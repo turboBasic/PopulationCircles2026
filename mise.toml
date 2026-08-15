@@ -220,6 +220,32 @@ run = "cargo test --release --all-features --test decimated_search -- --ignored"
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
+# None of the four are in `lint`, `test` or `ci`, and not on a condition a later change could satisfy: a
+# benchmark measures and asserts nothing, so there is no result for CI to be red about, and a figure
+# measured on a shared runner would be noise quoted to three digits. ADR 0009 decision 1 is the shape —
+# `harness = false` targets timing with `std::time::Instant`, no benchmark dependency — and ADR 0009's
+# Context is where the figures these produced on one machine are recorded.
+[tasks."bench:table"]
+description = "Measure the summation table build, compensation and payload write separately"
+run = "cargo bench --bench table_build"
+
+[tasks."bench:kernel"]
+description = "Measure circular kernel construction, the only step computing geodesic distance"
+run = "cargo bench --bench kernel"
+
+# Reports a resident figure always and a mapped one only when a full-resolution table is under `out/`,
+# which it names the command for rather than building behind the caller. The pair is the point: at 7.5 GB
+# a four-corner query is a page fault, and the resident figure alone describes a run nobody has.
+[tasks."bench:circle"]
+description = "Measure circle evaluation, resident and through a mapped full-resolution table"
+run = "cargo bench --bench circle"
+
+# `bench:table` is deliberately not in here: it writes a 7.5 GB payload to measure what the write costs,
+# and a task that runs every benchmark should not be the one that fills a disk. Run it by name.
+[tasks.bench]
+description = "Run the benchmarks that write nothing"
+depends = ["bench:kernel", "bench:circle"]
+
 [tasks."test:python"]
 description = "Run the Python test suite"
 run = "uv run pytest"
