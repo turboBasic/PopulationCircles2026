@@ -34,18 +34,13 @@ pub fn population(table: &Table<'_>, kernel: &Kernel, centre: Col) -> f64 {
         .sum()
 }
 
-// unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
-// exemption; docs/ai/code.md allows both in tests. float_cmp is the point rather than a concession: every
+// expect is warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
+// exemption; docs/ai/code.md allows it in tests. float_cmp is the point rather than a concession: every
 // fixture cell is a small integer, so each side of an assertion below is an exact f64 and a tolerance
 // would let a dropped row or a doubled one pass. cast_precision_loss likewise — the largest cell is 648,
 // which u32 -> f32 holds exactly.
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::float_cmp,
-    clippy::cast_precision_loss
-)]
+#[allow(clippy::expect_used, clippy::float_cmp, clippy::cast_precision_loss)]
 mod tests {
     use std::convert::Infallible;
 

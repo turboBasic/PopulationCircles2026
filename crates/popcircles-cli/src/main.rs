@@ -212,6 +212,9 @@ fn run(command: Command) -> Result<String, Failure> {
     }
 }
 
+// unwrap and expect are both warn at workspace level and lint:rust runs --all-targets, so tests need
+// this narrow exemption; docs/ai/code.md allows both in tests. Both are load-bearing here, unlike the
+// other test modules in this crate: the flag-list helper unwraps and the parser assertions expect.
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

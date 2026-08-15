@@ -63,6 +63,25 @@ repos:
       # reviewed. Zero fails too, and deliberately: an exception disappearing means the mapping went with
       # it, which is a decision to record rather than a tree to wave through. grep rather than rg
       # because a CI runner is not promised one.
+      # The half of "never silence a lint with a blanket #[allow]" a machine can settle. A crate-level
+      # `#![allow(…)]` exempts every item beneath it, including ones written later by someone who never
+      # read the attribute; an item-level one cannot. So the shape is what gets checked, not the count —
+      # a count would rise legitimately every time a module gains a test module of its own. `src` only:
+      # `tests/` and `benches/` are where the blanket form is the right answer, and all ten of them live
+      # there. Whether an item-level exception is narrow and justified stays a review question.
+      - id: no-blanket-allow
+        name: "no crate-level #![allow] under src"
+        language: system
+        types: [rust]
+        pass_filenames: false
+        entry: >-
+          bash -c 'hits=$(grep -rn --include="*.rs" -F "#![allow(" crates/*/src || true);
+          [ -z "$hits" ] && exit 0;
+          echo "a crate-level #![allow] exempts every item beneath it, later ones included:";
+          echo "$hits" | sed "s/^/  /";
+          echo "  fix: move the exception onto the item that needs it, with a comment saying why;";
+          echo "  docs/ai/code.md \"Comments and docs\" holds the rule."; exit 1' --
+
       - id: single-unsafe-allow
         name: "one unsafe exception, where ADR 0006 put it"
         language: system

@@ -214,8 +214,11 @@ pub(crate) fn smallest_for_share(
     )))
 }
 
+// expect is warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
+// exemption; docs/ai/code.md allows it in tests. No unwrap_used beside it: every assertion below reaches
+// for expect_err or expect, and a lint nothing here trips would not be reviewable.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use crate::failure::EXIT_BAD_INPUT;
 
