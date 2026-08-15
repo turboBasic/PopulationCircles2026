@@ -87,7 +87,7 @@ Six facts settled here rather than met mid-task:
   `target/release/popcircles-cli`; `cargo run -q -p popcircles-cli -- --help` opens its usage line with
   `Usage: popcircles [OPTIONS]`; `cargo test -p popcircles-cli --test commands` runs its 8 tests green.
 
-- [ ] **1.3 `--help` describes the program, and the maintainer's reasoning is no longer published.** An
+- [x] **1.3 `--help` describes the program, and the maintainer's reasoning is no longer published.** An
   `about` on `Cli` saying what the tool does in one line, in the terms `docs/ai/application.md` "What this
   program does" already uses. `LogArgs`'s struct-level `///` becomes `//` — the same words, above the
   `#[derive]` — so the ADR citation and the `global`-placement note stay where a maintainer meets them and
