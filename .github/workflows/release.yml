@@ -1,0 +1,141 @@
+# Inline for the reason ci.yml is, one step further along: turboBasic/github-actions carries no release
+# workflow at all, so there is nothing to call. This is the second prototype for one, and like ci.yml it
+# is driven by mise tasks — `mise run build` here, `mise run ci` in the gate — so what a tag builds cannot
+# drift from what a clone builds.
+#
+# Every action here is pinned to a full SHA, `actions/*` included. `platform.md` "CI" allows a version tag
+# only for a reusable workflow call into turboBasic/github-actions, and there is no such call here.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  # ci.yml's reason, and a sharper one: without this a tag build clones the rasters, which is minutes and
+  # hundreds of megabytes on every leg of a job whose failure mode is a published release.
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  # A tag can name any commit, and main's required checks say nothing about the one it points at. A red
+  # release cannot be unpublished the way a late one can be waited for, so the gate runs before anything
+  # is built — ADR 0006 decision 1.
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      - name: Sync Python tooling
+        run: uv sync --locked
+
+      # ADR 0006 decision 3: the two agreeing is what makes `tool_version` in a published document mean
+      # the release it came from. Read through cargo rather than from the file, because what the binary
+      # compiles in is the version cargo resolves.
+      - name: The tag names the version the manifest carries
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "popcircles-cli") | .version')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "the tag is $TAG and the manifest carries $version:" \
+              "this tag would publish a binary reporting popcircles $version" >&2
+            exit 1
+          fi
+          echo "the tag $TAG agrees with the manifest's $version"
+
+      - run: mise run ci
+
+  build:
+    name: Build ${{ matrix.triple }}
+    needs: gate
+    runs-on: ${{ matrix.runner }}
+    # Longer than the gate's because no gate has ever compiled this on macOS, so the release profile's
+    # cost there — codegen-units = 1 and thin LTO — is unmeasured.
+    timeout-minutes: 30
+    strategy:
+      # Both legs report. With fail-fast a macOS break would cancel the Linux leg, and the macOS runner is
+      # the one nothing else in this repository exercises, so its failure is the one worth seeing whole.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            triple: aarch64-apple-darwin
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      # No cargo cache, unlike ci.yml: this artifact is downloaded and run by someone who cannot inspect
+      # what produced it, and a tag is built once. Paying the full compile is worth not having to reason
+      # about what a restored `target` contributed to it.
+      - run: mise run build
+
+      - name: Name the artifact by its target triple, with its checksum beside it
+        env:
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          cd target/release
+          mv popcircles "popcircles-$TRIPLE"
+          # sha256sum on the Linux runner, shasum on macOS, which ships no sha256sum.
+          if command -v sha256sum > /dev/null 2>&1; then
+            sha256sum "popcircles-$TRIPLE" > "popcircles-$TRIPLE.sha256"
+          else
+            shasum -a 256 "popcircles-$TRIPLE" > "popcircles-$TRIPLE.sha256"
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: popcircles-${{ matrix.triple }}
+          path: |
+            target/release/popcircles-${{ matrix.triple }}
+            target/release/popcircles-${{ matrix.triple }}.sha256
+          # A leg that built nothing must not reach publish as an empty upload.
+          if-no-files-found: error
+
+  # The only job granted write permission, and the only one that writes anything outside the run. Both
+  # legs land here or none does: a leg that fails leaves no Release at all rather than a half-populated
+  # one, and re-running after a fixed leg replaces assets with --clobber instead of colliding with them.
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+
+      # No --generate-notes: ADR 0006 decision 5 says the notes have to state what a release promises and
+      # what it may invalidate, and the first tag's are written by hand. This opens the body empty for a
+      # maintainer to fill; CONTRIBUTING's Releasing section is where that is asked for.
+      - name: Attach both artifacts to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes "" --verify-tag
+          fi
+          gh release upload "$TAG" --clobber dist/*

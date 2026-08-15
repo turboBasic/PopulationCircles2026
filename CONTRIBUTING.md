@@ -17,6 +17,7 @@ mise run lint       # lint
 mise run typecheck  # type-check
 mise run test       # test
 mise run ci         # all of the above — what CI runs
+mise run build      # the release binary, at target/release/popcircles
 ```
 
 Each task's description in `mise.toml` names what it actually runs; `mise run ci` is the check to
@@ -53,6 +54,27 @@ content: CI runs with LFS content absent.
 - **Do not port code from the upstream C++ project.** It carries no licence. Implementations
   written from a description of the algorithm are welcome; transliterations are not.
 - Documentation moves with the change. Stale framing is a defect, not a follow-up.
+
+## Releasing
+
+[ADR 0006](docs/decisions/0006-release-shape-and-format-promises.md) rules what a release is; this is
+the sequence for cutting one.
+
+1. Bump `version` in `[workspace.package]`, which is the only place it lives, and land it on `main` like
+   any other change. Every report snapshot moves with it, because every document carries `tool_version`.
+2. Tag the merged commit `vX.Y.Z` for that same version and push the tag. The workflow's gate compares
+   the two and refuses a tag that disagrees, so a mismatch costs a run rather than a wrong binary.
+3. Write the notes by hand. The workflow opens the body empty on purpose: the notes have to say that
+   `schema_version` is a contract across releases while a cache or a ledger may be invalidated by this
+   one and rebuilt, and nothing can generate that from a commit range.
+
+When a run fails, what to do next turns on one fact — **whether the publish job ran.**
+
+- **It did not.** No Release exists, so the tag is still retractable. Re-run the workflow if the cause
+  was the runner rather than the commit; otherwise delete the tag, fix the cause, and tag the same
+  version again.
+- **It did.** A Release exists and that version is spent, so the next attempt is a version bump rather
+  than a moved tag — a tag that moves lies to everyone who already fetched it.
 
 ## The conventions
 

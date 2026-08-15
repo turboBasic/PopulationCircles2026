@@ -163,7 +163,7 @@ impl Fixture {
 }
 
 fn run_with(flags: &[String], command: &str, rest: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_popcircles-cli"))
+    Command::new(env!("CARGO_BIN_EXE_popcircles"))
         .arg(command)
         .args(flags)
         .args(rest)

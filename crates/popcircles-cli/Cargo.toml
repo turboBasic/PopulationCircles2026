@@ -1,12 +1,22 @@
 [package]
 name = "popcircles-cli"
-version = "0.0.0"
+version.workspace = true
 description = "CLI for finding the smallest circle on Earth containing a given share of world population"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+# ADR 0006 decision 1, the same ruling the library carries: this crate cannot be published without
+# the library going first, and neither is going.
+publish = false
+
+# ADR 0006 decision 4: without this the file takes the package name, and every document the CLI writes
+# already reports `popcircles`. It is also what fixes the usage line, which clap takes from the binary
+# rather than from `#[command(name = ...)]`.
+[[bin]]
+name = "popcircles"
+path = "src/main.rs"
 
 [lints]
 workspace = true

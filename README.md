@@ -187,6 +187,35 @@ stdout stays exactly one JSON document at every level.
 
 `mise run cli -- --help` has the full command and flag reference.
 
+## Releases
+
+A [release][releases] attaches two binaries, each named by its target triple with a `.sha256` beside it:
+
+| Asset | For |
+| --- | --- |
+| `popcircles-aarch64-apple-darwin` | macOS on Apple silicon |
+| `popcircles-x86_64-unknown-linux-gnu` | Linux on x86-64 |
+
+Neither carries a Developer ID signature and neither is notarized, which costs you something only on
+macOS and only depending on how you fetched it. **A browser download** is tagged
+`com.apple.quarantine`, and Gatekeeper then kills the binary with "Apple could not verify … is free of
+malware" — offering to move it to the Bin, which you do not want. Clearing the attribute is the whole of
+the fix:
+
+```sh
+xattr -d com.apple.quarantine popcircles-aarch64-apple-darwin
+```
+
+**A download with `curl`, `wget` or `gh release download` is not tagged** and runs as it is. Nothing here
+depends on Gatekeeper being disabled: the macOS binary is ad-hoc signed, which is what the linker does by
+default and what lets it run on Apple silicon at all.
+
+**What a release promises is the wire format, and only that.** The `schema_version` the JSON documents
+carry is a contract across releases, so a renderer or any other consumer may rely on it. The summation
+table cache and the ledger are internal by contrast, and **any release may invalidate either**: one it
+did not write is refused and rebuilt rather than migrated, which at full resolution costs a pass over
+the raster rather than a download.
+
 ## Data
 
 The population raster is [GPWv4.11 UN WPP-adjusted population count for 2020][gpw] at 30
@@ -236,6 +265,7 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 [gpw-doi]: https://doi.org/10.7927/H4PN93PB
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/turboBasic/PopulationCircles2026
+[releases]: https://github.com/turboBasic/PopulationCircles2026/releases
 [rust]: https://www.rust-lang.org/
 [rust-badge]: https://img.shields.io/badge/rust-1.97%2B-orange.svg
 [valeriepieris]: https://en.wikipedia.org/wiki/Valeriepieris_circle

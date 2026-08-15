@@ -26,8 +26,15 @@ use popcircles::smallest::{self, Share, SmallestError};
 use popcircles::table::cache::{Cache, CacheError, Identity, Mapped};
 use popcircles::table::{BuildError, Decimation, Table, TableError, Window, build};
 
+/// Without an `about`, clap falls back to the description of the struct `Cli` flattens, and what a user
+/// read first was `LogArgs`'s reasoning — ADR 0006 decision 4 is what closed that.
 #[derive(Parser, Debug)]
-#[command(name = "popcircles", version)]
+#[command(
+    name = "popcircles",
+    version,
+    about = "Find the smallest circle on the globe containing a given share of world population, by \
+             great-circle radius rather than by area on a projected map."
+)]
 struct Cli {
     #[command(flatten)]
     log: LogArgs,
@@ -35,13 +42,17 @@ struct Cli {
     command: Command,
 }
 
-/// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. There
-/// is no boolean pair beside it: two flags standing in for a threshold is the shape `FU-04` names, and its
-/// condition is a sweep over this directory, so spelling those two flags out here would fire it.
-///
-/// `global` sits on the argument rather than on the `#[command(flatten)]` above, because the attribute is
-/// the argument's: that is what lets every subcommand take the flag after its own name without declaring
-/// it.
+// `//` rather than `///`, which is ADR 0006 decision 4: clap publishes a flattened struct's description
+// when the command declares none, so this reasoning was the first thing `--help` showed. The words are a
+// maintainer's and the level's own help text is the field's below.
+//
+// How much a run says about what it is doing, and the only control over it — ADR 0004 decision 3. There
+// is no boolean pair beside it: two flags standing in for a threshold is the shape `FU-04` names, and its
+// condition is a sweep over this directory, so spelling those two flags out here would fire it.
+//
+// `global` sits on the argument rather than on the `#[command(flatten)]` above, because the attribute is
+// the argument's: that is what lets every subcommand take the flag after its own name without declaring
+// it.
 #[derive(Args, Debug, Clone, Copy)]
 struct LogArgs {
     /// How much to report on stderr: `error`, `warn`, `info` or `debug`. It does not govern the progress

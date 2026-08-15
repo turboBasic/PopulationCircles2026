@@ -57,6 +57,15 @@ run = [
 description = "Run the popcircles CLI, optimised"
 run = "cargo run --release -p popcircles-cli --"
 
+# The artifact a release attaches, at `target/release/popcircles`. `--locked` is what makes it provably
+# the commit's: the release job publishes what this task builds, and without the flag cargo may update
+# Cargo.lock during that build. The cost is that a manifest edit fails this task until `cargo` or `uv`
+# has updated the lock, which `platform.md` "Dependencies" asks for anyway. `cli` runs the binary and
+# builds it incidentally; this one is asked for the file.
+[tasks.build]
+description = "Build the release binary from the committed lock, at target/release/popcircles"
+run = "cargo build --release --locked -p popcircles-cli"
+
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
 run = [
@@ -75,10 +84,21 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 # `--document-private-items` because without it rustdoc never reads a private item's doc comment, and this
 # crate keeps most of its reasoning there; with the plain form, a broken link inside `report.rs`'s own
 # helpers goes unreported. `--workspace` because the CLI has doc comments too.
+#
+# Two invocations rather than one `--workspace`, and the second's `--target-dir` is the whole point: since
+# ADR 0006 decision 4 named the binary `popcircles`, the bin target and the library share a crate name and
+# so `cargo doc --workspace` sends both to `target/doc/popcircles/` (cargo#6313). That is not the cosmetic
+# warning it reads as — the two runs document concurrently, and the second deletes the directory the first
+# is still writing into, which failed CI with `could not document popcircles` while passing locally, where
+# the ordering happened to serialise. Documenting the CLI into a directory of its own keeps both halves the
+# flags above are for: the library's rendered output, and the CLI's links checked too.
 [tasks."lint:rustdoc"]
 description = "Lint rustdoc, broken intra-doc links are errors"
 env = { RUSTDOCFLAGS = "-D warnings" }
-run = "cargo doc --workspace --no-deps --document-private-items"
+run = [
+  "cargo doc -p popcircles --no-deps --document-private-items",
+  "cargo doc -p popcircles-cli --no-deps --document-private-items --target-dir target/doc-cli",
+]
 
 [tasks."lint:python"]
 description = "Lint Python with ruff"

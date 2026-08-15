@@ -35,6 +35,7 @@ tiff = { version = "0.11", default-features = false, features = ["lzw"] }
 weezl = "0.1"
 
 [workspace.package]
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT"
