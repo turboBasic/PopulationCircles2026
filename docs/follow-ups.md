@@ -345,3 +345,34 @@ Identifiers are flat, sequential and never reused.
   passing — at full resolution a rebuild is the raster read again. The entry names the record it needs and
   stops there deliberately: prescribing the change here would settle in a register what `docs/decisions/`
   owns.
+
+### FU-12 - No gate compiles this for Apple silicon
+
+- **Status** — `due` (2026-08-15): met the moment `.github/workflows/release.yml` landed.
+- **Condition** — a release job builds a macOS artifact while no gate ever compiles for that target. Two
+  greps: `rg -n 'macos' .github/workflows/release.yml` matching, and `rg -n 'runs-on|macos'
+  .github/workflows/ci.yml` naming `ubuntu-latest` and nothing else. So the first time this code is compiled
+  for `aarch64-apple-darwin` is on a pushed tag, including the `unsafe` mmap site ADR 0003 decision 5
+  reviewed and the `#[allow(unsafe_code)]` the `single-unsafe-allow` hook guards. A macOS-only break
+  therefore surfaces when the tag already exists, which is the half of ADR 0006's cost that CONTRIBUTING's
+  Releasing section has to give a recovery for rather than prevent.
+- **Fix** — `macos-latest` in `ci.yml`'s job as a matrix beside `ubuntu-latest`. ADR 0006 weighed this and
+  did not take it: the cost is a second runner on every pull request rather than on every tag, which is why
+  this is an entry and not a task. What would move it is evidence the gap bites — a release leg failing on
+  macOS where the Linux leg passed, which is a fact a run either shows or does not.
+
+### FU-13 - A published binary is unsigned, and a user is told to clear an attribute by hand
+
+- **Status** — `dormant` (2026-08-15): the condition needs a release to exist, and none does. Nothing has
+  fired the release workflow.
+- **Condition** — a Release exists while no artifact is signed. The sweep is `gh release list` returning at
+  least one release, together with `rg -n 'codesign|notarytool|notarize' .github/workflows/release.yml`
+  returning nothing. The consequence is already written down: `README.md`'s Releases section tells a macOS
+  user to run `xattr -d com.apple.quarantine` on the download, which is a documented workaround for an
+  unsigned binary rather than a property of the tool. The entry exists because that instruction reads as
+  normal once it has sat in a README for a while, and it is not.
+- **Fix** — sign and notarize the macOS artifact in the publish job, which drops the README line rather
+  than explaining it better. ADR 0006 put it out of scope for a reason that is a prerequisite and not a
+  preference: it needs a paid Apple identity and a certificate in CI secrets, so this cannot be closed by
+  anyone who does not hold the account. Until then the honest form is the documented attribute, which is
+  why the entry's condition is about a release existing rather than about the README's wording.

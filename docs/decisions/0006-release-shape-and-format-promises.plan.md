@@ -5,7 +5,7 @@ created: 2026-08-15
 
 # Implementation plan — ADR 0006, the release process and what it promises
 
-**Status: in progress (2026-08-15).** Carries [ADR 0006](0006-release-shape-and-format-promises.md) into
+**Status: complete (2026-08-15).** Carries [ADR 0006](0006-release-shape-and-format-promises.md) into
 the tree, which is the remaining work of issue #28. It builds the process and does **not** publish a
 release: the tag waits on #9, #10 and #45, so the last thing this plan leaves behind is a workflow nobody
 has fired.
@@ -155,7 +155,7 @@ Six facts settled here rather than met mid-task:
   Verify: `rg -n '^## Releasing' CONTRIBUTING.md` matches; the section names both cases and the fact that
   separates them; `mise run lint:markdown` and `mise run lint:cspell` clean.
 
-- [ ] **3.3 The register carries what this plan deliberately left, #28's boxes are ticked, and this plan is
+- [x] **3.3 The register carries what this plan deliberately left, #28's boxes are ticked, and this plan is
   closed.** Two new entries in [`../follow-ups.md`](../follow-ups.md), each with a condition a sweep can
   answer: `FU-12`, no gate compiles this for Apple silicon while a release job ships a macOS artifact; and
   `FU-13`, a release exists while no artifact is signed, so a macOS user is told to clear an attribute by

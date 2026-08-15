@@ -10,9 +10,11 @@ alexmijo
 turboBasic
 actionlint
 binstall
+codesign
 commitizen
 cspell
 mise
+notarytool
 popcircles
 prek
 pyright
