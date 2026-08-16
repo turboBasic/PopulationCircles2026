@@ -142,10 +142,10 @@ Identifiers are flat, sequential and never reused.
 
   **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
   `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its
-  terms ask for no attribution — so the count the Condition sweeps for is two against one citation while
-  the failure the entry guards against is still impossible. What the Condition means is a second row a
-  figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s reason: a reader
-  should be able to tell "the row arrived and the entry held" from "nobody looked".
+  terms ask for no attribution — so the count the Condition sweeps for is two rows against one selectable
+  dataset while the failure the entry guards against is still impossible. What the Condition means is a
+  second row a figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s
+  reason: a reader should be able to tell "the row arrived and the entry held" from "nobody looked".
 
   **Half of this closed** (2026-08-16, issue #57). The citation was a Python constant, which the original
   title named; it is now read from `data/registry.toml`, so the text a figure carries is the text the
