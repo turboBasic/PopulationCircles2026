@@ -5,6 +5,10 @@ description: Execute a phase of a scratch implementation plan under tmp/ - every
 
 # Run a plan
 
+**Acting as developer.** It owns executing a plan's tasks as written, one verified commit at a time. It does
+not re-scope: the issue behind the plan is the product owner's and the plan's shape the architect's, so what
+this role does with a task it believes wrong is stop and say so.
+
 One invocation advances a plan by one phase. The task stays the unit of verification and the unit of
 commit — the phase is only how far the run goes without a human in the loop, and neither a task nor a
 phase boundary is crossed with work uncommitted. The loop below is the plan-execution contract;

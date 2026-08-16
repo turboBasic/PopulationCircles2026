@@ -5,6 +5,9 @@ description: Audit repository hygiene - gates, instruction-layer duplication, th
 
 # Housekeeping sweep
 
+**Acting as architect.** It owns what counts as drift across the repository and hands that reading back. It
+does not implement, not even the one-line fix a finding makes obvious.
+
 Report-only. Run every check, then hand the user one list; a sweep that fixes as it goes buries what
 drifted under the repair. Each finding names what drifted, the file that owns it, and the fix — the
 user decides which fixes happen, and each one is separate work afterwards.
