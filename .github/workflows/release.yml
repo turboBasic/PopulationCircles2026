@@ -7,10 +7,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # Without this the checkout fetches the rasters, which is minutes and hundreds of megabytes.
-  GIT_LFS_SKIP_SMUDGE: 1
-
 jobs:
   # A tag can name any commit, and main's required checks say nothing about the one it points at.
   # Checking before the build costs a slow release; skipping it risks one that cannot be recalled.

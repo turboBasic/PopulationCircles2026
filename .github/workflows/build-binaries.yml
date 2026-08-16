@@ -6,12 +6,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # A caller's workflow-level env does not reach a called workflow, so this is declared here rather
-  # than inherited: without it a build clones the rasters, which is minutes and hundreds of megabytes
-  # on every leg.
-  GIT_LFS_SKIP_SMUDGE: 1
-
 jobs:
   build:
     name: Build ${{ matrix.triple }}

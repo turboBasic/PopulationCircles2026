@@ -16,10 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  # Rasters stay pointer-only in CI. Nothing here may depend on their content.
-  GIT_LFS_SKIP_SMUDGE: 1
-
 jobs:
   ci:
     name: CI
