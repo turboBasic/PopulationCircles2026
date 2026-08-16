@@ -60,8 +60,8 @@ def test_a_committed_row_describes_the_file_on_disk() -> None:
 
 @pytest.mark.raster
 def test_a_fetched_row_describes_the_file_once_it_has_been_fetched() -> None:
-    # Deselected by default and never in CI: a fetched dataset is an LFS pointer on the clone CI
-    # runs on, so asserting its length there fails for having no data rather than for a wrong
+    # Deselected by default and never in CI: a fetched dataset is absent from the checkout CI runs
+    # on, so asserting its length there fails for having no file rather than for a wrong
     # figure — platform.md "Testing". `mise run test:python-raster` is what runs it.
     fetched = [d for d in load().datasets.values() if d.fetch_url is not None]
     assert fetched
