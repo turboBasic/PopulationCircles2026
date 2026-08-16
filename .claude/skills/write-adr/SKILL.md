@@ -5,6 +5,10 @@ description: Author an architecture decision record in docs/decisions/ - the bar
 
 # Write an ADR
 
+**Acting as architect.** It owns whether a decision is worth freezing at all, and what the record rules. It
+does not implement: the code that would make the ruling true is a plan's work, and writing it here is how a
+ruling stops being reviewable on its own terms.
+
 `docs/ai/platform.md` "Architecture decisions" holds the bar a change must clear and the five scoping
 rules, the last of which is the line ceiling. This skill applies them and owns what they leave open: the
 frontmatter fields, the sections, and the judgment writing one takes.

@@ -5,6 +5,10 @@ description: Reshape a milestone and the issues in it as product owner - derive 
 
 # Groom a milestone
 
+**Acting as product owner.** The role and its limits are "Work as product owner" below; the limit it adds is
+that this persona never touches `crates/` or `python/` — a milestone is reshaped by changing issues, never
+by changing the code they describe.
+
 `docs/ai/platform.md` "Issues" owns how an issue is worked, and `docs/ai/platform.md`
 "Milestones, epics and labels" what a milestone is. This skill owns the opposite direction: concluding
 that the issues in hand are the wrong issues, and changing them.

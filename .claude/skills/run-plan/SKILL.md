@@ -5,6 +5,10 @@ description: Execute a phase of a scratch implementation plan under tmp/ - every
 
 # Run a plan
 
+**Acting as developer.** It owns executing a plan's tasks as written. It does not re-scope: the issue behind
+the plan is the product owner's and the plan's shape the architect's, so a task this role believes wrong goes
+back to them.
+
 One invocation advances a plan by one phase. The task stays the unit of verification and the unit of
 commit — the phase is only how far the run goes without a human in the loop, and neither a task nor a
 phase boundary is crossed with work uncommitted. The loop below is the plan-execution contract;
@@ -45,7 +49,17 @@ issue checkbox the closing task reaches.
    the scratch file after that commit exists, and never before it — the commit is the durable half, and
    a tick standing where no commit does is the one state this loop cannot recover from.
 9. **Take the next unchecked task in the same phase and repeat from step 5.** At the phase boundary,
-   stop: report the tasks that landed and name what the next phase holds. Do not roll into it.
+   stop. Do not roll into the next phase.
+10. **Run the `architect-reviewer` agent over the phase's commits**, once for the phase rather than per
+    task — per-task invocation multiplies the cost by the task count for a commit that is still amendable
+    inside its phase. Every task is committed and its box ticked by now, so a rejection cannot reopen
+    anything; what it obliges is one of three answers, and ticked boxes stay ticked because the commit is
+    the durable half. The three are a further commit inside this phase, a task appended to the next
+    phase, or an entry in `docs/follow-ups.md`.
+11. **Report** the tasks that landed, what the review found and how each finding was answered, and what
+    the next phase holds. **The phase is not reported complete until every finding has one of those three
+    answers or the owner overrides it** — an unanswered finding is the one thing that makes the boundary a
+    formality, and a report written before the review is the same thing with the order hidden.
 
 ## Judgment
 

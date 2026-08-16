@@ -62,7 +62,7 @@ owner already holds it. Lowest first:
 | L1 records | why a constraint exists, and what lost to it | `docs/decisions/` |
 | L2 router | project invariants and the layering rule | this file |
 | L3 domain docs | judgment no tool can enforce | `docs/ai/` |
-| L4 skills | one task's workflow and the judgment that task needs | `.claude/skills/*/SKILL.md` |
+| L4 skills and personas | one task's workflow and the judgment that task needs, or a standing stance and what it refuses | `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` |
 | L5 entry points | routing only | `CLAUDE.md`, `.github/copilot-instructions.md` |
 
 Within L3, [`ai/platform.md`](ai/platform.md) wins wherever it and an application doc would

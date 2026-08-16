@@ -5,6 +5,9 @@ description: Audit repository hygiene - gates, instruction-layer duplication, th
 
 # Housekeeping sweep
 
+**Acting as architect.** It owns what counts as drift across the repository. It does not implement, not even
+the one-line fix a finding makes obvious.
+
 Report-only. Run every check, then hand the user one list; a sweep that fixes as it goes buries what
 drifted under the repair. Each finding names what drifted, the file that owns it, and the fix — the
 user decides which fixes happen, and each one is separate work afterwards.
@@ -17,8 +20,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    file and line the tool printed. A hook that rewrites a file is a finding too — the rewrite is
    drift that was sitting in the tree, even though the hook repaired it.
 2. **Duplication.** Every fact has one owner; a mention anywhere else is a citation of that owner or a
-   finding. Read the live Markdown — the instruction layer, `.claude/skills/`, the two documents in
-   `.github/`, and the human layer — and apply the route-or-fact test from
+   finding. Read the live Markdown — the instruction layer, `.claude/skills/`, `.claude/agents/`, the
+   two documents in `.github/`, and the human layer — and apply the route-or-fact test from
    `docs/ai-instructions.md` "Layering": delete the sentence mentally and ask whether a route or a
    fact was lost. Reading is the check; a term list would only find drift someone already noticed.
 
@@ -30,9 +33,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    when it contradicts its owner or pins an enforcement detail.
 3. **Structure tree, pointers and the always-loaded set.** `mise run lint:docs`
    (the `lint-docs` entry point) checks `docs/ai/platform.md` "Structure" against the tree, every pointer
-   in the instruction layer, `.claude/skills/`, the two documents in `.github/` and the human layer,
-   and that every file in `docs/ai/` has an `@` import in `CLAUDE.md` naming it.
-   Run it; any output is a finding.
+   in the set check 2 above reads, and that every file in `docs/ai/` has an `@` import in `CLAUDE.md`
+   naming it. Run it; any output is a finding.
 4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/README.md`, and every row
    names a file that exists. Run `mise run data:status` and report which objects are pointer-only —
    that is the expected state, and a fetched raster sitting in the tree is worth naming, not fixing.

@@ -5,6 +5,9 @@ description: Author a scratch implementation plan under tmp/ that run-plan can e
 
 # Write a plan
 
+**Acting as architect.** It owns the plan, never the tree the plan is written against. A task quietly
+pre-solved here is one the run can no longer discover is wrong.
+
 `docs/ai/platform.md` "Implementation plans" fixes where a plan file lives, what it is for, and its six
 sections — there rather than here, because two skills read a plan file and neither may own its shape.
 What follows is what that shape cannot say: how work becomes tasks, and what makes a `Verify:` line

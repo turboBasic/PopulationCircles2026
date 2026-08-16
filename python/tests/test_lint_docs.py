@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from repo_tools import lint_docs
 
 
@@ -156,3 +158,25 @@ def test_scope_files_are_all_real_files() -> None:
 
 def test_main_is_clean_on_real_repo() -> None:
     assert lint_docs.main() == 0
+
+
+def test_agent_files_are_in_scope_and_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent = tmp_path / ".claude" / "agents" / "bad.md"
+    agent.parent.mkdir(parents=True)
+    agent.write_text("# Bad\n\n[gone](docs/gone.md)\n")
+    # Both are @functools.cache and read REPO_ROOT when called, so a warm entry from an earlier
+    # test answers about the real repo here — and one left warm by this test answers about tmp_path
+    # in whatever runs next.
+    lint_docs.top_level_roots.cache_clear()
+    lint_docs.is_ignored.cache_clear()
+    monkeypatch.setattr(lint_docs, "REPO_ROOT", tmp_path)
+    try:
+        assert agent in lint_docs.scope_files()
+        findings = lint_docs.check_pointers(agent)
+        assert len(findings) == 1
+        assert "does not resolve" in findings[0].message
+    finally:
+        lint_docs.top_level_roots.cache_clear()
+        lint_docs.is_ignored.cache_clear()

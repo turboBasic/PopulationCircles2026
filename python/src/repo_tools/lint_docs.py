@@ -21,7 +21,8 @@ def top_level_roots() -> frozenset[str]:
 
 
 # The scope of the housekeeping sweep's "Duplication" check (.claude/skills/housekeeping/SKILL.md):
-# the instruction layer, .claude/skills/, the two documents in .github/, and the human layer.
+# the instruction layer, .claude/skills/, .claude/agents/, the two documents in .github/, and the
+# human layer.
 # docs/decisions/ is a valid *target* for a pointer but is never itself scanned: a record is frozen
 # once accepted, so a pointer it contains cannot be fixed to satisfy this lint.
 def scope_files() -> list[Path]:
@@ -37,6 +38,7 @@ def scope_files() -> list[Path]:
     globbed = [
         *sorted((REPO_ROOT / "docs" / "ai").glob("*.md")),
         *sorted((REPO_ROOT / ".claude" / "skills").glob("*/SKILL.md")),
+        *sorted((REPO_ROOT / ".claude" / "agents").glob("*.md")),
     ]
     return [*fixed, *globbed]
 
