@@ -16,5 +16,7 @@
 
 *.png binary
 *.bin binary
+# No raster is committed, so these two are for the force-add that gets past .gitignore: without them
+# `text=auto` above would decide, and a raster it guessed wrong about would be line-ending mangled.
 *.tif binary
 *.tiff binary

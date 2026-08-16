@@ -47,9 +47,10 @@ repos:
       # beside the check rather than in the registry, which describes the datasets that exist
       # rather than the formats one might arrive in.
       #
-      # grep for the `path` line rather than a TOML parse, because a hook may not assume a
-      # Python environment is built. That accepts a match inside a comment; the stem-equals-key
-      # check in the Python boundary is what holds the row itself honest.
+      # grep for the `path` line rather than a TOML parse, because a tripwire runs on the crudest
+      # path that answers the question and a parse would be a second reader of the registry beside
+      # `dataset_registry`. Two accepted costs: a match inside a comment satisfies it, and it is
+      # coupled to taplo's spelling, so a row written `path='…'` would fail for a file that has one.
       - id: geo-data-registered
         name: geospatial data has a registry row
         language: system

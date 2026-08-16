@@ -40,6 +40,7 @@ tmp/
 # behind and it is the size of the raster.
 *.part
 # The fetched raster, which `mise run data:get` is what puts there. This line keeps it out of `git
-# status`; the hook, not this line, is what refuses a commit of one — a `git add -f` defeats an ignore
-# rule and nothing here would notice.
+# status`, and a `git add -f` defeats it. What refuses the commit then is `check-added-large-files`, on
+# size alone — the registry-row hook cannot, because the raster has a row. So nothing bounds a published
+# dataset small enough to pass that hook; FU-22 holds the gap.
 /data/population/*.tif
