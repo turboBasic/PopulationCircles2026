@@ -66,8 +66,12 @@ checksum above is of *our* copy, and [Obtaining it](#obtaining-it) is how to get
 
 #### Obtaining it
 
-The raster is not in a normal clone and is not attached to a release. Download it from the source
-above; the whole of it is four commands, and the last one is the point.
+The raster is not in a normal clone. The [`data-v1` release][data-tag] carries it, and that copy needs
+no account — its body holds the provenance, the licence and the checksum.
+
+What follows is the other route: obtaining an **independent** copy from the publisher, which is what
+makes the checksum below something more than a record of one download. The whole of it is four
+commands, and the last one is the point.
 
 **It needs a free [NASA Earthdata Login][urs-new].** The archive is behind URS OAuth, so an
 anonymous request gets a 401 and a redirect rather than the file. A browser download from the
@@ -110,6 +114,7 @@ The dataset is also mirrored in the Google Earth Engine catalog as
 `CIESIN/GPWv411/GPW_UNWPP-Adjusted_Population_Count`.
 
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
+[data-tag]: https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1
 [gpw-adj]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
 [gpw-raw]: https://doi.org/10.7927/H4JW8BX5
 [gpw-search]: https://search.earthdata.nasa.gov/search/granules?p=C3540909447-ESDIS
