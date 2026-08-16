@@ -11,7 +11,7 @@ from population_circles.circle_document import (
 )
 
 # Every fixture below is a dictionary, never a file: the renderer's input is one JSON path and its
-# tests open nothing at all, which is what keeps them runnable on a clone with no LFS content. The
+# tests open nothing at all, which is what keeps them runnable on a checkout with no raster. The
 # figures are `report.rs`'s own snapshots, named so a change to one moves every assertion over it.
 EARTH_RADIUS_KM = 6371.0088
 EARTH_MODEL = {"model": "sphere", "radius_km": EARTH_RADIUS_KM}
