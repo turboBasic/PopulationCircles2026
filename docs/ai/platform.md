@@ -48,10 +48,12 @@ waiting on sources and tests to exist, not on someone noticing them.
 Input datasets live in `data/`, one directory per kind. A large one is published and fetched rather
 than carried in the repository, a small one is committed; Git LFS is still the route for the raster
 until #85 removes it.
-[`data/README.md`](../../data/README.md) is the registry and owns each dataset's grid, CRS, nodata
-value, checksum and provenance, which of them LFS holds, plus the mechanics of skipping and fetching
-the objects ([Fetching](../../data/README.md#fetching)). A dataset gets its row in the same change that
-adds it.
+[`data/registry.toml`](../../data/registry.toml) is the registry and owns each dataset's grid, CRS,
+nodata value, byte length, checksum, fetch URL, licence and the attribution a figure owes — it is what
+`mise run data:get` and the renderer read. [`data/README.md`](../../data/README.md) is the same datasets
+described for a person, and owns the provenance that identifies each one, which of them LFS holds, plus
+the mechanics of skipping and fetching the objects ([Fetching](../../data/README.md#fetching)). A dataset
+gets its row in both, in the same change that adds it.
 
 The judgment around that mechanism:
 
@@ -327,6 +329,6 @@ docs/follow-ups.md               the register of pending obligations
 .claude/agents/                  one file per standing persona
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search
-data/                            input datasets; registry in data/README.md
+data/                            input datasets; registry in data/registry.toml
 python/                          Python project — src/ holds the packages, tests/ the suite
 ```

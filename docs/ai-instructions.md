@@ -70,8 +70,9 @@ conflict. `README.md`, `USAGE.md` and `CONTRIBUTING.md` are the human layer and 
 files own, each earning it by a way of being read that no owner serves: `README.md` is read first,
 `CONTRIBUTING.md` cold and once, `USAGE.md` with a terminal open and returned to. Where any of them and
 the instruction layer disagree, the instruction layer governs.
-`data/README.md` is an owner rather than a restater — the dataset registry and the fetching mechanics
-live there. Those are the only licences to restate an owned fact; anywhere else, a restatement is
+`data/registry.toml` is the dataset registry and owns what a machine reads of each dataset;
+`data/README.md` owns the provenance and the fetching mechanics, and is a restater of the rest.
+Those are the only licences to restate an owned fact; anywhere else, a restatement is
 a defect to correct at the owner. Granting a further one takes a record in `docs/decisions/`, and the
 bar is that reader property. That a human might read the file is true of everything here and grants
 nothing.

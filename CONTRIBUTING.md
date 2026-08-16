@@ -40,15 +40,21 @@ format because prek reads it.
 
 ## Data
 
-Input datasets live in [`data/`](data/README.md) with their contents in Git LFS. Clone without
-pulling hundreds of megabytes, then fetch only when you need them:
+Input datasets live in [`data/`](data/README.md), described for a machine in
+[`data/registry.toml`](data/registry.toml) and for a person in [`data/README.md`](data/README.md). Clone
+without pulling hundreds of megabytes, then fetch only when you need them:
 
 ```sh
 GIT_LFS_SKIP_SMUDGE=1 git clone <url>
 mise run setup          # also pins the skip in repo-local git config
-mise run data:pull      # fetch the rasters
+mise run data:get       # fetch every registered dataset not already here, and verify it
+mise run data:pull      # the LFS route to the same rasters, for anyone with access to the objects
 mise run data:status    # present locally, or pointer-only
 ```
+
+`data:get` needs no access to this repository's LFS objects and no account anywhere: it reads the
+registry, verifies each file against the recorded checksum before putting it in place, and prints the
+attribution each licence requires.
 
 Skipping is a layered default, not a guarantee — [`data/README.md`](data/README.md#fetching) explains
 which layer holds and why the environment variable is still on you.
@@ -73,8 +79,8 @@ The body is read by someone who has never seen this repository, and the asset's 
 own description rather than the publisher's, so it lets them assume nothing. Each item names where its
 text already exists, and a published dataset's row carries the two sub-headings items 3 to 6 cite:
 
-1. **What the file is** — extent, pixel type and nodata sentinel, from the dataset's row under
-   [Registry](data/README.md#registry).
+1. **What the file is** — extent, pixel type and nodata sentinel, from the dataset's row in
+   [`data/registry.toml`](data/registry.toml).
 2. **Its grid** — dimensions and cell size, from the same row.
 3. **Which variant**, where a dataset is published in several that differ in values — the paragraph
    naming the variant and the figure that distinguishes it, under
@@ -85,10 +91,12 @@ text already exists, and a published dataset's row carries the two sub-headings 
 5. **The licence** and its URL, from [`data/README.md`](data/README.md) "Licence and attribution".
 6. **The citation** verbatim, where the licence requires one — that heading again. A fetcher acquires
    the obligation with the bytes, so it travels with them.
-7. **The `SHA-256`**, from the row, so the download can be verified by hand.
+7. **The `sha256` and `bytes`**, from the row, so the download can be verified by hand and not only by
+   `mise run data:get`.
 
-A figure the body needs and `data/README.md` does not hold is a finding, not something to measure into
-the release notes: measure it into the row, then quote the row.
+A figure the body needs and no row holds is a finding, not something to measure into the release notes:
+measure it into [`data/registry.toml`](data/registry.toml) where a machine reads it, or into
+[`data/README.md`](data/README.md) where a person does, then quote it.
 
 ## Sending a change
 

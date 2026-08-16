@@ -113,7 +113,7 @@ published checksum worth checking.
 | --- | --- |
 | `crates/popcircles/` | Rust library — the search |
 | `crates/popcircles-cli/` | The `popcircles` binary — a client of the library |
-| `data/` | Input datasets, with a registry in [`data/README.md`](data/README.md) |
+| `data/` | Input datasets, with a registry in [`data/registry.toml`](data/registry.toml) |
 | `python/` | Python project — `population_circles` renders the maps, `repo_tools` lints this repository |
 | `docs/ai-instructions.md` | The instruction router: project invariants, and what to read for a task |
 | `docs/ai/` | Per-task conventions: [platform](docs/ai/platform.md), [code](docs/ai/code.md), [application](docs/ai/application.md) |
