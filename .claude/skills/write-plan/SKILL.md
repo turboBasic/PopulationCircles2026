@@ -37,7 +37,9 @@ act on this without asking the author what was meant?
    state a reader can check and disagree with. "Tests pass" verifies nothing — the gates run anyway, on
    every task. Prefer the assertion that would have caught the mistake you are worried about:
    `rg -n 'scaffolding only'` returns nothing; the totals match the four figures the registry records;
-   the same 1 test runs before and after.
+   the same 1 test runs before and after. Prefer too an assertion the work under test cannot satisfy by
+   editing itself — "the tolerance assertion passes" is met by widening the tolerance, while "the same 1
+   test runs before and after" forces whoever would fake it to break something else.
 6. **Phase only where the grouping carries information** — a shared prerequisite, a change of subject, a
    `Model:` the phase expects. Phases exist so a reader can see the shape of the work; numbering that
    only counts is noise. A boundary also costs something, now that `run-plan` stops at one: it is where
@@ -46,18 +48,22 @@ act on this without asking the author what was meant?
    place by naming a mistake available in *this* work, not by restating a convention the instruction
    layer already binds. An Out of scope entry carries the reason it lost, so a later reader cannot
    mistake the omission for an oversight.
-8. **Make the last task land what outlives the file.** The plan itself is scratch and is thrown away, so
-   the closing task is what survives it: the issue's checkboxes and the roadmap box ticked, any
-   obligation the work produced written into `docs/follow-ups.md`, the Follow-ups section here reduced to
-   those identifiers, and the status line set to complete with the date. `run-plan` refuses a plan marked
-   complete, which is the only thing keeping a finished plan from being run twice.
+8. **Make the last task land what outlives the file, and judge where it lands.** The plan is scratch and is
+   thrown away, so the closing task is what survives it: the issue's checkboxes and the roadmap box ticked,
+   the status line set to complete with the date, and every remaining obligation given a home. Which home is
+   a judgment rather than a default — a remainder shaped like work someone will do is an issue, and
+   `docs/follow-ups.md` takes only an obligation stating a condition the repository can answer, which is the
+   bar that file sets. Forcing one into the register for want of anywhere else produces an entry no sweep can
+   evaluate; ask where the shape is genuinely unclear. The Follow-ups section then names the identifiers of
+   whatever entries exist, and says so when there are none. `run-plan` refuses a plan marked complete, which
+   is the only thing keeping a finished plan from being run twice.
 
 ## Judgment
 
-- **A `Verify:` line is the only part of a plan that cannot be fudged.** The task text says what to do
-  and a determined reader can satisfy it badly; the verification either holds or does not. Where a task
-  resists a checkable verification, that is evidence the task is not yet understood — split it until one
-  is available.
+- **A `Verify:` line is the hardest part of a plan to fudge, and only when it points outside the change.**
+  The task text says what to do and a determined reader can satisfy it badly; a verification aimed at
+  something the change may itself edit is satisfiable the same way. Where a task resists a checkable
+  verification, that is evidence the task is not yet understood — split it until one is available.
 - **Phrase a task as an end state, not an action.** `run-plan` verifies an already-done task and checks
   it off rather than redoing it, and "add the module" is ambiguous the moment the module exists while
   "the module exists, declared in `lib.rs`, with these two functions" is not. Plans get partially

@@ -64,7 +64,8 @@ issue checkbox the closing task reaches.
 - **A task that names a non-negotiable is a stop, not a licence.** A plan is not authorisation to
   break one; the router's protocol applies inside a plan exactly as outside it.
 - **The last task closes the plan and hands the work to the issue** — the issue's checkboxes and the
-  roadmap box ticked, any obligation the work produced written into `docs/follow-ups.md` (which owns
-  their format and the bar their conditions must meet), the Follow-ups section reduced to those
-  identifiers, and the status line set to complete with the date. Once that is done the scratch file has
+  roadmap box ticked, each remaining obligation landed in the home that task judged for it (an issue where
+  it is work someone will do, `docs/follow-ups.md` where it states a condition the repository can answer,
+  and that file owns the format and the bar), the Follow-ups section naming whatever identifiers resulted,
+  and the status line set to complete with the date. Once that is done the scratch file has
   no reader left, and step 2 will refuse it if anyone tries.
