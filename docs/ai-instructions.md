@@ -71,7 +71,8 @@ files own, each earning it by a way of being read that no owner serves: `README.
 `CONTRIBUTING.md` cold and once, `USAGE.md` with a terminal open and returned to. Where any of them and
 the instruction layer disagree, the instruction layer governs.
 `data/registry.toml` is the dataset registry and owns what a machine reads of each dataset;
-`data/README.md` owns the provenance and the fetching mechanics, and is a restater of the rest.
+`data/README.md` owns the provenance and the fetching mechanics, and is a restater of the rest — the
+split [ADR 0009](decisions/0009-input-data-is-published-not-versioned.md) took.
 Those are the only licences to restate an owned fact; anywhere else, a restatement is
 a defect to correct at the owner. Granting a further one takes a record in `docs/decisions/`, and the
 bar is that reader property. That a human might read the file is true of everything here and grants

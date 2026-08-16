@@ -120,9 +120,9 @@ Identifiers are flat, sequential and never reused.
 
 - **Status** — `dormant` (2026-08-15): the registry holds one dataset, at 0.008333° — six orders of
   magnitude above the constant.
-- **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
-  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
-  resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
+- **Condition** — a row in [`data/registry.toml`](../data/registry.toml) names a grid resolution within
+  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is each
+  row's `lat_step`/`lon_step` against the constant: 0.008333333333333333° against 1e-9° today, and
   what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — a cache
   compares the geometry within it while the dimensions compare exactly — so a cell small enough
   to land in that gap makes a stale cache indistinguishable from the right one, which is the failure
@@ -231,9 +231,12 @@ Identifiers are flat, sequential and never reused.
   checkout and `data/` is beside it. The path is `parents[3]` of a module under
   `python/src/population_circles/`, which is the repository root for exactly as long as that holds.
 
-  **A second resolution joined the first** (2026-08-16, issue #57). `dataset_registry.py`'s `REGISTRY`
-  reaches `data/registry.toml` the same way `render_map.py`'s `COASTLINE` reaches the basemap, so the
-  count this entry sweeps for is two and the failure is unchanged. The registry is the worse of the
+  **A second resolution joined the first, and one consumer of it writes** (2026-08-16, issue #57).
+  `dataset_registry.py`'s `REGISTRY` reaches `data/registry.toml` the same way `render_map.py`'s
+  `COASTLINE` reaches the basemap, so the count this entry sweeps for is two. `mise run data:get` then
+  resolves paths against that same root to place 428 MB, so under a wheel it would `mkdir` under
+  `site-packages` — it happens to fail loudly first, because the coastline sorts before the raster and
+  has no `fetch_url`, but the message it gives is about a damaged checkout and would be wrong. The registry is the worse of the
   two: it is read for the attribution a figure owes, so under a wheel a figure would fail before it
   could credit anybody.
 - **Condition** — anything installs this project other than editable from a checkout: a `uv tool

@@ -12,8 +12,9 @@ data/
   boundaries/   coastlines and country borders
 ```
 
-A new kind gets its own directory and a row in the registry below. Keep names lowercase and
-hyphenated, and put the grid resolution in the filename when a dataset comes in several.
+A new kind gets its own directory, a row in [`registry.toml`](registry.toml) and an entry below. Keep
+names lowercase and hyphenated, and put the grid resolution in the filename when a dataset comes in
+several.
 
 **Every filename here is this project's own description of the contents, and matches no publisher's.**
 So what identifies a dataset is its row's Provenance, never its name — and a file downloaded from the
