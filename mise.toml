@@ -21,20 +21,12 @@ run = [
   "cargo fetch",
   "uv sync --locked",
   "prek install",
-  "mise run data:skip",
   "mise run git:ff-only",
 ]
 
-# A global lfs.fetchexclude overrides the committed .lfsconfig, and repo-local config overrides
-# the global one, so this is the setting that decides. It applies from here on: a first clone
-# still needs GIT_LFS_SKIP_SMUDGE=1 to skip the data.
-[tasks."data:skip"]
-description = "Pin this clone to skip LFS data until data:pull asks for it"
-run = "git config --local lfs.fetchexclude '*'"
-
 # main's ruleset is what enforces linear history; this makes the accidental merge fail earlier, at
 # `git pull` or `git merge main` on a diverged branch, while there is nothing pushed to rewrite. It
-# is not a second gate, because `git merge --no-ff` still overrides it. Repo-local like data:skip,
+# is not a second gate, because `git merge --no-ff` still overrides it. Repo-local rather than global,
 # because a developer's own global preference is theirs to set.
 #
 # fetch.prune is here rather than in a task of its own because it closes the same kind of clone-side
@@ -181,12 +173,12 @@ description = "Run the Rust and Python test suites"
 depends = ["test:python"]
 run = "cargo test --all-features"
 
-# Never in `lint` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1,
-# so data/ there holds pointers and this test would have nothing to read. --release because the pass is
+# Never in `lint` or `ci`, and no later change can put it there: a CI checkout has no raster, so this
+# test would have nothing to read. --release because the pass is
 # 933 120 000 cells and a debug build spends minutes on it. `--ignored` selects every deselected test,
 # `test:slow`'s among them, so this task runs that one too while `test:slow` runs it alone.
 [tasks."test:raster"]
-description = "Read the real population raster end to end (needs mise run data:pull)"
+description = "Read the real population raster end to end (needs mise run data:get)"
 run = "cargo test --release --all-features -- --ignored"
 
 # Not in `test` or `ci`, for time rather than for data: the shape is 933 120 000 cells and the pass
@@ -257,8 +249,8 @@ run = ["mise run bench:kernel", "mise run bench:circle"]
 description = "Run the Python test suite"
 run = "uv run pytest"
 
-# Never in `test` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1, so
-# the raster is a pointer there and a length assertion against it would fail for having no data. The `-m`
+# Never in `test` or `ci`, and no later change can put it there: a CI checkout has no raster, so a length
+# assertion against it would fail for having no file. The `-m`
 # here overrides the one in pyproject.toml's addopts, the same way `--ignored` selects the deselected
 # Rust tests.
 [tasks."test:python-raster"]
@@ -286,11 +278,3 @@ run = "uv run release-smoke"
 [tasks."data:get"]
 description = "Fetch every registered dataset not already present, verifying before it is placed"
 run = "uv run fetch-data"
-
-[tasks."data:pull"]
-description = "Fetch the Git LFS raster data that a normal clone deliberately skips"
-run = "git lfs pull --include='*.tif' --exclude=''"
-
-[tasks."data:status"]
-description = "Show which LFS objects are present locally versus pointer-only"
-run = "git lfs ls-files --size"
