@@ -43,11 +43,14 @@ issue checkbox the closing task reaches.
    checked nothing and the commit fails a moment later. Re-stage what a hook reformats and re-run;
    that is expected, not a defect to investigate. A task's `Verify:` line may ask for less than both;
    it never licenses less than both.
-8. **Land it, then tick the box.** Read `docs/ai/platform.md` "Git" before the run's first commit rather
-   than after — it constrains which branch may receive one, and a commit on the wrong branch is not
-   something the next task can undo. The task's change is one Conventional Commit; the box is ticked in
-   the scratch file after that commit exists, and never before it — the commit is the durable half, and
-   a tick standing where no commit does is the one state this loop cannot recover from.
+8. **Land it, then tick the box, before the next task starts.** Read `docs/ai/platform.md` "Git" before
+   the run's first commit rather than after — it constrains which branch may receive one, and a commit on
+   the wrong branch is not something the next task can undo. The task's change is one Conventional
+   Commit, and the box is ticked in the scratch file once that commit exists. **Never before it** — the
+   commit is the durable half, and a tick standing where no commit does is the one state this loop cannot
+   recover from. **Never batched to the phase boundary either**, which is the tempting shape because the
+   ticks are cheap and the boundary is where the file is read: a run interrupted mid-phase then
+   under-reports what landed, and the next one re-derives work already committed.
 9. **Take the next unchecked task in the same phase and repeat from step 5.** At the phase boundary,
    stop. Do not roll into the next phase.
 10. **Run the `architect-reviewer` agent over the phase's commits**, once for the phase rather than per

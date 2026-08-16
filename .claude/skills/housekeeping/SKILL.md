@@ -35,8 +35,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    (the `lint-docs` entry point) checks `docs/ai/platform.md` "Structure" against the tree, every pointer
    in the set check 2 above reads, and that every file in `docs/ai/` has an `@` import in `CLAUDE.md`
    naming it. Run it; any output is a finding.
-4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/README.md`, and every row
-   names a file that exists. Run `mise run data:status` and report which objects are pointer-only —
+4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/registry.toml` and an entry
+   in `data/README.md`, and every row names a file that exists. Run `mise run data:status` and report which objects are pointer-only —
    that is the expected state, and a fetched raster sitting in the tree is worth naming, not fixing.
    A generated artifact anywhere under `data/` is a finding.
 5. **Follow-up register.** `docs/follow-ups.md` holds every follow-up this repository has recorded.

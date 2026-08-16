@@ -42,7 +42,7 @@ skill succeeding rather than refusing.
    ```
 
    `scope:` takes exactly one value, from `architecture`, `build`, `contract`, `caching`, `safety`,
-   `output`, `rendering`, `process`. It is what turns "what have we decided about caching" into a query
+   `output`, `rendering`, `process`, `data`. It is what turns "what have we decided about caching" into a query
    rather than a read, so a record wanting two values is two records. A ruling no value fits adds one,
    to this list and in the same change — but check first that the want is not step 2's "and" in
    disguise. `superseded_by: NNNN` appears only when `status: superseded`, and there is no

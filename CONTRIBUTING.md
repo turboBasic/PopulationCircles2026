@@ -24,9 +24,10 @@ Deselected from `test` and `ci`, because each needs the raster, time, or both �
 each says which:
 
 ```sh
-mise run test:validate  # the real raster, end to end, against the published result
-mise run bench          # kernel construction and circle evaluation
-mise run bench:table    # the table build — writes 7.5 GB, which is why it is separate
+mise run test:validate      # the real raster, end to end, against the published result
+mise run test:python-raster # the registry's fetched rows against the files on disk
+mise run bench              # kernel construction and circle evaluation
+mise run bench:table        # the table build — writes 7.5 GB, which is why it is separate
 ```
 
 A benchmark asserts nothing and no gate compares it against a baseline, so its figures are read rather
@@ -39,21 +40,65 @@ format because prek reads it.
 
 ## Data
 
-Input datasets live in [`data/`](data/README.md) with their contents in Git LFS. Clone without
-pulling hundreds of megabytes, then fetch only when you need them:
+Input datasets live in [`data/`](data/README.md), described for a machine in
+[`data/registry.toml`](data/registry.toml) and for a person in [`data/README.md`](data/README.md). Clone
+without pulling hundreds of megabytes, then fetch only when you need them:
 
 ```sh
 GIT_LFS_SKIP_SMUDGE=1 git clone <url>
 mise run setup          # also pins the skip in repo-local git config
-mise run data:pull      # fetch the rasters
+mise run data:get       # fetch every registered dataset not already here, and verify it
+mise run data:pull      # the LFS route to the same rasters, for anyone with access to the objects
 mise run data:status    # present locally, or pointer-only
 ```
+
+`data:get` needs no access to this repository's LFS objects and no account anywhere: it reads the
+registry, verifies each file against the recorded checksum before putting it in place, and prints the
+attribution each licence requires.
 
 Skipping is a layered default, not a guarantee — [`data/README.md`](data/README.md#fetching) explains
 which layer holds and why the environment variable is still on you.
 
 A new input dataset goes in `data/<kind>/` with a registry entry. Never make a test depend on raster
 content: CI runs with LFS content absent.
+
+### Publishing a dataset
+
+A dataset too large to carry in the repository is published as an asset on a **data-only tag**. Cutting
+one is rare enough that its body is written from this list rather than from whatever the person cutting
+it remembered.
+
+The tag and its assets:
+
+1. Name it `data-vN`. It must **not** match `v*`, which is what `.github/workflows/release.yml` triggers
+   on — a data tag matching that pattern publishes a binary release nobody asked for.
+2. Name each asset for the dataset's key plus its extension, so the asset, the file on disk and the
+   registry row are one string. Attach the `.sha256` beside it.
+
+The body is read by someone who has never seen this repository, and the asset's name is this project's
+own description rather than the publisher's, so it lets them assume nothing. Each item names where its
+text already exists, and a published dataset's entry in `data/README.md` carries the two sub-headings
+items 3 to 6 cite:
+
+1. **What the file is** — its nodata sentinel, from the dataset's row in
+   [`data/registry.toml`](data/registry.toml); its extent and pixel type from the entry in
+   [`data/README.md`](data/README.md), which is where those two are recorded.
+2. **Its grid** — dimensions and cell size, from the registry row.
+3. **Which variant**, where a dataset is published in several that differ in values — the paragraph
+   naming the variant and the figure that distinguishes it, under
+   [`data/README.md`](data/README.md) "Provenance". The asset's name will not carry it and the numbers
+   change, so the body is the only place a fetcher can learn it.
+4. **Provenance** — the format, the published name, the publisher and the DOI or tag identifying it,
+   from that same heading.
+5. **The licence** and its URL, from [`data/README.md`](data/README.md) "Licence and attribution".
+6. **The citation** verbatim, where the licence requires one — that heading again. A fetcher acquires
+   the obligation with the bytes, so it travels with them.
+7. **The `sha256` and `bytes`**, from the row, so the download can be verified by hand and not only by
+   `mise run data:get`.
+
+A figure the body needs and no row holds is a finding, not something to measure into the release notes:
+measure it into [`data/registry.toml`](data/registry.toml) where a machine reads it, or into
+[`data/README.md`](data/README.md) where a person does, then quote it.
 
 ## Sending a change
 

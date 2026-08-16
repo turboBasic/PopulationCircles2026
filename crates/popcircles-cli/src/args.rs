@@ -148,7 +148,7 @@ impl GridArgs {
     }
 }
 
-/// What the file must say about itself beyond its grid. No defaults: `data/README.md` owns each
+/// What the file must say about itself beyond its grid. No defaults: `data/registry.toml` owns each
 /// dataset's sentinel and CRS, and a copy of them here would be a second owner drifting from the first.
 #[derive(Args, Debug, Clone, Copy)]
 pub(crate) struct RasterSpecArgs {

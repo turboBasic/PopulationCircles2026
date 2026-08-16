@@ -12,8 +12,13 @@ data/
   boundaries/   coastlines and country borders
 ```
 
-A new kind gets its own directory and a row in the registry below. Keep names lowercase and
-hyphenated, and put the grid resolution in the filename when a dataset comes in several.
+A new kind gets its own directory, a row in [`registry.toml`](registry.toml) and an entry below. Keep
+names lowercase and hyphenated, and put the grid resolution in the filename when a dataset comes in
+several.
+
+**Every filename here is this project's own description of the contents, and matches no publisher's.**
+So what identifies a dataset is its row's Provenance, never its name — and a file downloaded from the
+source is renamed to the row's heading before it is usable.
 
 **LFS is for the rasters, not for `data/` as such.** A vector dataset small enough to read on every
 render is a Git blob: it costs a hundred kilobytes of pack, and in exchange every clone and every CI
@@ -22,16 +27,16 @@ job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` t
 
 ## Registry
 
-### `population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif`
+### `population/population-count-2020-30arcsec.tif`
 
 | Property | Value |
 | --- | --- |
-| Grid | 43200 × 21600 (30 arc-second, 0.008333°) |
+| Grid | 43200 × 21600 (30 arc-second, 1/120°) |
 | Extent | whole globe, origin (−180°, 90°) |
 | CRS | EPSG:4326 (WGS 84) |
-| Pixel type | Float32, LZW compressed |
+| Pixel type | Float32, single band, LZW compressed |
 | Nodata | −3.40282306073709653e+38 (Float32, two ulps above −max) |
-| Size | 409 MiB |
+| Size | 428 465 215 bytes (409 MiB) |
 | SHA-256 | `956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d` |
 | Land cells | 222 669 928 of 933 120 000 (182 358 616 populated, 40 311 312 zero) |
 | World total | 7 757 982 599.32 persons |
@@ -62,8 +67,12 @@ checksum above is of *our* copy, and [Obtaining it](#obtaining-it) is how to get
 
 #### Obtaining it
 
-The raster is not in a normal clone and is not attached to a release. Download it from the source
-above; the whole of it is four commands, and the last one is the point.
+The raster is not in a normal clone. The [`data-v1` release][data-tag] carries it, and that copy needs
+no account — its body holds the provenance, the licence and the checksum.
+
+What follows is the other route: obtaining an **independent** copy from the publisher, which is what
+makes the `SHA-256` above something more than a record of one download. The whole of it is four
+commands, and the last one is the point.
 
 **It needs a free [NASA Earthdata Login][urs-new].** The archive is behind URS OAuth, so an
 anonymous request gets a 401 and a redirect rather than the file. A browser download from the
@@ -77,8 +86,8 @@ registry, tests and examples expect:
 ```sh
 unzip -j <granule>.zip '*.tif' -d data/population/
 mv data/population/gpw_v4_population_count_*_2020_30_sec.tif \
-   data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
-shasum -a 256 data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
+   data/population/population-count-2020-30arcsec.tif
+shasum -a 256 data/population/population-count-2020-30arcsec.tif
 ```
 
 The zip carries one `.tif` per year, so the glob is what selects 2020 rather than an assumption
@@ -106,13 +115,14 @@ The dataset is also mirrored in the Google Earth Engine catalog as
 `CIESIN/GPWv411/GPW_UNWPP-Adjusted_Population_Count`.
 
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
+[data-tag]: https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1
 [gpw-adj]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
 [gpw-raw]: https://doi.org/10.7927/H4JW8BX5
 [gpw-search]: https://search.earthdata.nasa.gov/search/granules?p=C3540909447-ESDIS
 [urs-curl]: https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget
 [urs-new]: https://urs.earthdata.nasa.gov/users/new
 
-### `boundaries/ne-110m-coastline.geojson`
+### `boundaries/coastline-1to110m.geojson`
 
 | Property | Value |
 | --- | --- |
@@ -128,9 +138,10 @@ ten-millionths of a degree past the antimeridian and 5 cm on the ground; the ver
 at 180, so nothing here relies on the declaration.
 
 **It is [Natural Earth][ne]'s 1:110m physical coastline**, from the vector distribution repository at
-tag **[v5.1.2][ne-tag]**, path `geojson/ne_110m_coastline.geojson`. Committed byte-for-byte as that
-tag serves it, which is what makes the checksum above something a reader can check rather than a
-record of one download:
+tag **[v5.1.2][ne-tag]**, path `geojson/ne_110m_coastline.geojson` — stored here under the heading
+above, which is the only difference between the two. Committed byte-for-byte as that tag serves it,
+which is what makes the checksum above something a reader can check rather than a record of one
+download; there is no step to obtain it, because every clone has it already:
 
 ```sh
 curl -sL https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_coastline.geojson \
@@ -165,6 +176,13 @@ mise run setup                          # pins lfs.fetchexclude=* in .git/config
 Then, when the data is actually wanted:
 
 ```sh
+mise run data:get       # fetch every registered dataset not already here, and verify it
 mise run data:pull      # git lfs pull --include='*.tif' --exclude=''
 mise run data:status    # size and whether each object is present or pointer-only
 ```
+
+`data:get` is the one that needs no access to this repository's LFS objects: it reads
+[`registry.toml`](registry.toml), checks each file against the `sha256` recorded there **before**
+putting it in place, and downloads nothing that is already present and correct. A download that fails
+verification leaves nothing behind. On success it prints the attribution each licence requires, which is the moment
+a user acquires the obligation.

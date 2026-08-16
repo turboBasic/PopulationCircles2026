@@ -25,7 +25,7 @@ this file's doing rather than the CLI's, because the same grid, table and digest
 only the window changes:
 
 ```sh
-$ mise run cli -- table build --raster data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif \
+$ mise run cli -- table build --raster data/population/population-count-2020-30arcsec.tif \
     --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
     --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
     --nodata -3.40282306073709653e38 --epsg 4326 --decimate 10 --cache out/gpw-5arcmin
@@ -63,8 +63,10 @@ circle, as a country is the spec error
 
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
 Building needs the raster, so `mise run data:pull` first — or, without access to this repository's LFS
-objects, [Obtaining it](data/README.md#obtaining-it), which is the download from NASA Earthdata and the
-rename that produces the path spelled above.
+objects, the [`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1),
+which needs no account and carries the checksum to verify
+what you got. [Obtaining it](data/README.md#obtaining-it) is the slower route, and the one that gets an
+independent copy.
 
 ## Circles
 

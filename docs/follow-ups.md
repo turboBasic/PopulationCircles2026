@@ -120,9 +120,9 @@ Identifiers are flat, sequential and never reused.
 
 - **Status** — `dormant` (2026-08-15): the registry holds one dataset, at 0.008333° — six orders of
   magnitude above the constant.
-- **Condition** — a registry row in [`data/README.md`](../data/README.md) names a grid resolution within
-  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is the
-  resolution figure in each row of that registry against the constant: 0.008333° against 1e-9° today, and
+- **Condition** — a row in [`data/registry.toml`](../data/registry.toml) names a grid resolution within
+  three orders of magnitude of `BOUNDARY_TOLERANCE_DEG` in `crates/popcircles/src/grid.rs`. The sweep is each
+  row's `lat_step`/`lon_step` against the constant: 0.008333333333333333° against 1e-9° today, and
   what fires it is a dataset finer than about 1e-6°. Two grids within the tolerance are one table — a cache
   compares the geometry within it while the dimensions compare exactly — so a cell small enough
   to land in that gap makes a stale cache indistinguishable from the right one, which is the failure
@@ -135,31 +135,35 @@ Identifiers are flat, sequential and never reused.
   of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
 
-### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
+### FU-16 - A figure names the dataset it credits rather than reading it from the document
 
 - **Status** — `dormant` (2026-08-15): the registry holds one dataset a figure needs a citation for, so
-  one citation is the whole mapping and a constant is indistinguishable from one.
+  one mapping is the whole mapping.
 
   **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
-  `boundaries/ne-110m-coastline.geojson` is a basemap in the public domain, and its own registry entry
-  records that its terms ask for no attribution — so the count the Condition below sweeps for is now two
-  against one citation while the failure the entry guards against is still impossible. What the Condition
-  means, and what the correction beneath it now says, is a second row a figure would have to *credit*. The
-  note is here rather than a silent edit for `FU-08`'s reason: a reader should be able to tell "the row
-  arrived and the entry held" from "nobody looked".
-- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row **whose licence
-  requires attribution**. The sweep is the count of registry entries stating such a licence against the
-  number of citations `python/src/population_circles/render_map.py` holds: one and one today. A second
-  such dataset makes `CITATION` the citation of whichever raster happens to have been first, and a figure
-  rendered from the other one then credits the wrong source while
-  `python/tests/test_render_map.py` still passes — the test asserts
-  the constant appears in the registry, which stays true of the wrong entry.
-- **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
-  choose between them. That second half is the reason this is an entry and not a task: `report`'s
-  `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
-  came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
-  fires this adds that field first, additively, and the entry is where the two halves are recorded
-  together.
+  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its
+  terms ask for no attribution — so the count the Condition sweeps for is two rows against one selectable
+  dataset while the failure the entry guards against is still impossible. What the Condition means is a
+  second row a figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s
+  reason: a reader should be able to tell "the row arrived and the entry held" from "nobody looked".
+
+  **Half of this closed** (2026-08-16, issue #57). The citation was a Python constant, which the original
+  title named; it is now read from `data/registry.toml`, so the text a figure carries is the text the
+  registry says is owed and `rg -n 'CIESIN' python/src/` returns nothing. What remains — and what the
+  entry is now titled for — is the selecting: `render_map.py` names `POPULATION_KEY`, so a figure credits
+  the dataset the renderer was written against rather than the one its document was answered from.
+- **Condition** — [`data/registry.toml`](../data/registry.toml) carries a second dataset **whose licence
+  requires attribution**. The sweep is the count of rows with a non-empty `attribution` against the number
+  of datasets `python/src/population_circles/render_map.py` can select between: one and one today. A second
+  such dataset makes the credited dataset whichever one `POPULATION_KEY` happens to name, and a figure
+  rendered from the other credits the wrong source while `python/tests/test_render_map.py` still passes —
+  the test compares the drawn text against that same key's row, so it stays true of the wrong entry.
+- **Fix** — key the citation by the document's own dataset, which means publishing enough in the document
+  to choose with. That is the reason this is an entry and not a task: `report`'s `provenance` names the
+  table a document was answered from by digest and grid, not the dataset the raster came from, so there is
+  nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
+  additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
+  the value to publish first exists.
 
 ### FU-17 - The full-resolution search is page faults, not arithmetic
 
@@ -221,20 +225,30 @@ Identifiers are flat, sequential and never reused.
   is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
   guesses at the difference is worse than the sweep reading the file.
 
-### FU-20 - The renderer resolves the committed basemap from its own source path
+### FU-20 - The renderer resolves committed data from its own source path
 
 - **Status** — `dormant` (2026-08-15): the project is installed editable, so `__file__` is in the
-  checkout and `data/boundaries/` is beside it. `COASTLINE` is `parents[3]` of
-  `python/src/population_circles/render_map.py`, which is the repository root for exactly as long as
-  that holds.
+  checkout and `data/` is beside it. The path is `parents[3]` of a module under
+  `python/src/population_circles/`, which is the repository root for exactly as long as that holds.
+
+  **A second resolution joined the first, and one consumer of it writes** (2026-08-16, issue #57).
+  `dataset_registry.py`'s `REGISTRY` reaches `data/registry.toml` the same way `render_map.py`'s
+  `COASTLINE` reaches the basemap, so the count this entry sweeps for is two. `mise run data:get` then
+  resolves paths against that same root to place 428 MB, so under a wheel it would `mkdir` under
+  `site-packages` — it happens to fail loudly first, because the coastline sorts before the raster and
+  has no `fetch_url`, but the message it gives is about a damaged checkout and would be wrong. The registry is the worse of the
+  two: it is read for the attribution a figure owes, so under a wheel a figure would fail before it
+  could credit anybody.
 - **Condition** — anything installs this project other than editable from a checkout: a `uv tool
-  install`, a `uv publish`, or a workflow running an entry point out of a built wheel. Then `COASTLINE`
-  resolves under `site-packages`, where no `data/` sits beside the package, and `basemap()` raises
-  `FileNotFoundError` at draw time rather than at import.
-- **Fix** — ship the basemap as package data, or take its path as an argument defaulting to the registry
-  location. The first duplicates a committed file into the wheel and owes
+  install`, a `uv publish`, or a workflow running an entry point out of a built wheel. Then both paths
+  resolve under `site-packages`, where no `data/` sits beside the package, and each raises
+  `FileNotFoundError` at read time rather than at import. The sweep is
+  `rg -n 'parents\[3\]' python/src/population_circles/`.
+- **Fix** — ship the two files as package data, or take each path as an argument defaulting to the
+  current location. The first duplicates committed files into the wheel and owes
   [`data/README.md`](../data/README.md) a line saying so; the second keeps one copy and moves the choice
-  to the caller, which is the shape the rest of the renderer already takes.
+  to the caller, which is the shape the rest of the renderer already takes. One fix covers both, and
+  splitting them would leave a figure half-resolvable.
 
 ### FU-21 - The direct push to main is a concession to an early, solo repository
 

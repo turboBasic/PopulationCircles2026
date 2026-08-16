@@ -8,10 +8,19 @@ import pytest
 
 from population_circles.circle_document import circle_of
 from population_circles.circle_geometry import HALF_TURN_DEG, POLE_LAT
+from population_circles.dataset_registry import load
 from population_circles.map_frame import ORTHOGRAPHIC, PLATE_CARREE
-from population_circles.render_map import CITATION, COASTLINE, basemap, main, render
+from population_circles.render_map import (
+    COASTLINE,
+    POPULATION_KEY,
+    basemap,
+    citation,
+    main,
+    render,
+)
 
-REGISTRY = Path(__file__).resolve().parents[2] / "data" / "README.md"
+REGISTRY = load()
+PROSE = Path(__file__).resolve().parents[2] / "data" / "README.md"
 
 CENTRE_LAT = 25.125
 CENTRE_LON = 79.708
@@ -19,6 +28,9 @@ RADIUS_KM = 1000.0
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 NO_NETWORK = "a figure is drawn from the committed basemap and reaches no network"
+# Handed to `render` in place of a citation, so the footer assertion is about what the caller passed
+# rather than about a value the test could also have read.
+MARKER = "attribution handed to render by its caller"
 
 
 def document() -> dict[str, Any]:
@@ -47,15 +59,22 @@ def normalised(text: str) -> str:
     return " ".join(re.sub(r"[>*<]", " ", text).split())
 
 
-def test_the_citation_is_the_text_the_registry_owns() -> None:
-    # data/README.md "Licence and attribution" owns the wording. Checked rather than trusted, so a
-    # drift between the two fails here instead of shipping a figure that credits nobody.
-    assert normalised(CITATION) in normalised(REGISTRY.read_text(encoding="utf-8"))
+def test_the_citation_is_the_text_the_prose_entry_quotes() -> None:
+    # data/registry.toml owns the wording and data/README.md restates it for a human, so a drift
+    # between the two fails here rather than shipping a credit that matches nothing in the tree.
+    assert normalised(citation()) in normalised(PROSE.read_text(encoding="utf-8"))
+
+
+def test_the_credited_dataset_owes_a_citation_at_all() -> None:
+    # An empty attribution is a legal value in the registry — the coastline has one — so the footer
+    # assertion below would pass vacuously on "". CC BY is the whole reason a figure carries text.
+    assert citation().strip()
+    assert REGISTRY.datasets[POPULATION_KEY].licence != "public domain"
 
 
 def test_the_basemap_is_the_committed_one() -> None:
-    # The registry's row is what a reader is sent to; this is the half a test can hold — the file is
-    # in the tree, outside LFS, and parses into coastlines spanning the world.
+    # data/README.md's entry is what a reader is sent to; this is the half a test can hold — the
+    # file is in the tree, outside LFS, and parses into coastlines spanning the world.
     assert COASTLINE.is_file()
     assert not COASTLINE.read_bytes().startswith(b"version https://git-lfs")
     coastline = basemap(COASTLINE)
@@ -65,13 +84,15 @@ def test_the_basemap_is_the_committed_one() -> None:
 
 
 def test_the_footer_artist_carries_the_citation() -> None:
-    figure = render(circle_of(document()), PLATE_CARREE, coastlines=False)
+    figure = render(circle_of(document()), PLATE_CARREE, MARKER, coastlines=False)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
-    assert normalised(CITATION) in drawn_text
+    # The string handed in, not the one the registry holds: `render` draws what it is given, which
+    # is the whole of what this test can prove about it.
+    assert MARKER in drawn_text
 
 
 def test_the_title_states_the_radius_the_share_and_the_centre() -> None:
-    figure = render(circle_of(document()), ORTHOGRAPHIC, coastlines=False)
+    figure = render(circle_of(document()), ORTHOGRAPHIC, MARKER, coastlines=False)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
     assert "1,000 km circle" in drawn_text
     assert "16.17% of the population" in drawn_text
