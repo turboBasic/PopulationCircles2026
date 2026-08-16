@@ -183,6 +183,6 @@ mise run data:status    # size and whether each object is present or pointer-onl
 
 `data:get` is the one that needs no access to this repository's LFS objects: it reads
 [`registry.toml`](registry.toml), checks each file against the `sha256` recorded there **before**
-putting it in place, and downloads nothing that is already present and correct. A failed download
-leaves nothing behind. On success it prints the attribution each licence requires, which is the moment
+putting it in place, and downloads nothing that is already present and correct. A download that fails
+verification leaves nothing behind. On success it prints the attribution each licence requires, which is the moment
 a user acquires the obligation.

@@ -21,18 +21,22 @@ mise run setup      # toolchains, dependencies, git hooks
 mise run ci         # lint, typecheck, test — the same checks CI runs
 ```
 
-Input datasets live in [`data/`](data/README.md). The rasters are Git LFS objects, kept out of a
-normal clone so cloning stays fast and cheap; the coastline basemap is a committed blob, because a
-hundred kilobytes every clone needs is cheaper carried than fetched:
+Input datasets live in [`data/`](data/README.md), described for a machine in
+[`data/registry.toml`](data/registry.toml). The rasters are kept out of a normal clone so cloning stays
+fast and cheap; the coastline basemap is a committed blob, because a hundred kilobytes every clone needs
+is cheaper carried than fetched:
 
 ```sh
 GIT_LFS_SKIP_SMUDGE=1 git clone …   # clone without downloading the rasters
-mise run data:pull                  # fetch them when you actually need them
+mise run data:get                   # fetch what is missing and verify it — no account needed
 mise run data:status                # what is present locally versus pointer-only
 ```
 
-Skipping is a layered default rather than a guarantee, and the layers are worth knowing before a
-clone surprises you: [`data/README.md`](data/README.md#fetching).
+`data:get` reads the registry and checks each file against the recorded checksum before putting it in
+place, so a truncated download is refused rather than parsed. `mise run data:pull` is the Git LFS route
+to the same rasters, for anyone with access to the objects — skipping is a layered default rather than a
+guarantee, and the layers are worth knowing before a clone surprises you:
+[`data/README.md`](data/README.md#fetching).
 
 ## Usage
 

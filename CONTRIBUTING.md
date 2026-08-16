@@ -77,11 +77,13 @@ The tag and its assets:
 
 The body is read by someone who has never seen this repository, and the asset's name is this project's
 own description rather than the publisher's, so it lets them assume nothing. Each item names where its
-text already exists, and a published dataset's row carries the two sub-headings items 3 to 6 cite:
+text already exists, and a published dataset's entry in `data/README.md` carries the two sub-headings
+items 3 to 6 cite:
 
-1. **What the file is** — extent, pixel type and nodata sentinel, from the dataset's row in
-   [`data/registry.toml`](data/registry.toml).
-2. **Its grid** — dimensions and cell size, from the same row.
+1. **What the file is** — its nodata sentinel, from the dataset's row in
+   [`data/registry.toml`](data/registry.toml); its extent and pixel type from the entry in
+   [`data/README.md`](data/README.md), which is where those two are recorded.
+2. **Its grid** — dimensions and cell size, from the registry row.
 3. **Which variant**, where a dataset is published in several that differ in values — the paragraph
    naming the variant and the figure that distinguishes it, under
    [`data/README.md`](data/README.md) "Provenance". The asset's name will not carry it and the numbers

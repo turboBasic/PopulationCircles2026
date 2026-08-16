@@ -59,9 +59,9 @@ def normalised(text: str) -> str:
     return " ".join(re.sub(r"[>*<]", " ", text).split())
 
 
-def test_the_citation_is_the_text_the_prose_registry_quotes() -> None:
-    # data/registry.toml owns the wording and PROSE restates it for a human, so a drift between the
-    # two fails here rather than shipping a figure whose credit matches no document in the tree.
+def test_the_citation_is_the_text_the_prose_entry_quotes() -> None:
+    # data/registry.toml owns the wording and data/README.md restates it for a human, so a drift
+    # between the two fails here rather than shipping a credit that matches nothing in the tree.
     assert normalised(citation()) in normalised(PROSE.read_text(encoding="utf-8"))
 
 

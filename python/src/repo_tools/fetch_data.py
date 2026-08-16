@@ -1,4 +1,5 @@
 import hashlib
+import os
 import shutil
 import sys
 import urllib.request
@@ -7,7 +8,6 @@ from pathlib import Path
 from population_circles.dataset_registry import REPO_ROOT, Registry, load
 
 CHUNK = 1 << 20
-PART = ".part"
 FIX = "mise run data:get"
 
 # A fetch writes into the tree, so the scheme is checked rather than trusted to the registry being
@@ -46,20 +46,28 @@ def fetch(url: str, target: Path, size: int, sha256: str) -> None:
     # Written beside the target and renamed only once the hash matches, so nothing that fails
     # verification is ever visible at the path a reader uses. The finally clause is what keeps an
     # interruption from leaving one behind.
-    part = target.with_name(target.name + PART)
+    # The pid is in the name because two concurrent runs opening one fixed path share an inode: the
+    # first rename hands the target to the second writer, which then keeps writing into the placed
+    # file, and nothing has verified what a reader ends up with.
+    part = target.with_name(f"{target.name}.{os.getpid()}.part")
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         download(url, part)
+        # Length before the digest, and that order is the whole value of the check: a truncated
+        # response raises nothing, since urlopen closes the connection rather than reporting a short
+        # read, so this names the failure from a stat instead of a full pass over 428 MB.
+        written = part.stat().st_size
+        if written != size:
+            message = (
+                f"{target.name} arrived as {written} bytes, and the registry records {size} — "
+                f"nothing was placed; re-run {FIX}"
+            )
+            raise FetchError(message)
         found = digest(part)
         if found != sha256:
             message = (
                 f"{target.name} hashed to {found}, and the registry records {sha256} — "
                 f"nothing was placed; re-run {FIX}"
-            )
-            raise FetchError(message)
-        if part.stat().st_size != size:
-            message = (
-                f"{target.name} is {part.stat().st_size} bytes, and the registry records {size}"
             )
             raise FetchError(message)
         part.replace(target)

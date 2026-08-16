@@ -35,3 +35,7 @@ tmp/
 # that created the file — which is what the lint-docs entry point relies on to tell a per-developer file
 # from a broken pointer.
 .claude/settings.local.json
+
+# A partial download from `mise run data:get`. It unlinks its own on failure, but a SIGKILL leaves one
+# behind and it is the size of the raster.
+*.part

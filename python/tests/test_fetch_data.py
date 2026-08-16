@@ -38,14 +38,14 @@ def registry_text(
 
 
 def serving(payload: bytes) -> Callable[..., io.BytesIO]:
-    def opener(url: str, *_args: object, **_kwargs: object) -> io.BytesIO:  # noqa: ARG001
+    def opener(_url: str, *_args: object, **_kwargs: object) -> io.BytesIO:
         return io.BytesIO(payload)
 
     return opener
 
 
 def refusing() -> Callable[..., io.BytesIO]:
-    def opener(url: str, *_args: object, **_kwargs: object) -> io.BytesIO:  # noqa: ARG001
+    def opener(_url: str, *_args: object, **_kwargs: object) -> io.BytesIO:
         message = "a present, verified file must not be downloaded again"
         raise AssertionError(message)
 
@@ -73,19 +73,25 @@ def test_a_wrong_payload_places_nothing_and_leaves_no_part(
 ) -> None:
     # The claim the .part-then-rename dance exists to make: a reader never sees a file that failed
     # verification, and a refused fetch leaves nothing behind to confuse the next run.
-    monkeypatch.setattr("urllib.request.urlopen", serving(b"wrong"))
-    with pytest.raises(FetchError, match="hashed to"):
-        acquire(parse(registry_text()), tmp_path)
+    monkeypatch.setattr("urllib.request.urlopen", serving(b"wrong" * 1))
+    with pytest.raises(FetchError, match="hashed to") as raised:
+        acquire(parse(registry_text(size=len(b"wrong"))), tmp_path)
+    # The acceptance criterion says the message names the fix, so it is asserted rather than left as
+    # a constant nobody reads.
+    assert "mise run data:get" in str(raised.value)
     assert not target(tmp_path).exists()
     assert siblings(tmp_path) == []
 
 
-def test_a_payload_of_the_wrong_length_places_nothing(
+def test_a_truncated_response_is_named_by_its_length_not_its_hash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("urllib.request.urlopen", serving(PAYLOAD))
-    with pytest.raises(FetchError):
-        acquire(parse(registry_text(size=len(PAYLOAD) + 1)), tmp_path)
+    # A short read raises nothing, since urlopen closes the connection instead, so the length check
+    # catches it — and runs before the digest, so it reports without hashing the whole file.
+    monkeypatch.setattr("urllib.request.urlopen", serving(PAYLOAD[:2]))
+    with pytest.raises(FetchError, match="arrived as 2 bytes") as raised:
+        acquire(parse(registry_text()), tmp_path)
+    assert "mise run data:get" in str(raised.value)
     assert not target(tmp_path).exists()
     assert siblings(tmp_path) == []
 
