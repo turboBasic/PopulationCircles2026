@@ -45,7 +45,7 @@ fn the_registry_raster_reproduces_every_figure_the_registry_records() {
     .iter()
     .collect();
     let mut source = GeoTiffSource::open(&path, &spec).expect(
-        "the registry raster is the raster the registry describes; run `mise run data:pull` first",
+        "the registry raster is the raster the registry describes; run `mise run data:get` first",
     );
 
     // f64 throughout, per application.md "Precision": every f32 widens exactly, so the only error is in

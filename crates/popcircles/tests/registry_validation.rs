@@ -9,9 +9,9 @@
 // brackets and the expensive grid certifies: this test is the bracket, and the full-resolution
 // certification of the same answer is recorded in issue #10 rather than run here.
 //
-// Skipped with a message rather than failed when the raster is an unfetched pointer, which is box 2 of
+// Skipped with a message rather than failed when the raster is absent, which is box 2 of
 // issue #10. A `#[test]` cannot skip at runtime, so the skip is an early return that says why — the
-// alternative being a red suite on every clone that has not run `mise run data:pull`.
+// alternative being a red suite on every clone that has not run `mise run data:get`.
 //
 // expect is what a test documents an invariant with; docs/ai/code.md allows it here.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -97,12 +97,12 @@ fn the_registry_raster_answers_the_published_half_of_the_world() {
     let path = registry_raster();
     let source = match GeoTiffSource::open(&path, &spec) {
         Ok(source) => source,
-        // The one failure that is not a defect: a clone that has not fetched the object. Everything else
-        // — a missing file, a truncated one, tags that disagree with the row above — is a real failure and
-        // is reported as one.
-        Err(RasterError::UnfetchedPointer) => {
+        // The one failure that is not a defect: a clone that has not fetched the raster. Everything else
+        // — a truncated file, tags that disagree with the row above — is a real failure and is reported
+        // as one.
+        Err(RasterError::Absent { .. }) => {
             eprintln!(
-                "skipped: {} is an unfetched Git LFS pointer. Run `mise run data:pull` first.",
+                "skipped: {} is not there. Run `mise run data:get` first.",
                 path.display()
             );
             return;

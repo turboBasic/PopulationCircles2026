@@ -74,9 +74,8 @@ def test_the_credited_dataset_owes_a_citation_at_all() -> None:
 
 def test_the_basemap_is_the_committed_one() -> None:
     # data/README.md's entry is what a reader is sent to; this is the half a test can hold — the
-    # file is in the tree, outside LFS, and parses into coastlines spanning the world.
+    # file is committed, and parses into coastlines spanning the world.
     assert COASTLINE.is_file()
-    assert not COASTLINE.read_bytes().startswith(b"version https://git-lfs")
     coastline = basemap(COASTLINE)
     west, south, east, north = coastline.bounds
     assert (west, east) == pytest.approx((-HALF_TURN_DEG, HALF_TURN_DEG), abs=1e-6)

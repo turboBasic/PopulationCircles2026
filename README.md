@@ -22,21 +22,17 @@ mise run ci         # lint, typecheck, test — the same checks CI runs
 ```
 
 Input datasets live in [`data/`](data/README.md), described for a machine in
-[`data/registry.toml`](data/registry.toml). The rasters are kept out of a normal clone so cloning stays
-fast and cheap; the coastline basemap is a committed blob, because a hundred kilobytes every clone needs
-is cheaper carried than fetched:
+[`data/registry.toml`](data/registry.toml). The rasters are published rather than carried, so cloning
+stays fast and cheap; the coastline basemap is a committed blob, because a hundred kilobytes every clone
+needs is cheaper carried than fetched:
 
 ```sh
-GIT_LFS_SKIP_SMUDGE=1 git clone …   # clone without downloading the rasters
-mise run data:get                   # fetch what is missing and verify it — no account needed
-mise run data:status                # what is present locally versus pointer-only
+mise run data:get   # fetch what is missing and verify it — no account needed
 ```
 
 `data:get` reads the registry and checks each file against the recorded checksum before putting it in
-place, so a truncated download is refused rather than parsed. `mise run data:pull` is the Git LFS route
-to the same rasters, for anyone with access to the objects — skipping is a layered default rather than a
-guarantee, and the layers are worth knowing before a clone surprises you:
-[`data/README.md`](data/README.md#fetching).
+place, so a truncated download is refused rather than parsed:
+[`data/README.md`](data/README.md#getting-it).
 
 ## Usage
 
@@ -100,16 +96,13 @@ the raster rather than a download.
 The population raster is [GPWv4.11 UN WPP-adjusted population count for 2020][gpw] at 30
 arc-second resolution — CIESIN / Columbia University, distributed by NASA SEDAC, DOI
 [10.7927/H4PN93PB][gpw-doi], [CC BY 4.0][cc-by]. Attribution is required of anything published from
-it; [`data/README.md`](data/README.md#provenance) holds the citation, the grid details, and what
-about this copy is still unverified.
+it; [`data/README.md`](data/README.md#population-count-2020-30arcsec) holds the citation and the grid
+details.
 
-**It is not in a plain clone.** The [`data-v1` release][data-tag] carries it, and that copy needs no
-account.
-
-[Obtaining it](data/README.md#obtaining-it) is the other route — the download from NASA Earthdata,
-which needs a free login, and the extract, rename and checksum check that turn the granule into the
-file every command here expects. That one gets you an *independent* copy, which is what makes the
-published checksum worth checking.
+**It is not in a plain clone.** The [`data-v1` release][data-tag] carries it, `mise run data:get` fetches
+from there, and that copy needs no account. Obtaining an *independent* copy from NASA Earthdata instead —
+which is what makes the published checksum worth checking — is
+[`CONTRIBUTING.md`](CONTRIBUTING.md#verifying-a-published-dataset).
 
 ## Layout
 

@@ -6,7 +6,7 @@
 // snapshot kept here.
 //
 // No raster anywhere. `Synthetic` is public and unconditional, so the fixture streams into a real cache
-// through the writer a build uses, and the suite passes on a clone that has fetched no LFS content.
+// through the writer a build uses, and the suite passes on a checkout with no raster in it.
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
 // exemption; docs/ai/code.md allows both in tests. cast_precision_loss likewise — the largest cell is 648,

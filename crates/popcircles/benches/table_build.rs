@@ -3,7 +3,7 @@
 // outside this tree.
 //
 // No raster: the source is generated a row at a time, so this measures the build and not a decoder, and
-// it runs on a clone with no LFS content. The generated mix is the registry raster's own, because a
+// it runs on a checkout with no raster in it. The generated mix is the registry raster's own, because a
 // build over all-nodata rows and a build over dense counts are not the same measurement.
 //
 // expect is what a benchmark documents an invariant with, the same licence `docs/ai/code.md` grants a

@@ -18,8 +18,8 @@ sha256 = "956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d"
 # Republished by this project under CC BY 4.0's redistribution terms (ADR 0009). Upstream cannot be this
 # URL: NASA's archive is behind an OAuth login that answers an anonymous request with a 401.
 fetch_url = "https://github.com/turboBasic/PopulationCircles2026/releases/download/data-v1/population-count-2020-30arcsec.tif"
-# Which GPW product, which variant of it, and how this copy was tied to that entry is `data/README.md`
-# under Provenance.
+# Which GPW product, which variant of it, and how this copy was tied to that entry is this dataset's
+# heading in `data/README.md`.
 source_url = "https://doi.org/10.7927/H4PN93PB"
 
 width = 43200
@@ -27,8 +27,7 @@ height = 21600
 origin_lat = 90.0
 origin_lon = -180.0
 # 1/120° to full f64 precision, because the owning file has no reason to spell a value worse than it can:
-# a truncated 0.0083333333333333 misses a 180° span by 7.1e-13 over the height. #85 removes the copies
-# `USAGE.md`'s examples still carry.
+# a truncated 0.0083333333333333 misses a 180° span by 7.1e-13 over the height.
 lat_step = -0.008333333333333333
 lon_step = 0.008333333333333333
 epsg = 4326

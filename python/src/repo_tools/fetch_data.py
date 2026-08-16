@@ -29,7 +29,7 @@ def digest(path: Path) -> str:
 
 
 def matches(path: Path, size: int, sha256: str) -> bool:
-    # Size first, so an unfetched LFS pointer is rejected in a stat rather than by hashing 134 bytes
+    # Size first, so a truncated or partial download is rejected in a stat rather than by hashing it
     # into a mismatch, and a present 428 MB file is only hashed when it could possibly match.
     return path.is_file() and path.stat().st_size == size and digest(path) == sha256
 

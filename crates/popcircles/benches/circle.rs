@@ -8,7 +8,7 @@
 // table it builds and the mapped one from the cache under `out/` when a full-resolution table is there.
 //
 // The mapped half is skipped with a message rather than failed when that cache is absent: it needs
-// `mise run data:pull` and a build, and neither is something a benchmark should do behind a caller's back.
+// `mise run data:get` and a build, and neither is something a benchmark should do behind a caller's back.
 //
 // expect is what a benchmark documents an invariant with, the same licence `docs/ai/code.md` grants a
 // test.
@@ -177,7 +177,7 @@ fn mapped() {
         Err(error) => {
             println!(
                 "\nskipped the mapped figure — {error}\n\
-                 it needs a full-resolution table, which `mise run data:pull` and then \
+                 it needs a full-resolution table, which `mise run data:get` and then \
                  `table build --decimate 1 --cache {MAPPED_CACHE}` produce; \
                  README.md's Usage carries the whole command."
             );

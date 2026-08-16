@@ -15,8 +15,8 @@ the file itself:
 
 ```sh
 $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
-    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333
-{"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048046, …}}
+    --lon-step 0.008333333333333333 --lat-step -0.008333333333333333
+{"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048113, …}}
 ```
 
 A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then
@@ -27,12 +27,12 @@ only the window changes:
 ```sh
 $ mise run cli -- table build --raster data/population/population-count-2020-30arcsec.tif \
     --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
-    --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --lon-step 0.008333333333333333 --lat-step -0.008333333333333333 \
     --nodata -3.40282306073709653e38 --epsg 4326 --decimate 10 --cache out/gpw-5arcmin
 {"schema_version":1, …,"result":{"digest":"0xf17aa802a6890f0c","total_population":7757982599.323671, …}}
 
 $ query() { mise run cli -- table query --width 43200 --height 21600 --origin-lat 90 \
-    --origin-lon -180 --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --origin-lon -180 --lon-step 0.008333333333333333 --lat-step -0.008333333333333333 \
     --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
 
 $ query                                                            # every cell there is
@@ -62,11 +62,11 @@ circle, as a country is the spec error
 [the application doc](docs/ai/application.md#what-this-program-does) names.
 
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
-Building needs the raster, so `mise run data:pull` first — or, without access to this repository's LFS
-objects, the [`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1),
-which needs no account and carries the checksum to verify
-what you got. [Obtaining it](data/README.md#obtaining-it) is the slower route, and the one that gets an
-independent copy.
+Building needs the raster, so `mise run data:get` first: it fetches from the
+[`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1), which needs
+no account, and verifies what it got against the registry's checksum before placing it. Getting an
+independent copy from the publisher instead is the slower route, and is
+[`CONTRIBUTING.md`](CONTRIBUTING.md#verifying-a-published-dataset).
 
 ## Circles
 
@@ -75,7 +75,7 @@ function again, and the outputs below are from one run against the 5 arcmin tabl
 
 ```sh
 $ search() { local command="$1"; shift; mise run cli -- "$command" --width 43200 --height 21600 \
-    --origin-lat 90 --origin-lon -180 --lon-step 0.0083333333333333 --lat-step -0.0083333333333333 \
+    --origin-lat 90 --origin-lon -180 --lon-step 0.008333333333333333 --lat-step -0.008333333333333333 \
     --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
 ```
 
@@ -83,7 +83,7 @@ The population inside a circle you name. A thousand kilometres around Dhaka is a
 
 ```sh
 $ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
-{…,"result":{"requested":{"lat":23.8103,…},"centre":{"lat":23.791666666666927,"lon":90.37499999999898},
+{…,"result":{"requested":{"lat":23.8103,…},"centre":{"lat":23.79166666666667,"lon":90.375},
  "radius_km":1000.0,"population":769799773.1688497,"share_of_total":0.0992267981157833}}
 ```
 
@@ -95,7 +95,7 @@ further west, and holding 16% of the world rather than 10%:
 
 ```sh
 $ search most-populous --radius-km 1000 --spacing 32
-{…,"result":{"centre":{"lat":25.125000000000256,"lon":79.70833333333235},"radius_km":1000.0,
+{…,"result":{"centre":{"lat":25.125,"lon":79.70833333333331},"radius_km":1000.0,
  "population":1254363867.9300776,"share_of_total":0.1616868627727305,"tolerance_persons":0.0,
  "stats":{"levels":6,"blocks_examined":13908,"blocks_pruned":12725,…}}}
 ```
@@ -109,7 +109,7 @@ And the question the program is named for. The smallest circle holding half the 
 ```sh
 $ search smallest-for-share --share 50 --spacing 32 --ledger out/radii.json
 {…,"result":{"ledger":{"path":"out/radii.json","radii":24},"circle":{"radius_km":3360,
- "centre":{"lat":28.791666666666906,"lon":100.625},"population":3879165388.019252,
+ "centre":{"lat":28.79166666666667,"lon":100.625},"population":3879165388.019252,
  "target":{"share":0.5,"persons":3878991299.6618357,"total":7757982599.323671},
  "short_below":{"radius_km":3359,"population":3878869485.4163485},"covers_whole_grid":false,
  "predicate_slack_persons":0.01196060136531932,…}}}
@@ -159,7 +159,7 @@ mise run render -- --input out/most-populous.json --output out/globe.png --proje
 
 `--projection` takes `plate-carree`, which is what the viral maps used, or `orthographic` centred on the
 circle. Every figure carries the CC BY citation the raster's licence requires, and a test fails if that
-wording drifts from [`data/README.md`](data/README.md#licence-and-attribution).
+wording drifts from [`data/README.md`](data/README.md#population-count-2020-30arcsec).
 
 **The circle is a spherical cap projected by PROJ, not a ring of coordinates.** So one crossing the
 antimeridian comes out in two pieces at either edge of the map, and one covering a pole closes across the

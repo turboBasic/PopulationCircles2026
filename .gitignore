@@ -39,3 +39,8 @@ tmp/
 # A partial download from `mise run data:get`. It unlinks its own on failure, but a SIGKILL leaves one
 # behind and it is the size of the raster.
 *.part
+# The fetched raster, which `mise run data:get` is what puts there. This line keeps it out of `git
+# status`, and a `git add -f` defeats it. What refuses the commit then is `check-added-large-files`, on
+# size alone — the registry-row hook cannot, because the raster has a row. So nothing bounds a published
+# dataset small enough to pass that hook; FU-22 holds the gap.
+/data/population/*.tif

@@ -21,20 +21,12 @@ run = [
   "cargo fetch",
   "uv sync --locked",
   "prek install",
-  "mise run data:skip",
   "mise run git:ff-only",
 ]
 
-# A global lfs.fetchexclude overrides the committed .lfsconfig, and repo-local config overrides
-# the global one, so this is the setting that decides. It applies from here on: a first clone
-# still needs GIT_LFS_SKIP_SMUDGE=1 to skip the data.
-[tasks."data:skip"]
-description = "Pin this clone to skip LFS data until data:pull asks for it"
-run = "git config --local lfs.fetchexclude '*'"
-
 # main's ruleset is what enforces linear history; this makes the accidental merge fail earlier, at
 # `git pull` or `git merge main` on a diverged branch, while there is nothing pushed to rewrite. It
-# is not a second gate, because `git merge --no-ff` still overrides it. Repo-local like data:skip,
+# is not a second gate, because `git merge --no-ff` still overrides it. Repo-local rather than global,
 # because a developer's own global preference is theirs to set.
 #
 # fetch.prune is here rather than in a task of its own because it closes the same kind of clone-side
@@ -112,24 +104,24 @@ description = "Lint GitHub Actions workflows"
 run = "actionlint"
 
 # CI never runs prek, so the commit hooks would be local-only advice. This task selects the
-# three data-integrity hooks by id and `lint` depends on it, which puts them in CI without a
+# two data-integrity hooks by id and `lint` depends on it, which puts them in CI without a
 # second copy of the logic: .pre-commit-config.yaml stays the only implementation.
 # --all-files rather than the staged set, because on a CI checkout nothing is staged.
-[tasks."lint:lfs"]
-description = "Check geo data is LFS-tracked and no large blob is committed outside LFS"
-run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
+[tasks."lint:data"]
+description = "Check every geo data file has a registry row and no large blob is committed"
+run = "prek run --all-files check-added-large-files geo-data-registered"
 
 # CI never runs prek, so the formatting hooks would be local-only advice. This task selects the
-# three formatting hooks by id and `lint` depends on it, the same shape `lint:lfs` uses to put
+# three formatting hooks by id and `lint` depends on it, the same shape `lint:data` uses to put
 # hooks in CI without a second copy of the logic. Those hooks rewrite rather than check, so a CI
 # failure reads "files were modified by this hook" rather than naming the diff — the same report
-# `lint:lfs` gives, and enough to stop the merge.
+# `lint:data` gives, and enough to stop the merge.
 # --all-files rather than the staged set, because on a CI checkout nothing is staged.
 [tasks."lint:format"]
 description = "Check Rust, TOML and Python are formatted"
 run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 
-# Puts the prek hooks in CI; see `lint:lfs` for why. It matters more here than for the others: one of
+# Puts the prek hooks in CI; see `lint:data` for why. It matters more here than for the others: one of
 # them stands in for `unsafe_code = "forbid"`, so a branch pushed from a clone where `prek install`
 # never ran has to meet it too. Both hooks answer one question — what may silence a lint — which is why
 # they share a task rather than each having one.
@@ -137,17 +129,17 @@ run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 description = "Check what may silence a lint: the one unsafe exception, and no blanket #![allow] in src"
 run = "prek run --all-files single-unsafe-allow no-blanket-allow"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:markdown"]
 description = "Lint Markdown with markdownlint-cli2"
 run = "prek run --all-files markdownlint-cli2"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:cspell"]
 description = "Spell-check every tracked file with cspell"
 run = "prek run --all-files cspell"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:docs"]
 description = "Check pointers and the Structure tree with the lint-docs entry point"
 run = "prek run --all-files doc-pointers"
@@ -159,7 +151,7 @@ depends = [
   "lint:rustdoc",
   "lint:python",
   "lint:workflows",
-  "lint:lfs",
+  "lint:data",
   "lint:format",
   "lint:exemptions",
   "lint:markdown",
@@ -181,12 +173,12 @@ description = "Run the Rust and Python test suites"
 depends = ["test:python"]
 run = "cargo test --all-features"
 
-# Never in `lint` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1,
-# so data/ there holds pointers and this test would have nothing to read. --release because the pass is
+# Never in `lint` or `ci`, and no later change can put it there: a CI checkout has no raster, so this
+# test would have nothing to read. --release because the pass is
 # 933 120 000 cells and a debug build spends minutes on it. `--ignored` selects every deselected test,
 # `test:slow`'s among them, so this task runs that one too while `test:slow` runs it alone.
 [tasks."test:raster"]
-description = "Read the real population raster end to end (needs mise run data:pull)"
+description = "Read the real population raster end to end (needs mise run data:get)"
 run = "cargo test --release --all-features -- --ignored"
 
 # Not in `test` or `ci`, for time rather than for data: the shape is 933 120 000 cells and the pass
@@ -214,10 +206,10 @@ run = "cargo test --release --all-features --test decimated_search -- --ignored"
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
-# Not in `test` or `ci` because it reads the registry raster, which a CI clone holds only as a pointer.
+# Not in `test` or `ci` because it reads the registry raster, which a CI checkout does not have.
 # It is the end-to-end one: the raster streamed into a table and the smallest circle holding half the
 # world searched for over it, checked against the published prior art. Selected by target rather than by
-# name so a second validation test needs no change here. When the raster is an unfetched pointer it skips
+# name so a second validation test needs no change here. When the raster is absent it skips
 # with a message rather than failing, which is why running it on a fresh clone is harmless.
 [tasks."test:validate"]
 description = "Search the real raster for half the world and check it against the published result"
@@ -257,8 +249,8 @@ run = ["mise run bench:kernel", "mise run bench:circle"]
 description = "Run the Python test suite"
 run = "uv run pytest"
 
-# Never in `test` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1, so
-# the raster is a pointer there and a length assertion against it would fail for having no data. The `-m`
+# Never in `test` or `ci`, and no later change can put it there: a CI checkout has no raster, so a length
+# assertion against it would fail for having no file. The `-m`
 # here overrides the one in pyproject.toml's addopts, the same way `--ignored` selects the deselected
 # Rust tests.
 [tasks."test:python-raster"]
@@ -281,16 +273,8 @@ depends = ["lint", "typecheck", "test"]
 description = "Compile both release legs on demand, macOS included, publishing nothing"
 run = "uv run release-smoke"
 
-# Not in `lint`, `test` or `ci`, and no later change can put it there: it reaches the network, and CI
-# deliberately holds pointers rather than data.
+# Not in `lint`, `test` or `ci`, and no later change can put it there: it reaches the network, and a CI
+# checkout deliberately has no raster.
 [tasks."data:get"]
 description = "Fetch every registered dataset not already present, verifying before it is placed"
 run = "uv run fetch-data"
-
-[tasks."data:pull"]
-description = "Fetch the Git LFS raster data that a normal clone deliberately skips"
-run = "git lfs pull --include='*.tif' --exclude=''"
-
-[tasks."data:status"]
-description = "Show which LFS objects are present locally versus pointer-only"
-run = "git lfs ls-files --size"

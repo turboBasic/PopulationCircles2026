@@ -27,7 +27,7 @@ Run every check below even when an earlier one fails: a broken hook says nothing
 
    The enforcement details are where it bites, because prose naming one has copied a fact a config
    file owns and will not be corrected when that file changes: a lint level, a task's command line, a
-   hook's name, a nodata value, an LFS setting. Three restatements are sanctioned and not worth
+   hook's name, a nodata value, a dataset's checksum. Three restatements are sanctioned and not worth
    listing — the invariant list in `docs/ai-instructions.md`, a record in `docs/decisions/` that
    decided a fact, and the human layer, which restates by licence. A human-layer hit is a finding only
    when it contradicts its owner or pins an enforcement detail.
@@ -36,8 +36,9 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    in the set check 2 above reads, and that every file in `docs/ai/` has an `@` import in `CLAUDE.md`
    naming it. Run it; any output is a finding.
 4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/registry.toml` and an entry
-   in `data/README.md`, and every row names a file that exists. Run `mise run data:status` and report which objects are pointer-only —
-   that is the expected state, and a fetched raster sitting in the tree is worth naming, not fixing.
+   in `data/README.md`. Check each row's `path` for presence directly: a row carrying a `fetch_url`
+   naming no file is the expected state, because a published dataset is absent until someone fetches it.
+   A row without a `fetch_url` names a committed file, so there its absence is a finding.
    A generated artifact anywhere under `data/` is a finding.
 5. **Follow-up register.** `docs/follow-ups.md` holds every follow-up this repository has recorded.
    Take the `dormant` and `due` entries, answer

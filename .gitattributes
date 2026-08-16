@@ -10,14 +10,15 @@
 *.sh text eol=lf
 *.snap text
 
-# Raster population data. Tracked by LFS but deliberately not fetched on clone —
-# see .lfsconfig and the `data:pull` mise task.
-*.tif filter=lfs diff=lfs merge=lfs -text
-*.tiff filter=lfs diff=lfs merge=lfs -text
-
-# Vector basemap data, and deliberately not LFS: it is a hundred kilobytes that every
-# clone and every CI job needs, so it is a Git blob. data/README.md says so under Data.
+# Vector basemap data: a hundred kilobytes that every clone and every CI job needs, so it
+# is a Git blob. data/README.md says so.
 *.geojson text
 
 *.png binary
 *.bin binary
+# A decimated raster small enough to commit is sanctioned (platform.md "Testing"), and the
+# geo-data-registered hook passes one that has a registry row — so these two are load-bearing for the
+# raster this repository would really commit. Without them `text=auto` above decides, and a raster it
+# guessed wrong about is line-ending mangled.
+*.tif binary
+*.tiff binary
