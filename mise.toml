@@ -257,6 +257,14 @@ run = ["mise run bench:kernel", "mise run bench:circle"]
 description = "Run the Python test suite"
 run = "uv run pytest"
 
+# Never in `test` or `ci`, and no later change can put it there: CI clones with GIT_LFS_SKIP_SMUDGE=1, so
+# the raster is a pointer there and a length assertion against it would fail for having no data. The `-m`
+# here overrides the one in pyproject.toml's addopts, the same way `--ignored` selects the deselected
+# Rust tests.
+[tasks."test:python-raster"]
+description = "Check the registry's fetched rows against the files on disk (needs the raster present)"
+run = "uv run pytest -m raster"
+
 [tasks.ci]
 description = "Run everything CI runs, locally"
 depends = ["lint", "typecheck", "test"]

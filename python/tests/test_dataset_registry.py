@@ -56,10 +56,25 @@ def test_the_rust_spec_still_carries_the_constant_this_pins() -> None:
     assert "-3.402_823e38" in source
 
 
-def test_each_row_describes_the_file_on_disk() -> None:
-    # bytes and sha256 are what a fetch enforces and a reader verifies, so a stale one is worse than
-    # none — measured here rather than trusted.
-    for dataset in load().datasets.values():
+def test_a_committed_row_describes_the_file_on_disk() -> None:
+    # bytes and sha256 are what a reader verifies, so a stale one is worse than none. Only the rows
+    # with no `fetch_url`: those files are committed, so they are present on every clone.
+    committed = [d for d in load().datasets.values() if d.fetch_url is None]
+    assert committed
+    for dataset in committed:
+        content = dataset.file.read_bytes()
+        assert len(content) == dataset.bytes
+        assert hashlib.sha256(content).hexdigest() == dataset.sha256
+
+
+@pytest.mark.raster
+def test_a_fetched_row_describes_the_file_once_it_has_been_fetched() -> None:
+    # Deselected by default and never in CI: a fetched dataset is an LFS pointer on the clone CI
+    # runs on, so asserting its length there fails for having no data rather than for a wrong
+    # figure — platform.md "Testing". `mise run test:python-raster` is what runs it.
+    fetched = [d for d in load().datasets.values() if d.fetch_url is not None]
+    assert fetched
+    for dataset in fetched:
         content = dataset.file.read_bytes()
         assert len(content) == dataset.bytes
         assert hashlib.sha256(content).hexdigest() == dataset.sha256

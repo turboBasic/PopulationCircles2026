@@ -24,9 +24,10 @@ Deselected from `test` and `ci`, because each needs the raster, time, or both �
 each says which:
 
 ```sh
-mise run test:validate  # the real raster, end to end, against the published result
-mise run bench          # kernel construction and circle evaluation
-mise run bench:table    # the table build — writes 7.5 GB, which is why it is separate
+mise run test:validate      # the real raster, end to end, against the published result
+mise run test:python-raster # the registry's fetched rows against the files on disk
+mise run bench              # kernel construction and circle evaluation
+mise run bench:table        # the table build — writes 7.5 GB, which is why it is separate
 ```
 
 A benchmark asserts nothing and no gate compares it against a baseline, so its figures are read rather
