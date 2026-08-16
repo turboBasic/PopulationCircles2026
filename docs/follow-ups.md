@@ -236,6 +236,23 @@ Identifiers are flat, sequential and never reused.
   [`data/README.md`](../data/README.md) a line saying so; the second keeps one copy and moves the choice
   to the caller, which is the shape the rest of the renderer already takes.
 
+### FU-21 - The bypass that lets the owner push to main is a role, not a person
+
+- **Status** — `dormant` (2026-08-16): the owner is the only account with admin, so the role and the person
+  are the same set of one.
+- **Condition** — a second account holds admin on this repository:
+  `gh api repos/:owner/:repo/collaborators --jq '[.[] | select(.permissions.admin) | .login]'` returning
+  more than one login. `main`'s ruleset carries one bypass actor, the `Repository admin` role in mode
+  `always`, so that account may push straight to `main` and may merge a red PR — neither of which anyone
+  intended to grant by adding a collaborator. Write and maintain do not qualify, which is what makes the
+  grant of admin the event rather than the invitation.
+- **Fix** — decide between two, and the choice is the point rather than a detail: drop the bypass and take
+  the pull-request loop back for everyone, or keep it and accept that admin now means it. There is no
+  narrower setting to reach for — GitHub's bypass modes are `always` or pull-requests-only, and
+  `required_status_checks` takes no path conditions, so neither "pushes only" nor "documentation only" is
+  expressible. `guard-direct-push` in `.pre-commit-config.yaml` runs `mise run ci` before a direct push,
+  but it is a clone-side guardrail: a second admin has to install it, and `--no-verify` skips it.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves

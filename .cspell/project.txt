@@ -150,6 +150,7 @@ codegen
 fetchexclude
 lfsconfig
 nextest
+refspec
 RUSTDOCFLAGS
 smudge
 testpaths

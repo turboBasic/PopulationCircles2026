@@ -1,6 +1,6 @@
 # Run through prek, not pre-commit: `prek run`, `prek install`. The file format is
 # pre-commit's, which is why the filename is unchanged.
-default_install_hook_types: [pre-commit, commit-msg]
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -194,3 +194,28 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      # main's ruleset carries one bypass actor, the Repository admin role, so the owner can push
+      # straight to main and nobody else can. The three server-side checks never report on a commit
+      # that arrived without a pull request, and this is what runs in their place: the same task CI
+      # runs, before the push rather than after it.
+      #
+      # A guardrail and not a gate, the same way git:ff-only is one. `--no-verify` skips it, and it
+      # tests the current branch rather than the refspec, so `git push origin HEAD:main` from
+      # elsewhere is not seen. What it is for is the ordinary case of committing on main and pushing.
+      #
+      # Adding pre-push to default_install_hook_types displaces git-lfs's own pre-push hook, which is
+      # what uploads LFS objects. prek moves it to pre-push.legacy and keeps running it, so
+      # `prek install --force` is the command not to reach for: it drops the legacy hook and LFS objects
+      # then stop being pushed, silently. The tension ends with the raster leaving LFS, after which
+      # nothing here is LFS-tracked and that hook has no work to do.
+      - id: guard-direct-push
+        name: a direct push to main runs ci first
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+        entry: >-
+          bash -c '[ "$(git rev-parse --abbrev-ref HEAD)" = main ] || exit 0;
+          echo "pushing main directly: running mise run ci in place of the checks it skips";
+          mise run ci'

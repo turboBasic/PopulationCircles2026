@@ -221,21 +221,30 @@ date derived from summing them is arithmetic on guesses.
 
 - Conventional Commits, commitizen's default types; the PR title is held to the same format. Both
   are checked — locally by the commit-msg hook, in CI by the shared workflow.
-- Commit or push only when asked. Branch first if on the default branch.
+- Commit or push only when asked. Branch first if on the default branch, unless the owner asks for a
+  direct commit and the change touches no code — a documentation edit, a comment, a task description.
+  Anything else branches even when asked, because the reason to branch is review rather than the ruleset.
 - **No merge commits.** History is linear, so a branch is rebased onto `main` rather than merged into
   it. The gate is server-side: a ruleset requires linear history on `main`, and the merge-commit
   button is off, so a PR lands as a squash or a rebase. `mise run git:ff-only` configures the clone to
   refuse the accidental case, but `git merge --no-ff` overrides it — it is a guardrail, not a second
   gate, and describing it as one would promise something nobody is holding. Never resolve a divergence
   by merging `main` in.
-- **A red check blocks the merge, and there is no bypass.** The same ruleset requires three checks to
-  pass — `CI`, `commits / PR title` and `commits / Commit messages` — with no bypass actors, so a
-  failing gate cannot be merged past by anyone including the repository owner. Two consequences worth
-  stating because neither is visible from a green PR:
-  - **`main` takes no direct push.** Two of the three checks run on `pull_request` only, so on a commit
-    pushed straight to `main` they never report and the push is refused. That makes "branch first if on
-    the default branch" a gate rather than a convention, and it is the reason the list is those three
-    rather than `CI` alone.
+- **A red check blocks the merge for everyone but the owner.** The same ruleset requires three checks to
+  pass — `CI`, `commits / PR title` and `commits / Commit messages` — and carries exactly one bypass
+  actor, the `Repository admin` role in mode `always`. A contributor with write or maintain access never
+  qualifies; an admin collaborator would, which is the one thing to weigh before granting that access.
+  Three consequences, none of them visible from a green PR:
+  - **The owner may push straight to `main`, and it is for small changes that touch no code.** That
+    restriction is a convention and cannot be otherwise: `required_status_checks` takes no path
+    conditions, and a push ruleset that would take them applies to every push including a PR merge.
+    Anyone else still branches, because for them the push is refused — two of the three checks run on
+    `pull_request` only, so on a directly pushed commit they never report.
+  - **The bypass cannot be narrowed to pushes.** GitHub offers `always` or pull-requests-only, so the
+    same actor that may push to `main` may also merge a red PR. Nothing enforces that they do not, and
+    the `guard-direct-push` hook in `.pre-commit-config.yaml` is what partly replaces the gate a direct
+    push skips — it runs `mise run ci` before the push, and like `git:ff-only` it is a guardrail rather
+    than a second gate.
   - **A renamed job locks the branch.** A required check is matched by name, so if the shared
     `turboBasic/github-actions` workflow renames a job, the old context never reports and every PR
     blocks until the ruleset is updated. Bumping that dependency means checking the job names with it.
