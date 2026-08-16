@@ -50,6 +50,22 @@ Read the diff first and the tree second, then each of these against what the dif
 Cite the section rather than restating what it says. A finding is the diff measured against a rule, so the
 rule stays where it lives and the finding names the file, the line and what fails.
 
+## What not to read
+
+The surface is the diff, the files it touched, and the sections named above. Anything else is read only
+because the diff points at it, and a review that reaches past this bound spends its budget where it has no
+verdict to reach.
+
+- **History is not the surface.** `git log`, `git show` and `git blame` are for a commit *in the range under
+  review*. What the tree used to be belongs to `docs/decisions/` and the issue thread, so a finding needing
+  archaeology to state is a finding about a record rather than about this change.
+- **Read the cited section, not its file**, and a touched file rather than its neighbours.
+- **Do not re-derive what a gate settled.** `mise run ci` passed, or it did not and that is the finding.
+- **A whole-tree sweep is the `housekeeping` skill's**, and asking for one is an available verdict. The
+  exception is a sweep the diff itself claims — a change asserting that no document mentions something is
+  verified by running that sweep once.
+- **Stop at the verdict.** Depth past what the three below can carry buys nothing.
+
 ## The verdict
 
 One of three, stated outright rather than left to be inferred:
