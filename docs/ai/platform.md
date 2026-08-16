@@ -45,7 +45,9 @@ waiting on sources and tests to exist, not on someone noticing them.
 
 ## Large input data
 
-Input datasets live in `data/`, one directory per kind, the large ones in Git LFS.
+Input datasets live in `data/`, one directory per kind. A large one is published and fetched rather
+than carried in the repository, a small one is committed; Git LFS is still the route for the raster
+until #85 removes it.
 [`data/README.md`](../../data/README.md) is the registry and owns each dataset's grid, CRS, nodata
 value, checksum and provenance, which of them LFS holds, plus the mechanics of skipping and fetching
 the objects ([Fetching](../../data/README.md#fetching)). A dataset gets its row in the same change that
@@ -58,9 +60,10 @@ The judgment around that mechanism:
   turns a default into a guarantee nobody is holding.
 - A new **input** dataset goes to `data/<kind>/` with a registry entry, and only deliberately.
   Generated products are neither committed nor placed there.
-- **LFS is the answer for a raster, not for `data/` by location.** A dataset every clone and every CI
-  job needs, small enough that fetching it would cost more than carrying it, is a Git blob — the
-  registry states that trade for each row, and `check-added-large-files` is what still bounds it.
+- **Publishing is the answer for a raster, not for `data/` by location**
+  ([ADR 0009](../decisions/0009-input-data-is-published-not-versioned.md)). A dataset every clone and
+  every CI job needs, small enough that fetching it would cost more than carrying it, is a Git blob —
+  the registry states that trade for each row, and `check-added-large-files` is what still bounds it.
 - Code that reads a raster fails with a clear message naming `mise run data:pull` when the file is
   an unfetched LFS pointer, rather than parsing the pointer as data.
 

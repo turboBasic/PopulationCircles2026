@@ -65,8 +65,6 @@ need its own.
 
 - **A published dataset cannot be unpublished.** Whoever fetched it has it, and a moved or deleted
   asset breaks fresh working copies and not merely future ones, so publishing is deliberate.
-- Reading a dataset needs a fetch that may not have happened, so code that reads one fails with a
-  message naming the command rather than parsing whatever is on disk.
 - The attribution a licence requires travels with the fetch, because acquiring the bytes is when the
   obligation is acquired.
 - A dataset small enough that fetching costs more than carrying stays a committed blob. Which side of
