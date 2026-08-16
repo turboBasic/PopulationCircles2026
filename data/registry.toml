@@ -1,0 +1,64 @@
+# Every input dataset this project reads, described for a machine: `mise run data:get` fetches from here,
+# and the renderer reads the attribution a figure owes. `data/README.md` is the same datasets described
+# for a person and owns the provenance that identifies each one — including why a filename here names no
+# publisher.
+#
+# A dataset's key is its filename without the extension, so the key, the file, the release asset and the
+# heading in `data/README.md` are one string. `path` still spells the directory and extension a key cannot
+# carry; a check asserts its stem equals the key, which is what keeps that a fact rather than a convention.
+#
+# `fetch_url` is present only for a dataset `data:get` retrieves. Without one, the dataset is committed,
+# and its `sha256` is then a checksum a reader can verify rather than one a fetch enforces.
+
+[datasets.population-count-2020-30arcsec]
+kind = "population-raster"
+path = "data/population/population-count-2020-30arcsec.tif"
+bytes = 428465215
+sha256 = "956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d"
+# Republished by this project under CC BY 4.0's redistribution terms (ADR 0009). Upstream cannot be this
+# URL: NASA's archive is behind an OAuth login that answers an anonymous request with a 401.
+fetch_url = "https://github.com/turboBasic/PopulationCircles2026/releases/download/data-v1/population-count-2020-30arcsec.tif"
+# Which GPW product and which variant of it, and how this copy was tied to that entry, is `data/README.md`
+# under Provenance. Two variants differ only in values, so a name cannot settle it and a measurement did.
+source_url = "https://doi.org/10.7927/H4PN93PB"
+
+width = 43200
+height = 21600
+origin_lat = 90.0
+origin_lon = -180.0
+# 1/120° to full f64 precision. `USAGE.md`'s examples carry a truncated 0.0083333333333333, which misses a
+# 180° span by 7.1e-13 over the height — inside the boundary tolerance, so it was always accepted, and no
+# reason for the owning file to spell a value worse than it can.
+lat_step = -0.008333333333333333
+lon_step = 0.008333333333333333
+epsg = 4326
+# Two ulps above -f32::MAX, and compared bit for bit rather than by tolerance — so this literal has to
+# round-trip to the identical f32, which is pinned by a test rather than assumed.
+nodata = -3.40282306073709653e38
+
+licence = "CC BY 4.0"
+licence_url = "https://creativecommons.org/licenses/by/4.0/"
+# Reuse, including commercial, requires attribution, so every published figure carries this text.
+# `data/README.md` quotes it for a human and a test pins the two together.
+attribution = """
+Center for International Earth Science Information Network — CIESIN — Columbia University. 2018. \
+Gridded Population of the World, Version 4 (GPWv4): Population Count Adjusted to Match 2015 \
+Revision of UN WPP Country Totals, Revision 11. Palisades, NY: NASA Socioeconomic Data and \
+Applications Center (SEDAC). https://doi.org/10.7927/H4PN93PB\
+"""
+
+[datasets.coastline-1to110m]
+kind = "boundary-vector"
+path = "data/boundaries/coastline-1to110m.geojson"
+bytes = 139907
+sha256 = "851f581ff5ffb844deed8ae1a9ce22e3c4bb3d74fa342cadb5d8e39b41ae7c3c"
+# No `fetch_url`: 137 KB that every clone and every CI job needs is cheaper carried than fetched, so this
+# one is a committed Git blob. Natural Earth's 1:110m physical coastline, committed byte for byte as tag
+# v5.1.2 serves it — `data/README.md` carries the command that reproduces the checksum from source.
+source_url = "https://github.com/nvkelso/natural-earth-vector/raw/v5.1.2/geojson/ne_110m_coastline.geojson"
+
+licence = "public domain"
+licence_url = "https://www.naturalearthdata.com/about/terms-of-use/"
+# Natural Earth asks for no attribution. Empty rather than absent, so a consumer reads the same field for
+# every dataset and an empty string means "nothing is owed" rather than "not recorded".
+attribution = ""
