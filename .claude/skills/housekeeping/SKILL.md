@@ -20,8 +20,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    file and line the tool printed. A hook that rewrites a file is a finding too — the rewrite is
    drift that was sitting in the tree, even though the hook repaired it.
 2. **Duplication.** Every fact has one owner; a mention anywhere else is a citation of that owner or a
-   finding. Read the live Markdown — the instruction layer, `.claude/skills/`, the two documents in
-   `.github/`, and the human layer — and apply the route-or-fact test from
+   finding. Read the live Markdown — the instruction layer, `.claude/skills/`, `.claude/agents/`, the
+   two documents in `.github/`, and the human layer — and apply the route-or-fact test from
    `docs/ai-instructions.md` "Layering": delete the sentence mentally and ask whether a route or a
    fact was lost. Reading is the check; a term list would only find drift someone already noticed.
 
@@ -33,7 +33,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    when it contradicts its owner or pins an enforcement detail.
 3. **Structure tree, pointers and the always-loaded set.** `mise run lint:docs`
    (the `lint-docs` entry point) checks `docs/ai/platform.md` "Structure" against the tree, every pointer
-   in the instruction layer, `.claude/skills/`, the two documents in `.github/` and the human layer,
+   in the instruction layer, `.claude/skills/`, `.claude/agents/`, the two documents in `.github/` and the
+   human layer,
    and that every file in `docs/ai/` has an `@` import in `CLAUDE.md` naming it.
    Run it; any output is a finding.
 4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/README.md`, and every row
