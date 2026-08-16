@@ -18,7 +18,7 @@ from shapely.ops import unary_union
 
 from population_circles.circle_document import Circle, circle_of
 from population_circles.circle_geometry import cap, linestrings, polygons
-from population_circles.dataset_registry import POPULATION_KEY, load
+from population_circles.dataset_registry import load
 from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
 
 # Every figure this writes goes to a file, so an interactive backend is never wanted — and asking
@@ -32,10 +32,16 @@ COASTLINE = (
 )
 
 
+# The dataset a figure credits. Named here rather than read from the document because `report`'s
+# provenance identifies the summation table, not the raster behind it — so nothing published could
+# select between two attributed datasets. That gap is FU-16, and this constant is its whole extent.
+POPULATION_KEY = "population-count-2020-30arcsec"
+
+
 def citation() -> str:
     # `data/registry.toml` owns the wording a licence requires, so a figure credits what the
-    # registry says is owed rather than what this file was written believing. Which dataset to
-    # credit is still named rather than read from the document — FU-16 holds that half.
+    # registry says is owed rather than what this file was written believing. Resolved by `main`
+    # and passed down, so `render` takes the string and never reaches for a dataset.
     return load().datasets[POPULATION_KEY].attribution
 
 
@@ -129,7 +135,7 @@ def draw(axes: Axes, view: Frame, coastline: BaseGeometry | None) -> None:
     outline(axes, view.horizon)
 
 
-def render(circle: Circle, projection: str, *, coastlines: bool) -> Figure:
+def render(circle: Circle, projection: str, attribution: str, *, coastlines: bool) -> Figure:
     built = cap(circle.centre, circle.radius_km, circle.earth_radius_km)
     view = frame(projection, built)
     centre = view.to_frame.transform(circle.centre.lon, circle.centre.lat)
@@ -164,7 +170,7 @@ def render(circle: Circle, projection: str, *, coastlines: bool) -> Figure:
     annotate(figure, 0.94, title_of(circle), 12.0)
     # Wrapped rather than one line: at this width the citation runs off both edges of the figure,
     # which is an attribution nobody can read and so not an attribution.
-    annotate(figure, 0.055, textwrap.fill(citation(), width=118), 6.5)
+    annotate(figure, 0.055, textwrap.fill(attribution, width=118), 6.5)
     return figure
 
 
@@ -185,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     no_coastlines: bool = args.no_coastlines
 
     document = json.loads(input_path.read_text(encoding="utf-8"))
-    figure = render(circle_of(document), projection, coastlines=not no_coastlines)
+    figure = render(circle_of(document), projection, citation(), coastlines=not no_coastlines)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # No bbox_inches="tight": the title and citation are placed at figure coordinates, and cropping
     # to the drawn content moves them off the positions they were given.

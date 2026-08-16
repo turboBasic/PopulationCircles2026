@@ -11,11 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # the package. FU-20 covers both of these together.
 REGISTRY = Path(__file__).resolve().parents[3] / "data" / "registry.toml"
 
-# The raster a figure is currently drawn from. Named here rather than chosen per document because
-# `report`'s provenance identifies the summation table, not the dataset behind it — so nothing in a
-# published document could select between two attributed datasets. That gap is FU-16.
-POPULATION_KEY = "population-count-2020-30arcsec"
-
+# `extra="forbid"` where `circle_document.py` uses `extra="ignore"`, and the difference is which
+# side of a boundary the producer sits on. That file consumes a format Rust writes and grows
+# additively, so an unknown field must not become a refusal. This file and this reader land in one
+# commit, so an unknown key is a typo — and a field added for Rust turns pytest red until the model
+# gains it, which is what keeps two readers of one file agreeing.
 _CONFIG = ConfigDict(frozen=True, extra="forbid")
 
 
