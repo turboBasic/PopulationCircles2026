@@ -5,7 +5,7 @@ working a GitHub issue, when deciding whether a change warrants a record under `
 writing the plan that carries it, or when the structure tree moves.
 
 Committed configuration is authoritative for what it declares — read `mise.toml`, `Cargo.toml`,
-`pyproject.toml`, `.pre-commit-config.yaml` and `.lfsconfig` rather than assuming. Extend those
+`pyproject.toml` and `.pre-commit-config.yaml` rather than assuming. Extend those
 files; never regenerate them. What follows is the judgment around them, not a second copy of them.
 
 ## Tooling hierarchy
@@ -46,28 +46,26 @@ waiting on sources and tests to exist, not on someone noticing them.
 ## Large input data
 
 Input datasets live in `data/`, one directory per kind. A large one is published and fetched rather
-than carried in the repository, a small one is committed; Git LFS is still the route for the raster
-until #85 removes it.
+than carried in the repository, a small one is committed.
 [`data/registry.toml`](../../data/registry.toml) is the registry and owns each dataset's grid, CRS,
 nodata value, byte length, checksum, fetch URL, licence and the attribution a figure owes — it is what
 `mise run data:get` and the renderer read. [`data/README.md`](../../data/README.md) is the same datasets
-described for a person, and owns the provenance that identifies each one, which of them LFS holds, plus
-the mechanics of skipping and fetching the objects ([Fetching](../../data/README.md#fetching)). A dataset
-gets its row in both, in the same change that adds it.
+described for a person, and owns the provenance that identifies each one, plus the mechanics of fetching
+them. A dataset gets its row in both, in the same change that adds it.
 
 The judgment around that mechanism:
 
-- **Never claim in docs or a commit message that a clone _cannot_ fetch the rasters.** Skipping is a
-  layered default, and git-lfs lets a user's own Git config defeat the committed one. Overstating it
-  turns a default into a guarantee nobody is holding.
 - A new **input** dataset goes to `data/<kind>/` with a registry entry, and only deliberately.
   Generated products are neither committed nor placed there.
 - **Publishing is the answer for a raster, not for `data/` by location**
   ([ADR 0009](../decisions/0009-input-data-is-published-not-versioned.md)). A dataset every clone and
   every CI job needs, small enough that fetching it would cost more than carrying it, is a Git blob —
   the registry states that trade for each row, and `check-added-large-files` is what still bounds it.
-- Code that reads a raster fails with a clear message naming `mise run data:pull` when the file is
-  an unfetched LFS pointer, rather than parsing the pointer as data.
+  **The row is what says which side of that line a dataset falls on**: a `fetch_url` means published, its
+  absence means committed, and the `geo-data-registered` hook is what refuses a geospatial file with no
+  row at all.
+- Code that reads a raster fails with a clear message naming `mise run data:get` when the file is
+  absent, rather than reporting it as a format error.
 
 ## Quality gates
 
@@ -99,7 +97,7 @@ strict mode.
 - Python: pytest. Never `unittest.TestCase` classes.
 - What the numeric code's tests must pin, as against merely exercise, is
   [`application.md`](application.md) "Correctness invariants".
-- **Never make a test depend on a fetched raster.** The suite runs on a clone with no LFS content, so
+- **Never make a test depend on a fetched raster.** The suite runs on a clone with no raster in it, so
   a test that needs raster bytes to pass is a test CI cannot run. Build the fixture in code, or
   decimate one small enough to commit.
 - Tests needing network, real credentials or fetched rasters are marked, deselected by default, and

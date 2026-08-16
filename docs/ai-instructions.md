@@ -58,7 +58,7 @@ owner already holds it. Lowest first:
 
 | Layer | Holds | Where |
 | --- | --- | --- |
-| L0 enforced | facts a machine checks | `mise.toml`, workspace lints in `Cargo.toml`, `.pre-commit-config.yaml`, `.gitignore`, `.lfsconfig`, `.github/workflows/` |
+| L0 enforced | facts a machine checks | `mise.toml`, workspace lints in `Cargo.toml`, `.pre-commit-config.yaml`, `.gitignore`, `.github/workflows/` |
 | L1 records | why a constraint exists, and what lost to it | `docs/decisions/` |
 | L2 router | project invariants and the layering rule | this file |
 | L3 domain docs | judgment no tool can enforce | `docs/ai/` |

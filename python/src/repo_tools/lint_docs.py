@@ -58,8 +58,8 @@ ROOT_FILE_ALLOWLIST = frozenset(
 )
 
 # docs/ai/platform.md's own rule: "Committed configuration sits at the repository root and
-# documents itself" (its opening paragraph names mise.toml, Cargo.toml, pyproject.toml,
-# .pre-commit-config.yaml, .lfsconfig outright); the rest here are the same kind of thing, plus
+# documents itself" (its opening paragraph names mise.toml, Cargo.toml, pyproject.toml and
+# .pre-commit-config.yaml outright); the rest here are the same kind of thing, plus
 # the human layer docs/ai-instructions.md "Layering" names, which are documents and not roots.
 STRUCTURE_EXEMPT_ROOTS = frozenset(
     {
@@ -69,7 +69,6 @@ STRUCTURE_EXEMPT_ROOTS = frozenset(
         "pyproject.toml",
         "uv.lock",
         ".pre-commit-config.yaml",
-        ".lfsconfig",
         ".editorconfig",
         ".gitattributes",
         ".gitignore",
