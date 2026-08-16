@@ -120,7 +120,7 @@ const fn exit_code_for_table_error(error: &TableError) -> u8 {
 
 /// Every disagreement between the file and the declaration is bad input, because the declaration is an
 /// argument: `--nodata` and the six grid numbers are what the file is being held to. Bytes that are not
-/// there to read are missing data, which is the class that names `mise run data:pull`.
+/// there to read are missing data, which is the class that names `mise run data:get`.
 fn exit_code_for_raster_error(error: &RasterError) -> u8 {
     match error {
         RasterError::Dimensions { .. }
@@ -139,7 +139,7 @@ fn exit_code_for_raster_error(error: &RasterError) -> u8 {
         | RasterError::MissingTag { .. }
         | RasterError::MissingGeoKey { .. } => EXIT_BAD_INPUT,
 
-        RasterError::UnfetchedPointer => EXIT_MISSING_DATA,
+        RasterError::Absent { .. } => EXIT_MISSING_DATA,
         RasterError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => EXIT_MISSING_DATA,
         RasterError::Io(_) | RasterError::Decode(_) => EXIT_FAILURE,
     }
@@ -269,7 +269,9 @@ mod tests {
             EXIT_BAD_INPUT
         );
         assert_eq!(
-            exit_code_for_raster_error(&RasterError::UnfetchedPointer),
+            exit_code_for_raster_error(&RasterError::Absent {
+                path: std::path::PathBuf::from("data/population/absent.tif")
+            }),
             EXIT_MISSING_DATA
         );
         assert_eq!(

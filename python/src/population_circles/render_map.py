@@ -25,7 +25,7 @@ from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame
 # for one is what fails on a machine with no display, rather than falling back.
 mpl.use("Agg")
 
-# The committed basemap. Natural Earth 110m, public domain, outside LFS and small enough to read on
+# The committed basemap. Natural Earth 110m, public domain, committed and small enough to read on
 # every render — `data/registry.toml` holds its terms and `data/README.md` its provenance.
 COASTLINE = (
     Path(__file__).resolve().parents[3] / "data" / "boundaries" / "coastline-1to110m.geojson"

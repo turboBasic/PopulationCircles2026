@@ -7,6 +7,7 @@ pub mod geotiff;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
+use std::path::PathBuf;
 
 use crate::geodesy::LatLon;
 use crate::grid::{Grid, Row};
@@ -150,11 +151,11 @@ pub enum RasterError {
     #[error("the file's GeoKeyDirectory carries no {name} key ({key})")]
     MissingGeoKey { name: &'static str, key: u16 },
 
-    #[error(
-        "the file is an unfetched Git LFS pointer rather than a raster; fetch it with `mise run \
-         data:pull`"
-    )]
-    UnfetchedPointer,
+    // Separate from `Io` although a `NotFound` is what produces it: an absent raster is the one I/O
+    // failure with a next step, and naming the path is what makes the message actionable when the
+    // caller passed a path it did not spell.
+    #[error("no raster at {path}; fetch it with `mise run data:get`")]
+    Absent { path: PathBuf },
 
     // Apart from Decode, and deliberately: a file that is not there and a file whose bytes are wrong
     // are different findings, and #8's exit-code classes will want to separate them. Folding both
@@ -471,8 +472,10 @@ mod tests {
                 vec!["GeographicType", "2048"],
             ),
             (
-                RasterError::UnfetchedPointer,
-                vec!["Git LFS pointer", "mise run data:pull"],
+                RasterError::Absent {
+                    path: PathBuf::from("data/population/absent.tif"),
+                },
+                vec!["data/population/absent.tif", "mise run data:get"],
             ),
             (
                 RasterError::Io(std::io::Error::from(std::io::ErrorKind::NotFound)),

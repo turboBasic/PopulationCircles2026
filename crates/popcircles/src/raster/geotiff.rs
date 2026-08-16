@@ -23,11 +23,6 @@ const MODEL_TYPE_GEOGRAPHIC: u16 = 2;
 const RASTER_PIXEL_IS_AREA: u16 = 1;
 const SAMPLE_FORMAT_IEEEFP: u16 = 3;
 
-/// How every Git LFS pointer file begins. `platform.md` "Large input data" requires a clone that has
-/// not fetched the objects to be told so by name, rather than having 134 bytes of text parsed as a
-/// TIFF and reported as a format error.
-const LFS_POINTER: &[u8] = b"version https://git-lfs";
-
 /// A striped, single-band `GeoTIFF` validated against a [`RasterSpec`].
 ///
 /// The declared grid wins: nothing here assembles a `Grid` from the file's tags. The file is required
@@ -55,25 +50,22 @@ impl GeoTiffSource<BufReader<File>> {
     /// [`RasterError`] when the file cannot be read, cannot be decoded, or is not the raster `spec`
     /// declares.
     pub fn open(path: impl AsRef<Path>, spec: &RasterSpec) -> Result<Self, RasterError> {
-        let file = File::open(path).map_err(RasterError::Io)?;
+        let path = path.as_ref();
+        let file = File::open(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                RasterError::Absent {
+                    path: path.to_path_buf(),
+                }
+            } else {
+                RasterError::Io(error)
+            }
+        })?;
         Self::from_reader(BufReader::new(file), spec)
     }
 }
 
 impl<R: Read + Seek> GeoTiffSource<R> {
-    fn from_reader(mut reader: R, spec: &RasterSpec) -> Result<Self, RasterError> {
-        // Before any byte reaches the decoder, because a pointer is valid text and an invalid TIFF, and
-        // the second thing is what a decoder would report.
-        let mut head = Vec::with_capacity(LFS_POINTER.len());
-        (&mut reader)
-            .take(LFS_POINTER.len() as u64)
-            .read_to_end(&mut head)
-            .map_err(RasterError::Io)?;
-        if head == LFS_POINTER {
-            return Err(RasterError::UnfetchedPointer);
-        }
-        reader.rewind().map_err(RasterError::Io)?;
-
+    fn from_reader(reader: R, spec: &RasterSpec) -> Result<Self, RasterError> {
         // The default Limits stand, per ADR 0003: the registry raster's 86 KB strip offsets and 173 KB
         // strips sit far inside them, so unlimited would only widen what a malformed header can ask for.
         let mut decoder = decoded(Decoder::new(reader))?;
@@ -1036,7 +1028,7 @@ mod tests {
         NodataMissing,
         MissingTag,
         MissingGeoKey,
-        UnfetchedPointer,
+        Absent,
         Io,
         Decode,
     }
@@ -1057,7 +1049,7 @@ mod tests {
         Kind::NodataMissing,
         Kind::MissingTag,
         Kind::MissingGeoKey,
-        Kind::UnfetchedPointer,
+        Kind::Absent,
         Kind::Io,
         Kind::Decode,
     ];
@@ -1079,7 +1071,7 @@ mod tests {
             RasterError::NodataMissing { .. } => Kind::NodataMissing,
             RasterError::MissingTag { .. } => Kind::MissingTag,
             RasterError::MissingGeoKey { .. } => Kind::MissingGeoKey,
-            RasterError::UnfetchedPointer => Kind::UnfetchedPointer,
+            RasterError::Absent { .. } => Kind::Absent,
             RasterError::Io(_) => Kind::Io,
             RasterError::Decode(_) => Kind::Decode,
         }
@@ -1273,31 +1265,28 @@ mod tests {
         ]
     }
 
-    // A pointer, a missing file and a file that is not a TIFF: the three failures that are not the
-    // raster disagreeing with the caller.
-    fn pointer_bytes() -> Vec<u8> {
-        "version https://git-lfs.github.com/spec/v1\n\
-         oid sha256:956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d\n\
-         size 428522394\n"
-            .as_bytes()
-            .to_vec()
-    }
-
+    // A missing file, a path that cannot be walked, and a file that is not a TIFF: the three failures
+    // that are not the raster disagreeing with the caller.
     fn out_of_band_rejections() -> Vec<(&'static str, Kind, RasterError)> {
         let spec = spec_for(declared_grid(4, 3, -180.0));
         let directory = tempfile::tempdir().expect("a temporary directory");
+        let file = directory.path().join("not-a-directory");
+        std::fs::write(&file, b"").expect("writing an empty file");
         vec![
             (
-                "an unfetched pointer",
-                Kind::UnfetchedPointer,
-                GeoTiffSource::from_reader(Cursor::new(pointer_bytes()), &spec)
-                    .expect_err("a pointer is not a raster"),
-            ),
-            (
                 "a file that is not there",
-                Kind::Io,
+                Kind::Absent,
                 GeoTiffSource::open(directory.path().join("absent.tif"), &spec)
                     .expect_err("an absent file cannot be read"),
+            ),
+            (
+                // Only NotFound becomes `Absent`, so this is what keeps the two distinguishable: a
+                // path routed through a regular file cannot be walked, which is a different failure
+                // from a file that is not there and `mise run data:get` is no answer to it.
+                "a path with a file where a directory belongs",
+                Kind::Io,
+                GeoTiffSource::open(file.join("gpw.tif"), &spec)
+                    .expect_err("a path through a regular file cannot be walked"),
             ),
             (
                 // The variant exists so a decoder failure is not mistaken for a rejection, which is only
@@ -1347,26 +1336,6 @@ mod tests {
                 "{expected:?} is a rejection no test above produces"
             );
         }
-    }
-
-    #[test]
-    fn an_unfetched_pointer_names_the_task_that_fetches_it() {
-        // The shape `git lfs` leaves in a clone that skipped the objects, which is every clone by
-        // default: valid text, and an invalid TIFF that a decoder would report as a format error.
-        let directory = tempfile::tempdir().expect("a temporary directory");
-        let path = directory.path().join("gpw.tif");
-        std::fs::write(
-            &path,
-            "version https://git-lfs.github.com/spec/v1\n\
-             oid sha256:956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d\n\
-             size 428522394\n",
-        )
-        .expect("writing a pointer-shaped file");
-
-        let error = GeoTiffSource::open(&path, &spec_for(declared_grid(4, 3, -180.0)))
-            .expect_err("a pointer is not a raster");
-        assert!(matches!(error, RasterError::UnfetchedPointer));
-        assert!(error.to_string().contains("mise run data:pull"));
     }
 
     #[test]
