@@ -100,6 +100,41 @@ A figure the body needs and no row holds is a finding, not something to measure 
 measure it into [`data/registry.toml`](data/registry.toml) where a machine reads it, or into
 [`data/README.md`](data/README.md) where a person does, then quote it.
 
+### Verifying a published dataset
+
+`mise run data:get` verifies what it fetches against the registry, so this is not that. It is the other
+route: obtaining an **independent** copy from the publisher, which is what makes the recorded `sha256`
+something more than a record of one download. Nobody needs it to work on this repository; someone
+checking that a republished asset is what it claims does.
+
+For the population raster it needs a free [NASA Earthdata Login][urs-new], because the archive is
+behind URS OAuth and answers an anonymous request with a 401 and a redirect rather than the file. A
+browser download from the [dataset's granules in Earthdata Search][gpw-search] is simplest — pick the
+2020, 30 arc-second GeoTIFF granule. For `curl` or `wget`, NASA documents the [cookie and netrc
+setup][urs-curl] the redirect needs.
+
+The granule is a ~405 MB zip. Extract just the raster and rename it to what the registry expects:
+
+```sh
+unzip -j <granule>.zip '*.tif' -d data/population/
+mv data/population/gpw_v4_population_count_*_2020_30_sec.tif \
+   data/population/population-count-2020-30arcsec.tif
+shasum -a 256 data/population/population-count-2020-30arcsec.tif
+```
+
+The zip carries one `.tif` per year, so the glob is what selects 2020 rather than an assumption about
+the name inside.
+
+**Check the last line against the `sha256` in [`data/registry.toml`](data/registry.toml)**, which holds
+it and the `bytes` beside it. A match means the copy every figure was measured from is the copy the
+archive serves. A mismatch is a finding rather than a broken download: it means the two differ, and the
+registry — measured from ours — is what would then need re-measuring. Say so rather than working around
+it. [`data/README.md`](data/README.md) is where the provenance that identifies the dataset lives.
+
+[gpw-search]: https://search.earthdata.nasa.gov/search/granules?p=C3540909447-ESDIS
+[urs-curl]: https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget
+[urs-new]: https://urs.earthdata.nasa.gov/users/new
+
 ## Sending a change
 
 - Conventional Commits, commitizen's default types. The PR title follows the same format; the
