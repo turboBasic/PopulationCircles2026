@@ -175,6 +175,13 @@ mise run setup                          # pins lfs.fetchexclude=* in .git/config
 Then, when the data is actually wanted:
 
 ```sh
+mise run data:get       # fetch every registered dataset not already here, and verify it
 mise run data:pull      # git lfs pull --include='*.tif' --exclude=''
 mise run data:status    # size and whether each object is present or pointer-only
 ```
+
+`data:get` is the one that needs no access to this repository's LFS objects: it reads
+[`registry.toml`](registry.toml), checks each file against the `sha256` recorded there **before**
+putting it in place, and downloads nothing that is already present and correct. A failed download
+leaves nothing behind. On success it prints the attribution each licence requires, which is the moment
+a user acquires the obligation.

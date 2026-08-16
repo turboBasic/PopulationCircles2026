@@ -281,6 +281,14 @@ depends = ["lint", "typecheck", "test"]
 description = "Compile both release legs on demand, macOS included, publishing nothing"
 run = "uv run release-smoke"
 
+# Not in `lint`, `test` or `ci`, and no later change can put it there: it reaches the network, and CI
+# deliberately holds pointers rather than data. It is also the one task a fresh clone runs before anything
+# else works, which is why its output names the attribution each licence requires — that is the moment a
+# user acquires the obligation.
+[tasks."data:get"]
+description = "Fetch every registered dataset not already present, verifying before it is placed"
+run = "uv run fetch-data"
+
 [tasks."data:pull"]
 description = "Fetch the Git LFS raster data that a normal clone deliberately skips"
 run = "git lfs pull --include='*.tif' --exclude=''"

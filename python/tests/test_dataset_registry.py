@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from population_circles.dataset_registry import (
     REGISTRY,
+    REPO_ROOT,
     BoundaryVector,
     PopulationRaster,
     load,
@@ -52,7 +53,7 @@ def test_a_committed_row_describes_the_file_on_disk() -> None:
     committed = [d for d in load().datasets.values() if d.fetch_url is None]
     assert committed
     for dataset in committed:
-        content = dataset.file.read_bytes()
+        content = dataset.file(REPO_ROOT).read_bytes()
         assert len(content) == dataset.bytes
         assert hashlib.sha256(content).hexdigest() == dataset.sha256
 
@@ -65,7 +66,7 @@ def test_a_fetched_row_describes_the_file_once_it_has_been_fetched() -> None:
     fetched = [d for d in load().datasets.values() if d.fetch_url is not None]
     assert fetched
     for dataset in fetched:
-        content = dataset.file.read_bytes()
+        content = dataset.file(REPO_ROOT).read_bytes()
         assert len(content) == dataset.bytes
         assert hashlib.sha256(content).hexdigest() == dataset.sha256
 

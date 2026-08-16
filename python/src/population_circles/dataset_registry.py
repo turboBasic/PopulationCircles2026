@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # Resolved from this file's own location, the same way `render_map.py` reaches the committed
 # basemap and for the same reason — the project is installed editable, so the checkout is beside
 # the package. FU-20 covers both of these together.
-REGISTRY = Path(__file__).resolve().parents[3] / "data" / "registry.toml"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+REGISTRY = REPO_ROOT / "data" / "registry.toml"
 
 # `extra="forbid"` where `circle_document.py` uses `extra="ignore"`, and the difference is which
 # side of a boundary the producer sits on. That file consumes a format Rust writes and grows
@@ -33,9 +34,10 @@ class _Dataset(BaseModel):
     # Absent for a dataset carried in the repository rather than fetched.
     fetch_url: str | None = None
 
-    @property
-    def file(self) -> Path:
-        return REGISTRY.parent.parent / self.path
+    # Takes the root rather than closing over `REPO_ROOT`: `path` is repository-relative, and a
+    # registry parsed from text that came from somewhere else must not resolve into this checkout.
+    def file(self, root: Path) -> Path:
+        return root / self.path
 
 
 class PopulationRaster(_Dataset):
