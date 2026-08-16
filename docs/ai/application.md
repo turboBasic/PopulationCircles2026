@@ -193,7 +193,7 @@ holds how those tests are organised.
 - **Determinism.** Same raster and same parameters give the same answer, tie-breaks included. Order
   the candidates rather than relying on iteration order, and break ties on a stated rule.
 - **Nodata.** Negative or sentinel cells are zero population, converted once at ingest so that no
-  later stage has to know a sentinel from a count. `data/README.md` records each dataset's value.
+  later stage has to know a sentinel from a count. `data/registry.toml` holds each dataset's value.
 - **Precision.** Populations sum to ~8 × 10⁹ over ~9 × 10⁸ cells; f64 throughout the summation table.
   Narrowing the element type is not the way out of the table's size — that size is a stated cost of
   the approach — and needs a documented error analysis first.
