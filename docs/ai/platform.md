@@ -224,8 +224,10 @@ milestone's epic and its body describes what the milestone contains — an epic 
 to contain is how a milestone acquires a second theme and twice the size without anyone deciding to. A
 sub-issue is one deliverable: its `## Goal` is the story, its `## Done when` the acceptance criteria.
 
-Every issue carries an area label, a `type:` and a `size:`. The types are `feature`, `enabler`, `debt` and
-`decision`; the sizes are `S`, `M` and `L`, read as about half a day, one to two days, three to five.
+Every issue carries an area label, a `type:` and a `size:`. The types are `feature`, `enabler`, `debt`,
+`bug` and `decision`; the sizes are `S`, `M` and `L`, read as about half a day, one to two days, three to
+five. An epic is the exception and carries `roadmap` alone: it is the container the sizes are balanced
+inside, so an area and a size on it are a sum of its children rather than a fact about it.
 **The sizes exist to balance milestones against each other and for nothing else.** They are bands, and a
 date derived from summing them is arithmetic on guesses.
 
