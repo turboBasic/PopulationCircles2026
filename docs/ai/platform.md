@@ -51,7 +51,8 @@ than carried in the repository, a small one is committed.
 nodata value, byte length, checksum, fetch URL, licence and the attribution a figure owes — it is what
 `mise run data:get` and the renderer read. [`data/README.md`](../../data/README.md) is the same datasets
 described for a person, and owns the provenance that identifies each one, plus the mechanics of fetching
-them. A dataset gets its row in both, in the same change that adds it.
+them ([Getting it](../../data/README.md#getting-it)). A dataset gets its row in both, in the same change
+that adds it.
 
 The judgment around that mechanism:
 

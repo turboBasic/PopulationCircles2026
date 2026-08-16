@@ -62,11 +62,11 @@ circle, as a country is the spec error
 [the application doc](docs/ai/application.md#what-this-program-does) names.
 
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
-Building needs the raster, so `mise run data:pull` first — or, without access to this repository's LFS
-objects, the [`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1),
-which needs no account and carries the checksum to verify
-what you got. [Obtaining it](data/README.md#obtaining-it) is the slower route, and the one that gets an
-independent copy.
+Building needs the raster, so `mise run data:get` first: it fetches from the
+[`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1), which needs
+no account, and verifies what it got against the registry's checksum before placing it. Getting an
+independent copy from the publisher instead is the slower route, and is
+[`CONTRIBUTING.md`](CONTRIBUTING.md#verifying-a-published-dataset).
 
 ## Circles
 
@@ -159,7 +159,7 @@ mise run render -- --input out/most-populous.json --output out/globe.png --proje
 
 `--projection` takes `plate-carree`, which is what the viral maps used, or `orthographic` centred on the
 circle. Every figure carries the CC BY citation the raster's licence requires, and a test fails if that
-wording drifts from [`data/README.md`](data/README.md#licence-and-attribution).
+wording drifts from [`data/README.md`](data/README.md#population-count-2020-30arcsec).
 
 **The circle is a spherical cap projected by PROJ, not a ring of coordinates.** So one crossing the
 antimeridian comes out in two pieces at either edge of the map, and one covering a pole closes across the
