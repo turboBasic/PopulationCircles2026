@@ -18,9 +18,9 @@ act on this without asking the author what was meant?
 
 1. **Start from the issue, not from a blank plan.** The issue and its thread are the decomposition; this
    file is that decomposition made executable, and the two are not allowed to disagree about what the
-   work is. Read the whole thread and the roadmap issue above it first — platform.md "Issues" says why
-   the body alone is not the requirement. Where the plan has to depart from the issue, the departure is a
-   comment on the issue before it is a task here.
+   work is. Read the whole thread and the roadmap issue above it first —
+   `docs/ai/platform.md` "Issues" says why the body alone is not the requirement. Where the plan has to
+   depart from the issue, the departure is a comment on the issue before it is a task here.
 2. **Measure the tree before drafting.** Read the files the work will touch, run the gates, get the
    counts and the values. Cite what you found: line numbers, measured figures, what a command actually
    printed. A task naming what it will change is executable; a task naming a goal is a wish, and the
@@ -77,5 +77,5 @@ act on this without asking the author what was meant?
 - **The sections are platform.md's, not yours to vary.** Adding one, renaming one, or copying a filled-in
   template into this file are all the same defect: a second owner for a fact that already has one.
 - **A close-out task ticks the issue's checkboxes; it does not close the issue.** Leave the close itself
-  to the PR's `Closes #N`, per platform.md "Git" — closing it here is exactly the ambiguity that let #2
+  to the PR's `Closes #N`, per `docs/ai/platform.md` "Git" — closing it here is the ambiguity that let #2
   get closed by hand hours before the PR carrying its work existed.

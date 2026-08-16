@@ -41,9 +41,9 @@ which solved the same problem in C++ and produced the published maps.
 - Third-party files vendored upstream carry their own permissive licences and are irrelevant here —
   pull such a dependency from its own origin through Cargo or uv, never from that repo.
 
-A port cannot be un-published, so this is non-negotiable by the test in `docs/ai-instructions.md`
-"Non-negotiables": a request to lift upstream code gets the protocol that section sets out, not a
-quiet workaround.
+A port cannot be un-published, so this is non-negotiable by the test in
+`docs/ai-instructions.md` "Non-negotiables": a request to lift upstream code gets the protocol that
+section sets out, not a quiet workaround.
 
 ## Approach
 

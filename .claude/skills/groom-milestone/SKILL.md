@@ -5,9 +5,9 @@ description: Reshape a milestone and the issues in it as product owner - derive 
 
 # Groom a milestone
 
-`docs/ai/platform.md` "Issues" and "Milestones, epics and labels" own how an issue is worked and what a
-milestone is. This skill owns the opposite direction: concluding that the issues in hand are the wrong
-issues, and changing them.
+`docs/ai/platform.md` "Issues" owns how an issue is worked, and `docs/ai/platform.md`
+"Milestones, epics and labels" what a milestone is. This skill owns the opposite direction: concluding
+that the issues in hand are the wrong issues, and changing them.
 
 **An issue body is an opening position, not a specification.** Bodies here were drafted quickly and
 approved in bulk, and one may describe work nobody needs. Reading them as settled requirements is how a
@@ -57,8 +57,8 @@ platform.md says the comments are where scope was cut, a figure settled or a ste
 is this skill's: **a comment narrating backlog mechanics is noise, and future agents read it as context.**
 
 - **Delete:** milestone moves, "the link was dead", "renamed to", any before-and-after account of how an
-  issue changed. `git log` and the body's current state own that, per `docs/ai-instructions.md`
-  "Working style".
+  issue changed. `git log` and the body's current state own that, per
+  `docs/ai-instructions.md` "Working style".
 - **Keep:** a scope cut, a measured figure, a dependency order, a draft artefact, a ruling and what lost
   to it.
 - **Trim rather than delete** where a real kernel sits wrapped in that narration.
@@ -91,4 +91,5 @@ carrying a script around for it.
   comment is now noise itself.
 - **Repoint the dependency graph out of a closed issue** before finishing. An issue closed as superseded
   never closes as done, so a dependency on it blocks its successors for good — and the graph is where that
-  hides, since platform.md "Relationships are structural, never prose" keeps it out of the bodies.
+  hides, since `docs/ai/platform.md` "Relationships are structural, never prose" keeps it out of the
+  bodies.

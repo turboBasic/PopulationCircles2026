@@ -20,8 +20,9 @@ those levels cannot express, and loosening one to clear an error is a non-negoti
 - **Errors:** a concrete error enum per crate boundary (`thiserror` when it earns its place),
   `anyhow`-style context only at the binary edge. Never `panic!` for an expected failure.
 - **Numeric casts are the sharpest edge in this codebase.** Make every conversion explicit and state
-  in a comment why it is safe when that is not obvious; [`application.md`](application.md)
-  "Correctness invariants" owns what "safe" means for the summation table and the geodesy.
+  in a comment why it is safe when that is not obvious;
+  [`application.md`](application.md) "Correctness invariants" owns what "safe" means for the summation
+  table and the geodesy.
 - Prefer iterators and slices over index arithmetic. Where index arithmetic is the clearer
   expression of a raster traversal, keep it local and named.
 - No `mod.rs`: a module is `foo.rs` plus `foo/`.
