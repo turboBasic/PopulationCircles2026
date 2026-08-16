@@ -288,6 +288,41 @@ Identifiers are flat, sequential and never reused.
   `guard-direct-push` runs `mise run ci` before a direct push, but it is a clone-side guardrail — a second
   admin has to install it, and `--no-verify` skips it.
 
+### FU-22 - The registry-row hook does not tell a published row from a committed one
+
+- **Status** — `dormant`.
+- **Condition** — a row in `data/registry.toml` carrying a `fetch_url` names a path that `git ls-files`
+  also names. `geo-data-registered` asks only whether a row exists, so a published dataset committed to the
+  tree satisfies it: the row it needs is the row it has. ADR 0009's discriminator is the `fetch_url` —
+  present means fetched and never carried, absent means a committed blob — and nothing checks the first
+  half.
+
+  `check-added-large-files --enforce-all` bounds the damage at 500 KB on size alone, which is why this is
+  an entry and not a task: the raster it would matter most for is 428 MB and refused already. What is
+  unguarded is a *small* published dataset, and there is none today —
+  `rg -c '^fetch_url' data/registry.toml` is 1, and that row's path is gitignored and untracked.
+- **Fix** — the check reads the registry rather than grepping it, which puts it in
+  `python/src/repo_tools/` beside `lint_docs.py` where the registry is already parsed, and asserts both
+  halves: every file matching the extension set has a row, and no file whose row carries a `fetch_url` is
+  tracked. That also retires the grep's two accepted costs — a match inside a comment, and the coupling to
+  taplo's `path = "…"` spelling.
+
+### FU-23 - The busiest pointer hub in the tree is outside the pointer gate
+
+- **Status** — `dormant`.
+- **Condition** — a repo-relative pointer or a quoted heading in `data/README.md` resolves to nothing.
+  `lint_docs.py`'s `scope_files()` does not sweep that file, and `docs/ai-instructions.md` "Layering" names
+  it a licensed restater of what `data/registry.toml` and the instruction layer own — so it carries
+  pointers in both directions and none of them is checked.
+
+  Measured on the tree that rewrote it: two pointers went stale in that rewrite and both were found by
+  hand rather than by the gate — the registry's own header citing a `Provenance` heading that had gone, and
+  this file's only route to the relocated verification walkthrough written as prose rather than a link.
+- **Fix** — `scope_files()` includes `data/README.md`. It is a one-line change to a set, and the reason it
+  is an entry rather than a task is that the gate then reads a file whose licence to restate is what makes
+  some of its pointers legitimately loose; whether every existing pointer passes has to be measured before
+  the set grows, not assumed.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
