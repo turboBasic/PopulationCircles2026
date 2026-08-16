@@ -69,21 +69,22 @@ The tag and its assets:
    registry row are one string. Attach the `.sha256` beside it.
 
 The body is read by someone who has never seen this repository, and the asset's name is this project's
-own description rather than the publisher's, so it lets them assume nothing. Every item below already
-exists in [`data/README.md`](data/README.md) — the body quotes it and composes none of it:
+own description rather than the publisher's, so it lets them assume nothing. Each item names where its
+text already exists, and a published dataset's row carries the two sub-headings items 3 to 6 cite:
 
-1. **What the file is** — format, extent, pixel type and nodata sentinel, from the dataset's row under
+1. **What the file is** — extent, pixel type and nodata sentinel, from the dataset's row under
    [Registry](data/README.md#registry).
 2. **Its grid** — dimensions and cell size, from the same row.
-3. **Which variant**, where a dataset is published in several that differ in values. The asset's name
-   will not carry it and the numbers change, so the body is the only place a fetcher can learn it.
-4. **Provenance** — the published name, the publisher and the DOI or tag identifying it, from the row's
-   Provenance heading.
-5. **The licence** and its URL, from the row's Licence and attribution heading.
+3. **Which variant**, where a dataset is published in several that differ in values — the paragraph
+   naming the variant and the figure that distinguishes it, under
+   [`data/README.md`](data/README.md) "Provenance". The asset's name will not carry it and the numbers
+   change, so the body is the only place a fetcher can learn it.
+4. **Provenance** — the format, the published name, the publisher and the DOI or tag identifying it,
+   from that same heading.
+5. **The licence** and its URL, from [`data/README.md`](data/README.md) "Licence and attribution".
 6. **The citation** verbatim, where the licence requires one — that heading again. A fetcher acquires
    the obligation with the bytes, so it travels with them.
-7. **The `SHA-256`**, from the row, so the download can be verified by hand and not only by
-   `mise run data:get`.
+7. **The `SHA-256`**, from the row, so the download can be verified by hand.
 
 A figure the body needs and `data/README.md` does not hold is a finding, not something to measure into
 the release notes: measure it into the row, then quote the row.
