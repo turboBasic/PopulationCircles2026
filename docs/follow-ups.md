@@ -236,22 +236,40 @@ Identifiers are flat, sequential and never reused.
   [`data/README.md`](../data/README.md) a line saying so; the second keeps one copy and moves the choice
   to the caller, which is the shape the rest of the renderer already takes.
 
-### FU-21 - The bypass that lets the owner push to main is a role, not a person
+### FU-21 - The direct push to main is a concession to an early, solo repository
 
-- **Status** — `dormant` (2026-08-16): the owner is the only account with admin, so the role and the person
-  are the same set of one.
-- **Condition** — a second account holds admin on this repository:
-  `gh api repos/:owner/:repo/collaborators --jq '[.[] | select(.permissions.admin) | .login]'` returning
-  more than one login. `main`'s ruleset carries one bypass actor, the `Repository admin` role in mode
-  `always`, so that account may push straight to `main` and may merge a red PR — neither of which anyone
-  intended to grant by adding a collaborator. Write and maintain do not qualify, which is what makes the
-  grant of admin the event rather than the invitation.
-- **Fix** — decide between two, and the choice is the point rather than a detail: drop the bypass and take
-  the pull-request loop back for everyone, or keep it and accept that admin now means it. There is no
-  narrower setting to reach for — GitHub's bypass modes are `always` or pull-requests-only, and
-  `required_status_checks` takes no path conditions, so neither "pushes only" nor "documentation only" is
-  expressible. `guard-direct-push` in `.pre-commit-config.yaml` runs `mise run ci` before a direct push,
-  but it is a clone-side guardrail: a second admin has to install it, and `--no-verify` skips it.
+- **Status** — `dormant` (2026-08-16): one account holds admin, and the open work is documentation and
+  backlog shaping, which is the state the concession was granted for.
+
+  **It is meant to be reverted, not inherited.** `main`'s ruleset carries one bypass actor, the
+  `Repository admin` role in mode `always`, so the owner may push straight to `main` while everyone else
+  still branches. That was taken deliberately, to spare a one-person repository a branch, a pull request, a
+  merge and a cleanup for every comment and every documentation edit. It buys nothing once the repository
+  is not that, and the ordinary state — every change to `main` arriving through a reviewed pull request
+  with three green checks — is the safe one. This entry exists so the concession expires on a condition
+  rather than on somebody noticing.
+- **Condition** — whichever of these comes first.
+  - **The repository stops being one person's.** A second account holds admin:
+    `gh api repos/:owner/:repo/collaborators --jq '[.[] | select(.permissions.admin) | .login]'` returning
+    more than one login. Write and maintain do not qualify, which is what makes the grant of admin the
+    event rather than the invitation — and what makes this fire by surprise, since nobody adding a
+    collaborator intends to hand out a red-PR merge.
+  - **The repository stops being early.** Milestone `v0.4: usable and distributable` closes:
+    `gh api repos/:owner/:repo/milestones --jq '.[] | select(.title | startswith("v0.4")) | .state'`
+    reporting `closed`. That milestone is where a distribution channel and signed release provenance land,
+    so it is the point at which strangers install what `main` holds, and unreviewed commits on `main` stop
+    being a private matter. The milestone is named rather than a date because a date would be a guess.
+- **Fix** — harden back: drop the bypass actor from the ruleset, delete the `guard-direct-push` hook and
+  `pre-push` from `default_install_hook_types`, and restore what the three documents said before — that a
+  red check blocks the merge for everyone including the owner, that `main` takes no direct push, and
+  `CONTRIBUTING.md`'s unqualified "do not push to `main` directly". Keeping the concession instead is a
+  decision that has to be argued for on the tree as it is then, not the default that happens by silence.
+
+  There is no narrower setting to reach for, which is why the answer is revert rather than tighten:
+  GitHub's bypass modes are `always` or pull-requests-only, and `required_status_checks` takes no path
+  conditions, so neither "pushes only" nor "documentation only" was ever expressible.
+  `guard-direct-push` runs `mise run ci` before a direct push, but it is a clone-side guardrail — a second
+  admin has to install it, and `--no-verify` skips it.
 
 ## Closed and retired
 
