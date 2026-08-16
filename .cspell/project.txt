@@ -142,18 +142,14 @@ JRC
 NASA
 Palisades
 SEDAC
-unwpp
 WPP
 
 # --- Config keys and CLI ---
 addopts
 codegen
-fetchexclude
-lfsconfig
 nextest
 refspec
 RUSTDOCFLAGS
-smudge
 testpaths
 typecheck
 xattr
