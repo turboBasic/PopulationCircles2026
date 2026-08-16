@@ -20,6 +20,9 @@ Prose that cannot meet that bar is not a follow-up and does not belong here.
 Closed and retired entries stay in the register, so a reader can tell "never fired" from "cannot
 fire". They sit under their own heading below the live ones, because a sweep and a reader both want the
 `dormant` and `due` entries and neither should page through the discharged ones to reach them.
+A discharged entry's Condition and Fix record what was checked against the tree they ran on, so a later
+rename corrects the live entries and leaves these: editing one to satisfy a text sweep would falsify a
+measurement.
 
 An entry that goes `due` gets an issue in the next milestone, and the Status names it. Where the Fix needs
 something nobody has — a paid identity, an account, hardware — it stays here and out of a milestone, and the
