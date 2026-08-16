@@ -51,16 +51,21 @@ impl GeoTiffSource<BufReader<File>> {
     /// declares.
     pub fn open(path: impl AsRef<Path>, spec: &RasterSpec) -> Result<Self, RasterError> {
         let path = path.as_ref();
-        let file = File::open(path).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                RasterError::Absent {
-                    path: path.to_path_buf(),
-                }
-            } else {
-                RasterError::Io(error)
-            }
-        })?;
+        let file = File::open(path).map_err(|error| error_opening(path, error))?;
         Self::from_reader(BufReader::new(file), spec)
+    }
+}
+
+/// The only place a missing raster is told from an unreadable one, so `Absent` means precisely
+/// `NotFound` and every other I/O failure keeps `Io` — a free function rather than a closure so a test
+/// can pin that rule without a filesystem that has to be coaxed into the failure.
+fn error_opening(path: &Path, error: std::io::Error) -> RasterError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        RasterError::Absent {
+            path: path.to_path_buf(),
+        }
+    } else {
+        RasterError::Io(error)
     }
 }
 
@@ -1265,13 +1270,13 @@ mod tests {
         ]
     }
 
-    // A missing file, a path that cannot be walked, and a file that is not a TIFF: the three failures
-    // that are not the raster disagreeing with the caller.
+    // A missing file, an unreadable one, and a file that is not a TIFF: the three failures that are not
+    // the raster disagreeing with the caller. The first goes through `open` so one row proves the
+    // wiring; the second is handed to the classifier directly, because what it pins is the rule that
+    // only NotFound is `Absent` rather than one operating system's way of producing something else.
     fn out_of_band_rejections() -> Vec<(&'static str, Kind, RasterError)> {
         let spec = spec_for(declared_grid(4, 3, -180.0));
         let directory = tempfile::tempdir().expect("a temporary directory");
-        let file = directory.path().join("not-a-directory");
-        std::fs::write(&file, b"").expect("writing an empty file");
         vec![
             (
                 "a file that is not there",
@@ -1280,13 +1285,12 @@ mod tests {
                     .expect_err("an absent file cannot be read"),
             ),
             (
-                // Only NotFound becomes `Absent`, so this is what keeps the two distinguishable: a
-                // path routed through a regular file cannot be walked, which is a different failure
-                // from a file that is not there and `mise run data:get` is no answer to it.
-                "a path with a file where a directory belongs",
+                "a file that cannot be read",
                 Kind::Io,
-                GeoTiffSource::open(file.join("gpw.tif"), &spec)
-                    .expect_err("a path through a regular file cannot be walked"),
+                error_opening(
+                    Path::new("gpw.tif"),
+                    std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+                ),
             ),
             (
                 // The variant exists so a decoder failure is not mistaken for a rejection, which is only

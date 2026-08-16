@@ -140,7 +140,6 @@ fn exit_code_for_raster_error(error: &RasterError) -> u8 {
         | RasterError::MissingGeoKey { .. } => EXIT_BAD_INPUT,
 
         RasterError::Absent { .. } => EXIT_MISSING_DATA,
-        RasterError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => EXIT_MISSING_DATA,
         RasterError::Io(_) | RasterError::Decode(_) => EXIT_FAILURE,
     }
 }
@@ -272,12 +271,6 @@ mod tests {
             exit_code_for_raster_error(&RasterError::Absent {
                 path: std::path::PathBuf::from("data/population/absent.tif")
             }),
-            EXIT_MISSING_DATA
-        );
-        assert_eq!(
-            exit_code_for_raster_error(&RasterError::Io(std::io::Error::from(
-                std::io::ErrorKind::NotFound
-            ))),
             EXIT_MISSING_DATA
         );
         assert_eq!(
