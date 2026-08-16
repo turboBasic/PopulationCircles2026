@@ -50,6 +50,14 @@ issue checkbox the closing task reaches.
    a tick standing where no commit does is the one state this loop cannot recover from.
 9. **Take the next unchecked task in the same phase and repeat from step 5.** At the phase boundary,
    stop: report the tasks that landed and name what the next phase holds. Do not roll into it.
+10. **Run the `architect-reviewer` agent over the phase's commits before reporting**, not per task —
+    per-task invocation multiplies the cost by the task count for a commit that is still amendable inside
+    its phase. Every task in the phase is committed and its box ticked by now, so a rejection cannot
+    reopen anything; what it obliges is one of three answers, and ticked boxes stay ticked because the
+    commit is the durable half. The three are a further commit inside this phase before it reports, a
+    task appended to the next phase, or an entry in `docs/follow-ups.md`. **The phase is not reported
+    complete until every finding has one of those or the owner overrides it** — an unanswered finding is
+    the one thing that makes the boundary a formality.
 
 ## Judgment
 
