@@ -110,11 +110,14 @@ names what is inside it.
    span, since the climb doubles and the radii between two probes were never measured
    ([ADR 0007](../decisions/0007-a-result-states-what-it-could-not-separate.md)).
 5. **Rendering.** Python, from the published document and nothing else, kept out of the Rust search
-   path entirely. Four modules in the `population_circles` package: `circle_document` is the boundary, turning a document
+   path entirely. Five modules in the `population_circles` package: `circle_document` is the boundary, turning a document
    into frozen pydantic models and refusing a schema version it does not know, a kind it cannot draw or
-   an earth model that is not a sphere; `circle_geometry` builds the cap and holds the one place a PROJ
-   definition is spelled; `map_frame` is what a figure is drawn *in* — the display projection, what it
-   can show, and the graticule; `render_map` is the figure and the only thing here that opens a file. A
+   an earth model that is not a sphere; `dataset_registry` is the second boundary, turning
+   `data/registry.toml` into the same shape and refusing a row whose key is not its file's stem, which is
+   where the attribution a figure owes is read from; `circle_geometry` builds the cap and holds the one
+   place a PROJ definition is spelled; `map_frame` is what a figure is drawn *in* — the display
+   projection, what it can show, and the graticule; `render_map` is the figure and the only one here that
+   writes anything. A
    circle is **an azimuthal-equidistant buffer handed to PROJ's polygon transform**, never a ring of
    latitudes and longitudes — the ring fills the complement at the antimeridian and the wrong hemisphere
    over a pole, measurably, which is why the buffer's own vertices and the polygon PROJ returns are two

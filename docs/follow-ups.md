@@ -221,20 +221,27 @@ Identifiers are flat, sequential and never reused.
   is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
   guesses at the difference is worse than the sweep reading the file.
 
-### FU-20 - The renderer resolves the committed basemap from its own source path
+### FU-20 - The renderer resolves committed data from its own source path
 
 - **Status** — `dormant` (2026-08-15): the project is installed editable, so `__file__` is in the
-  checkout and `data/boundaries/` is beside it. `COASTLINE` is `parents[3]` of
-  `python/src/population_circles/render_map.py`, which is the repository root for exactly as long as
-  that holds.
+  checkout and `data/` is beside it. The path is `parents[3]` of a module under
+  `python/src/population_circles/`, which is the repository root for exactly as long as that holds.
+
+  **A second resolution joined the first** (2026-08-16, issue #57). `dataset_registry.py`'s `REGISTRY`
+  reaches `data/registry.toml` the same way `render_map.py`'s `COASTLINE` reaches the basemap, so the
+  count this entry sweeps for is two and the failure is unchanged. The registry is the worse of the
+  two: it is read for the attribution a figure owes, so under a wheel a figure would fail before it
+  could credit anybody.
 - **Condition** — anything installs this project other than editable from a checkout: a `uv tool
-  install`, a `uv publish`, or a workflow running an entry point out of a built wheel. Then `COASTLINE`
-  resolves under `site-packages`, where no `data/` sits beside the package, and `basemap()` raises
-  `FileNotFoundError` at draw time rather than at import.
-- **Fix** — ship the basemap as package data, or take its path as an argument defaulting to the registry
-  location. The first duplicates a committed file into the wheel and owes
+  install`, a `uv publish`, or a workflow running an entry point out of a built wheel. Then both paths
+  resolve under `site-packages`, where no `data/` sits beside the package, and each raises
+  `FileNotFoundError` at read time rather than at import. The sweep is
+  `rg -n 'parents\[3\]' python/src/population_circles/`.
+- **Fix** — ship the two files as package data, or take each path as an argument defaulting to the
+  current location. The first duplicates committed files into the wheel and owes
   [`data/README.md`](../data/README.md) a line saying so; the second keeps one copy and moves the choice
-  to the caller, which is the shape the rest of the renderer already takes.
+  to the caller, which is the shape the rest of the renderer already takes. One fix covers both, and
+  splitting them would leave a figure half-resolvable.
 
 ### FU-21 - The direct push to main is a concession to an early, solo repository
 
