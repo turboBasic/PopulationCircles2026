@@ -17,6 +17,8 @@
 __pycache__/
 *.py[cod]
 .pyright/
+# The wheel and sdist `uv build` writes, now that there is a package to build
+/dist/
 
 # Generated data products: summation tables, rendered maps, profiling output
 *.bin
@@ -30,6 +32,6 @@ perf.data.old
 tmp/
 # Per-developer permission allowlist. Committed here rather than left to a contributor's global
 # excludes, so that `git check-ignore` gives the same answer in a clone as it does on the machine
-# that created the file — which is what scripts/lint_docs.py relies on to tell a per-developer file
+# that created the file — which is what the lint-docs entry point relies on to tell a per-developer file
 # from a broken pointer.
 .claude/settings.local.json

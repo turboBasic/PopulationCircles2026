@@ -1,9 +1,9 @@
 import re
 from pathlib import Path
 
-import release_smoke as rs
+from repo_tools import release_smoke as rs
 
-WORKFLOWS = Path(__file__).resolve().parent.parent / ".github/workflows"
+WORKFLOWS = Path(__file__).resolve().parents[2] / ".github/workflows"
 
 
 def workflow(name: str) -> str:

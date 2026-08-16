@@ -1,13 +1,14 @@
 from typing import Any
 
 import pytest
-from circle_document import (
+from pydantic import ValidationError
+
+from population_circles.circle_document import (
     CIRCLE_KINDS,
     SCHEMA_VERSION,
     UnsupportedDocumentError,
     circle_of,
 )
-from pydantic import ValidationError
 
 # Every fixture below is a dictionary, never a file: the renderer's input is one JSON path and its
 # tests open nothing at all, which is what keeps them runnable on a clone with no LFS content. The

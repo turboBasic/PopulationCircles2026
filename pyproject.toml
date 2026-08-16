@@ -1,6 +1,3 @@
-# Python is present for data preparation, map rendering and standalone tooling scripts. There is
-# no importable package yet, so this is a virtual project: uv manages the environment and the dev
-# tooling without building anything.
 [project]
 name = "population-circles-tools"
 version = "0.0.0"
@@ -8,8 +5,23 @@ description = "Data preparation and map rendering tooling for PopulationCircles2
 requires-python = ">=3.14"
 dependencies = []
 
-[tool.uv]
-package = false
+# The three repository tools reach their subjects through REPO_ROOT rather than an argument, so an
+# entry point is what lets a hook and a mise task call one without naming where its file sits.
+[project.scripts]
+lint-docs = "repo_tools.lint_docs:main"
+lint-version-bumps = "repo_tools.lint_version_bumps:main"
+release-smoke = "repo_tools.release_smoke:main"
+render-map = "population_circles.render_map:main"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+# Two packages in one project: uv_build takes `module-name` as a list, so both land in one wheel and
+# one editable install rather than each needing a project of its own.
+[tool.uv.build-backend]
+module-root = "python/src"
+module-name = ["population_circles", "repo_tools"]
 
 [dependency-groups]
 dev = [
@@ -27,6 +39,10 @@ line-length = 100
 target-version = "py314"
 # Beside cargo's target directory, which mise.toml sends here for the same reason.
 cache-dir = "build/ruff"
+# What INP001 reads to decide a directory is a root rather than a namespace package leaking. Naming
+# python/tests here is what makes that lint correct about a test directory with no __init__.py,
+# instead of it being silenced per-file.
+src = ["python/src", "python/tests"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -40,28 +56,26 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/*.py" = [
-  "T201",   # a lint script's output is stdout, not incidental debug printing
-  "INP001", # a standalone script, not part of a package
+"python/src/population_circles/render_map.py" = [
+  "T201", # the path a figure was written to is this command's output, not debug printing
 ]
-"tests/*.py" = [
-  "S101",   # assert is how pytest asserts
-  "INP001", # tests/ is pytest's testpaths, not a package
+"python/src/repo_tools/*.py" = [
+  "T201", # a lint script's findings are its output, not incidental debug printing
+]
+"python/tests/*.py" = [
+  "S101", # assert is how pytest asserts
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["population_circles"]
+known-first-party = ["population_circles", "repo_tools"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
-# tests/ imports the scripts/ modules directly, the same resolution pytest's `pythonpath` gives them.
-extraPaths = ["scripts"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"
 cache_dir = "build/pytest"
-testpaths = ["tests"]
-pythonpath = ["scripts"]
+testpaths = ["python/tests"]

@@ -1,11 +1,12 @@
 import math
 from dataclasses import dataclass
 
-from circle_document import Coordinate
 from pyproj import CRS, Transformer
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
+
+from population_circles.circle_document import Coordinate
 
 METRES_PER_KM = 1000.0
 

@@ -1,9 +1,17 @@
 import math
 
 import pytest
-from circle_document import Coordinate
-from circle_geometry import METRES_PER_KM, WORLD, cap, geographic, linestrings, polygons
-from map_frame import (
+
+from population_circles.circle_document import Coordinate
+from population_circles.circle_geometry import (
+    METRES_PER_KM,
+    WORLD,
+    cap,
+    geographic,
+    linestrings,
+    polygons,
+)
+from population_circles.map_frame import (
     GRATICULE_STEP_DEG,
     LIMB_SHAVE,
     ORTHOGRAPHIC,
