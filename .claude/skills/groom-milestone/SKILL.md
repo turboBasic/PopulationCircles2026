@@ -89,5 +89,6 @@ carrying a script around for it.
   issue's milestone does not move its parent link.
 - **Sweep for pointers to anything deleted.** A comment whose whole content was a link to a deleted
   comment is now noise itself.
-- **Repoint relationship lines out of a closed issue**, in bodies and in prose, before finishing. A
-  "Blocked by" naming an issue closed as superseded strands whoever reads it.
+- **Repoint the dependency graph out of a closed issue** before finishing. An issue closed as superseded
+  never closes as done, so a dependency on it blocks its successors for good — and the graph is where that
+  hides, since platform.md "Relationships are structural, never prose" keeps it out of the bodies.

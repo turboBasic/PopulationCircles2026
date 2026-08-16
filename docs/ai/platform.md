@@ -205,6 +205,18 @@ move — for a downstream discovery that is that issue, not the one in hand — 
 proposal is agreed. Quietly building something other than what the issue asks for is the failure this
 permission exists to make unnecessary, not the one it grants.
 
+### Relationships are structural, never prose
+
+**A relationship GitHub models is set through its API, not written into a body.** Containment is the
+sub-issue link, and blocking is the dependency —
+`gh api repos/:owner/:repo/issues/<n>/dependencies/blocked_by -F issue_id=<id>`, read back from either end
+with that path or `dependencies/blocking`. A `- Blocked by: #57` line under a `## Relationship` heading is
+the same fact in a second place, and the copy that rots: the panel updates when an issue closes, is
+renamed or is superseded, and the sentence does not.
+
+`- Relates to:` stays prose, because GitHub models nothing for it. That is the whole of what the heading
+is for, so a `## Relationship` section holding only blocking lines goes when they become links.
+
 ### Milestones, epics and labels
 
 A milestone is one release increment, and it holds exactly one roadmap issue's sub-issues. That issue is the
