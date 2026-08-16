@@ -35,7 +35,7 @@ job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` t
 | CRS | EPSG:4326 (WGS 84) |
 | Pixel type | Float32, LZW compressed |
 | Nodata | −3.40282306073709653e+38 (Float32, two ulps above −max) |
-| Size | 409 MiB |
+| Size | 428 465 215 bytes (409 MiB) |
 | SHA-256 | `956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d` |
 | Land cells | 222 669 928 of 933 120 000 (182 358 616 populated, 40 311 312 zero) |
 | World total | 7 757 982 599.32 persons |
