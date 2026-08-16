@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 import pytest
-from circle_document import circle_of
-from circle_geometry import HALF_TURN_DEG, POLE_LAT
-from map_frame import ORTHOGRAPHIC, PLATE_CARREE
-from render_map import CITATION, COASTLINE, basemap, main, render
 
-REGISTRY = Path(__file__).resolve().parent.parent / "data" / "README.md"
+from population_circles.circle_document import circle_of
+from population_circles.circle_geometry import HALF_TURN_DEG, POLE_LAT
+from population_circles.map_frame import ORTHOGRAPHIC, PLATE_CARREE
+from population_circles.render_map import CITATION, COASTLINE, basemap, main, render
+
+REGISTRY = Path(__file__).resolve().parents[2] / "data" / "README.md"
 
 CENTRE_LAT = 25.125
 CENTRE_LON = 79.708

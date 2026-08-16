@@ -1,8 +1,11 @@
 import math
 
 import pytest
-from circle_document import Coordinate
-from circle_geometry import (
+from pyproj import Geod
+from shapely.geometry.polygon import Polygon
+
+from population_circles.circle_document import Coordinate
+from population_circles.circle_geometry import (
     METRES_PER_KM,
     POLE_LAT,
     QUAD_SEGS,
@@ -13,8 +16,6 @@ from circle_geometry import (
     geographic,
     polygons,
 )
-from pyproj import Geod
-from shapely.geometry.polygon import Polygon
 
 EARTH_RADIUS_KM = 6371.0088
 

@@ -11,7 +11,7 @@ WORKFLOW = "release-smoke.yml"
 # One per leg of the build matrix `release-smoke.yml` calls. Pinned here rather than read back off
 # whatever the run happened to upload, because what this command exists to prove is that the macOS
 # leg produced something: a run whose matrix had lost that leg would otherwise come back green with
-# one artifact. tests/test_release_smoke.py holds these against the workflow's own matrix.
+# one artifact. python/tests/test_release_smoke.py holds these against the workflow's own matrix.
 ARTIFACTS = ("popcircles-aarch64-apple-darwin", "popcircles-x86_64-unknown-linux-gnu")
 
 UNEVENTFUL = frozenset({"success", "skipped"})

@@ -70,7 +70,7 @@ run = "cargo build --release --locked -p popcircles-cli"
 # are out. It is the one a person runs to get a figure at a path they chose.
 [tasks.render]
 description = "Render a map from a popcircles JSON document"
-run = "uv run python scripts/render_map.py"
+run = "uv run render-map"
 
 [tasks.fmt]
 description = "Format Rust, Python and TOML"

@@ -149,9 +149,10 @@ Identifiers are flat, sequential and never reused.
   arrived and the entry held" from "nobody looked".
 - **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row **whose licence
   requires attribution**. The sweep is the count of registry entries stating such a licence against the
-  number of citations `scripts/render_map.py` holds: one and one today. A second such dataset makes
-  `CITATION` the citation of whichever raster happens to have been first, and a figure rendered from the
-  other one then credits the wrong source while `tests/test_render_map.py` still passes — the test asserts
+  number of citations `python/src/population_circles/render_map.py` holds: one and one today. A second
+  such dataset makes `CITATION` the citation of whichever raster happens to have been first, and a figure
+  rendered from the other one then credits the wrong source while
+  `python/tests/test_render_map.py` still passes — the test asserts
   the constant appears in the registry, which stays true of the wrong entry.
 - **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
   choose between them. That second half is the reason this is an entry and not a task: `report`'s
@@ -191,8 +192,8 @@ Identifiers are flat, sequential and never reused.
   records and the binary alone chooses a stream, a level and a format, which is what makes the line-oriented
   form a choice rather than an accident — and the right one while the reader is human.
 - **Condition** — something in the tree parses a diagnostic rather than displaying it: a mise task, a
-  script under `scripts/`, a workflow step or a test that greps, cuts or regex-matches what the CLI writes
-  to stderr in order to obtain a value. `rg -n 'stderr' mise.toml .github/workflows/ scripts/` naming a
+  script under `python/`, a workflow step or a test that greps, cuts or regex-matches what the CLI writes
+  to stderr in order to obtain a value. `rg -n 'stderr' mise.toml .github/workflows/ python/` naming a
   step that extracts rather than shows is the sweep. The day one exists the log is an interface, and an
   interface whose shape is a formatting decision breaks the first time the wording is improved.
 - **Fix** — decide, and record the decision rather than reach for `tracing` by reflex. The consumer may be
@@ -213,8 +214,9 @@ Identifiers are flat, sequential and never reused.
   `scope:` value absent from the closed list in the `write-adr` skill, or carries none at all.
   `wc -l docs/decisions/*.md` and `rg -n '^scope:' docs/decisions/` answer both halves,
   and either answering wrong means the rules held for exactly as long as someone was watching.
-- **Fix** — a check in `scripts/lint_docs.py`, wired into `mise run lint:docs` the way the pointer and
-  structure-tree checks already are, with its cases in `tests/test_lint_docs.py`. It asserts the line count
+- **Fix** — a check in `python/src/repo_tools/lint_docs.py`, wired into `mise run lint:docs` the way the
+  pointer and structure-tree checks already are, with its cases in `python/tests/test_lint_docs.py`. It
+  asserts the line count
   and the `scope:` value over every record, since none is exempt. The numbered-list rule
   is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
   guesses at the difference is worse than the sweep reading the file.
@@ -223,7 +225,7 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-02 - Nothing checks that a pointer resolves
 
-- **Status** — `closed` (2026-08-14): `scripts/lint_docs.py` implements the fix below, wired into
+- **Status** — `closed` (2026-08-14): `python/src/repo_tools/lint_docs.py` implements the fix below, wired into
   `mise run lint:docs` (in `lint`) and the `doc-pointers` prek hook.
 - **Condition** — any pointer in a live Markdown document fails to resolve, in any of its four forms:
   a relative Markdown link, a **backticked repository-relative path**, an `ADR NNNN` reference, or an
@@ -246,12 +248,12 @@ Identifiers are flat, sequential and never reused.
     section and the second is ordinary emphasis. The rule needs the heading to exist *or* the quote to
     be recognisable as prose, which is why this cannot be a one-line grep.
 
-  It has no host yet: `crates/popcircles/` is a library about spherical geometry, there is no Python
-  package, and a shell script would be a fourth place hooks are configured.
+  It had no host when this was written: `crates/popcircles/` is a library about spherical geometry, there
+  was no Python package, and a shell script would be a fourth place hooks are configured.
 
 ### FU-03 - Nothing couples a wire-format change to a version bump
 
-- **Status** — `closed` (2026-08-15): the `version-bumps` prek hook, `scripts/lint_version_bumps.py`, is
+- **Status** — `closed` (2026-08-15): the `version-bumps` prek hook, `python/src/repo_tools/lint_version_bumps.py`, is
   the tripwire the Fix below asks for, and it carries `FU-06`'s two further pairs in the one hook that
   entry prescribes. Closed while still dormant — the sweep is clean, four commits touch the directory and
   every one is an addition — with three departures from the Fix as written, each measured; see the note
@@ -285,7 +287,7 @@ Identifiers are flat, sequential and never reused.
   is `SKIP=version-bumps`, which prek honours per-hook, rather than `--no-verify`. And there is no
   `mise run lint:` half: the check reads the index against HEAD, so on a CI checkout nothing is staged and
   an `--all-files` run would report a gate that had looked at nothing. The hook is the whole of it, bar the
-  trigger names, which `tests/test_lint_version_bumps.py` pins against the tree — so a watched block
+  trigger names, which `python/tests/test_lint_version_bumps.py` pins against the tree — so a watched block
   renamed out from under the check fails in CI even though the check itself never runs there.
 
 ### FU-04 - Diagnostics have no facade

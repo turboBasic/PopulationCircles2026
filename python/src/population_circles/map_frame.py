@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from circle_geometry import (
+from pyproj import CRS, Transformer
+from shapely.geometry import MultiLineString, Point
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import transform
+
+from population_circles.circle_geometry import (
     HALF_TURN_DEG,
     METRES_PER_KM,
     POLE_LAT,
@@ -12,10 +17,6 @@ from circle_geometry import (
     hemisphere_km,
     projected_crs,
 )
-from pyproj import CRS, Transformer
-from shapely.geometry import MultiLineString, Point
-from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform
 
 PLATE_CARREE = "plate-carree"
 ORTHOGRAPHIC = "orthographic"

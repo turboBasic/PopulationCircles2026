@@ -5,9 +5,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import matplotlib as mpl
-from circle_document import Circle, circle_of
-from circle_geometry import cap, linestrings, polygons
-from map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
@@ -19,6 +16,10 @@ from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import Polygon
 from shapely.ops import unary_union
 
+from population_circles.circle_document import Circle, circle_of
+from population_circles.circle_geometry import cap, linestrings, polygons
+from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
+
 # Every figure this writes goes to a file, so an interactive backend is never wanted — and asking
 # for one is what fails on a machine with no display, rather than falling back.
 mpl.use("Agg")
@@ -26,12 +27,12 @@ mpl.use("Agg")
 # The committed basemap. Natural Earth 110m, public domain, outside LFS and small enough to read on
 # every render — `data/README.md` is the registry that owns its provenance and terms.
 COASTLINE = (
-    Path(__file__).resolve().parent.parent / "data" / "boundaries" / "ne-110m-coastline.geojson"
+    Path(__file__).resolve().parents[3] / "data" / "boundaries" / "ne-110m-coastline.geojson"
 )
 
 # CC BY 4.0 requires attribution of anything published from the raster, and `data/README.md`
 # "Licence and attribution" is the owner of this text — a figure carrying a different wording is
-# drift, which is what tests/test_render_map.py fails on.
+# drift, which is what python/tests/test_render_map.py fails on.
 CITATION = (
     "Center for International Earth Science Information Network — CIESIN — Columbia University. "
     "2018. Gridded Population of the World, Version 4 (GPWv4): Population Count Adjusted to Match "

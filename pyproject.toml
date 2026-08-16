@@ -11,6 +11,7 @@ dependencies = []
 lint-docs = "repo_tools.lint_docs:main"
 lint-version-bumps = "repo_tools.lint_version_bumps:main"
 release-smoke = "repo_tools.release_smoke:main"
+render-map = "population_circles.render_map:main"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -20,7 +21,7 @@ build-backend = "uv_build"
 # one editable install rather than each needing a project of its own.
 [tool.uv.build-backend]
 module-root = "python/src"
-module-name = ["repo_tools"]
+module-name = ["population_circles", "repo_tools"]
 
 [dependency-groups]
 dev = [
@@ -55,19 +56,14 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"python/src/population_circles/render_map.py" = [
+  "T201", # the path a figure was written to is this command's output, not debug printing
+]
 "python/src/repo_tools/*.py" = [
-  "T201", # a lint script's output is stdout, not incidental debug printing
+  "T201", # a lint script's findings are its output, not incidental debug printing
 ]
 "python/tests/*.py" = [
   "S101", # assert is how pytest asserts
-]
-"scripts/*.py" = [
-  "T201",   # the path a render writes is stdout, not incidental debug printing
-  "INP001", # a standalone script, not part of a package
-]
-"tests/*.py" = [
-  "S101",   # assert is how pytest asserts
-  "INP001", # tests/ is pytest's testpaths, not a package
 ]
 
 [tool.ruff.lint.isort]
@@ -78,11 +74,8 @@ typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
-# tests/ imports the scripts/ modules directly, the same resolution pytest's `pythonpath` gives them.
-extraPaths = ["scripts"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"
 cache_dir = "build/pytest"
-testpaths = ["python/tests", "tests"]
-pythonpath = ["scripts"]
+testpaths = ["python/tests"]

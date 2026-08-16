@@ -110,7 +110,7 @@ names what is inside it.
    span, since the climb doubles and the radii between two probes were never measured
    ([ADR 0007](../decisions/0007-a-result-states-what-it-could-not-separate.md)).
 5. **Rendering.** Python, from the published document and nothing else, kept out of the Rust search
-   path entirely. Four modules under `scripts/`: `circle_document` is the boundary, turning a document
+   path entirely. Four modules in the `population_circles` package: `circle_document` is the boundary, turning a document
    into frozen pydantic models and refusing a schema version it does not know, a kind it cannot draw or
    an earth model that is not a sphere; `circle_geometry` builds the cap and holds the one place a PROJ
    definition is spelled; `map_frame` is what a figure is drawn *in* — the display projection, what it
