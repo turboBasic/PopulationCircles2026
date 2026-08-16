@@ -55,6 +55,39 @@ which layer holds and why the environment variable is still on you.
 A new input dataset goes in `data/<kind>/` with a registry entry. Never make a test depend on raster
 content: CI runs with LFS content absent.
 
+### Publishing a dataset
+
+A dataset too large to carry in the repository is published as an asset on a **data-only tag**. Cutting
+one is rare enough that its body is written from this list rather than from whatever the person cutting
+it remembered.
+
+The tag and its assets:
+
+1. Name it `data-vN`. It must **not** match `v*`, which is what `.github/workflows/release.yml` triggers
+   on — a data tag matching that pattern publishes a binary release nobody asked for.
+2. Name each asset for the dataset's key plus its extension, so the asset, the file on disk and the
+   registry row are one string. Attach the `.sha256` beside it.
+
+The body is read by someone who has never seen this repository, and the asset's name is this project's
+own description rather than the publisher's, so it lets them assume nothing. Every item below already
+exists in [`data/README.md`](data/README.md) — the body quotes it and composes none of it:
+
+1. **What the file is** — format, extent, pixel type and nodata sentinel, from the dataset's row under
+   [Registry](data/README.md#registry).
+2. **Its grid** — dimensions and cell size, from the same row.
+3. **Which variant**, where a dataset is published in several that differ in values. The asset's name
+   will not carry it and the numbers change, so the body is the only place a fetcher can learn it.
+4. **Provenance** — the published name, the publisher and the DOI or tag identifying it, from the row's
+   Provenance heading.
+5. **The licence** and its URL, from the row's Licence and attribution heading.
+6. **The citation** verbatim, where the licence requires one — that heading again. A fetcher acquires
+   the obligation with the bytes, so it travels with them.
+7. **The `SHA-256`**, from the row, so the download can be verified by hand and not only by
+   `mise run data:get`.
+
+A figure the body needs and `data/README.md` does not hold is a finding, not something to measure into
+the release notes: measure it into the row, then quote the row.
+
 ## Sending a change
 
 - Conventional Commits, commitizen's default types. The PR title follows the same format; the
