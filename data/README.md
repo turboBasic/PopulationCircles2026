@@ -15,6 +15,10 @@ data/
 A new kind gets its own directory and a row in the registry below. Keep names lowercase and
 hyphenated, and put the grid resolution in the filename when a dataset comes in several.
 
+**Every filename here is this project's own description of the contents, and matches no publisher's.**
+So what identifies a dataset is its row's Provenance, never its name — and a file downloaded from the
+source is renamed to the row's heading before it is usable.
+
 **LFS is for the rasters, not for `data/` as such.** A vector dataset small enough to read on every
 render is a Git blob: it costs a hundred kilobytes of pack, and in exchange every clone and every CI
 job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` to LFS, and the
@@ -128,9 +132,10 @@ ten-millionths of a degree past the antimeridian and 5 cm on the ground; the ver
 at 180, so nothing here relies on the declaration.
 
 **It is [Natural Earth][ne]'s 1:110m physical coastline**, from the vector distribution repository at
-tag **[v5.1.2][ne-tag]**, path `geojson/ne_110m_coastline.geojson`. Committed byte-for-byte as that
-tag serves it, which is what makes the checksum above something a reader can check rather than a
-record of one download:
+tag **[v5.1.2][ne-tag]**, path `geojson/ne_110m_coastline.geojson` — stored here under the heading
+above, which is the only difference between the two. Committed byte-for-byte as that tag serves it,
+which is what makes the checksum above something a reader can check rather than a record of one
+download; there is no step to obtain it, because every clone has it already:
 
 ```sh
 curl -sL https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_coastline.geojson \
