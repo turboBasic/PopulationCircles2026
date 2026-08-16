@@ -135,31 +135,35 @@ Identifiers are flat, sequential and never reused.
   of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
 
-### FU-16 - The CC BY citation is a Python constant rather than the registry's own text
+### FU-16 - A figure names the dataset it credits rather than reading it from the document
 
 - **Status** — `dormant` (2026-08-15): the registry holds one dataset a figure needs a citation for, so
-  one citation is the whole mapping and a constant is indistinguishable from one.
+  one mapping is the whole mapping.
 
   **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
-  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain, and its own registry entry
-  records that its terms ask for no attribution — so the count the Condition below sweeps for is now two
-  against one citation while the failure the entry guards against is still impossible. What the Condition
-  means, and what the correction beneath it now says, is a second row a figure would have to *credit*. The
-  note is here rather than a silent edit for `FU-08`'s reason: a reader should be able to tell "the row
-  arrived and the entry held" from "nobody looked".
-- **Condition** — [`data/README.md`](../data/README.md) carries a second dataset row **whose licence
-  requires attribution**. The sweep is the count of registry entries stating such a licence against the
-  number of citations `python/src/population_circles/render_map.py` holds: one and one today. A second
-  such dataset makes `CITATION` the citation of whichever raster happens to have been first, and a figure
-  rendered from the other one then credits the wrong source while
-  `python/tests/test_render_map.py` still passes — the test asserts
-  the constant appears in the registry, which stays true of the wrong entry.
-- **Fix** — key the citation by dataset rather than holding one, and publish enough in the document to
-  choose between them. That second half is the reason this is an entry and not a task: `report`'s
-  `provenance` names the table a document was answered from by digest and grid, not the dataset the raster
-  came from, so there is nothing in the wire format a renderer could select a citation with today. Whoever
-  fires this adds that field first, additively, and the entry is where the two halves are recorded
-  together.
+  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its
+  terms ask for no attribution — so the count the Condition sweeps for is two against one citation while
+  the failure the entry guards against is still impossible. What the Condition means is a second row a
+  figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s reason: a reader
+  should be able to tell "the row arrived and the entry held" from "nobody looked".
+
+  **Half of this closed** (2026-08-16, issue #57). The citation was a Python constant, which the original
+  title named; it is now read from `data/registry.toml`, so the text a figure carries is the text the
+  registry says is owed and `rg -n 'CIESIN' python/src/` returns nothing. What remains — and what the
+  entry is now titled for — is the selecting: `render_map.py` names `POPULATION_KEY`, so a figure credits
+  the dataset the renderer was written against rather than the one its document was answered from.
+- **Condition** — [`data/registry.toml`](../data/registry.toml) carries a second dataset **whose licence
+  requires attribution**. The sweep is the count of rows with a non-empty `attribution` against the number
+  of datasets `python/src/population_circles/render_map.py` can select between: one and one today. A second
+  such dataset makes the credited dataset whichever one `POPULATION_KEY` happens to name, and a figure
+  rendered from the other credits the wrong source while `python/tests/test_render_map.py` still passes —
+  the test compares the drawn text against that same key's row, so it stays true of the wrong entry.
+- **Fix** — key the citation by the document's own dataset, which means publishing enough in the document
+  to choose with. That is the reason this is an entry and not a task: `report`'s `provenance` names the
+  table a document was answered from by digest and grid, not the dataset the raster came from, so there is
+  nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
+  additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
+  the value to publish first exists.
 
 ### FU-17 - The full-resolution search is page faults, not arithmetic
 

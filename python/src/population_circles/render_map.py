@@ -18,6 +18,7 @@ from shapely.ops import unary_union
 
 from population_circles.circle_document import Circle, circle_of
 from population_circles.circle_geometry import cap, linestrings, polygons
+from population_circles.dataset_registry import POPULATION_KEY, load
 from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
 
 # Every figure this writes goes to a file, so an interactive backend is never wanted — and asking
@@ -25,20 +26,18 @@ from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame
 mpl.use("Agg")
 
 # The committed basemap. Natural Earth 110m, public domain, outside LFS and small enough to read on
-# every render — `data/README.md` is the registry that owns its provenance and terms.
+# every render — `data/registry.toml` holds its terms and `data/README.md` its provenance.
 COASTLINE = (
     Path(__file__).resolve().parents[3] / "data" / "boundaries" / "coastline-1to110m.geojson"
 )
 
-# CC BY 4.0 requires attribution of anything published from the raster, and `data/README.md`
-# "Licence and attribution" is the owner of this text — a figure carrying a different wording is
-# drift, which is what python/tests/test_render_map.py fails on.
-CITATION = (
-    "Center for International Earth Science Information Network — CIESIN — Columbia University. "
-    "2018. Gridded Population of the World, Version 4 (GPWv4): Population Count Adjusted to Match "
-    "2015 Revision of UN WPP Country Totals, Revision 11. Palisades, NY: NASA Socioeconomic Data "
-    "and Applications Center (SEDAC). https://doi.org/10.7927/H4PN93PB"
-)
+
+def citation() -> str:
+    # `data/registry.toml` owns the wording a licence requires, so a figure credits what the
+    # registry says is owed rather than what this file was written believing. Which dataset to
+    # credit is still named rather than read from the document — FU-16 holds that half.
+    return load().datasets[POPULATION_KEY].attribution
+
 
 # Bottom to top: the graticule under the coastlines, the circle over both, its centre over that, and
 # the frame's own outline last so no fill reaching the limb draws over it.
@@ -165,7 +164,7 @@ def render(circle: Circle, projection: str, *, coastlines: bool) -> Figure:
     annotate(figure, 0.94, title_of(circle), 12.0)
     # Wrapped rather than one line: at this width the citation runs off both edges of the figure,
     # which is an attribution nobody can read and so not an attribution.
-    annotate(figure, 0.055, textwrap.fill(CITATION, width=118), 6.5)
+    annotate(figure, 0.055, textwrap.fill(citation(), width=118), 6.5)
     return figure
 
 

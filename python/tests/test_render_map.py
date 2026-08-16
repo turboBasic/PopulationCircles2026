@@ -8,10 +8,12 @@ import pytest
 
 from population_circles.circle_document import circle_of
 from population_circles.circle_geometry import HALF_TURN_DEG, POLE_LAT
+from population_circles.dataset_registry import POPULATION_KEY, load
 from population_circles.map_frame import ORTHOGRAPHIC, PLATE_CARREE
-from population_circles.render_map import CITATION, COASTLINE, basemap, main, render
+from population_circles.render_map import COASTLINE, basemap, citation, main, render
 
-REGISTRY = Path(__file__).resolve().parents[2] / "data" / "README.md"
+REGISTRY = load()
+PROSE = Path(__file__).resolve().parents[2] / "data" / "README.md"
 
 CENTRE_LAT = 25.125
 CENTRE_LON = 79.708
@@ -48,9 +50,10 @@ def normalised(text: str) -> str:
 
 
 def test_the_citation_is_the_text_the_registry_owns() -> None:
-    # data/README.md "Licence and attribution" owns the wording. Checked rather than trusted, so a
-    # drift between the two fails here instead of shipping a figure that credits nobody.
-    assert normalised(CITATION) in normalised(REGISTRY.read_text(encoding="utf-8"))
+    # data/registry.toml owns the wording now, and PROSE restates it for a human. Both halves are
+    # checked, so a drift fails here rather than shipping a figure that credits nobody.
+    assert normalised(citation()) == normalised(REGISTRY.datasets[POPULATION_KEY].attribution)
+    assert normalised(citation()) in normalised(PROSE.read_text(encoding="utf-8"))
 
 
 def test_the_basemap_is_the_committed_one() -> None:
@@ -67,7 +70,7 @@ def test_the_basemap_is_the_committed_one() -> None:
 def test_the_footer_artist_carries_the_citation() -> None:
     figure = render(circle_of(document()), PLATE_CARREE, coastlines=False)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
-    assert normalised(CITATION) in drawn_text
+    assert normalised(citation()) in drawn_text
 
 
 def test_the_title_states_the_radius_the_share_and_the_centre() -> None:
