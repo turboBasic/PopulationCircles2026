@@ -74,6 +74,10 @@ typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
+# Not redundant next to module-root and ruff's src: pyright does not read .gitignore, so without a
+# scope it walks the whole tree and a scratch script under tmp/ fails a required check. An allow-list
+# rather than an exclude of tmp/ because platform.md's Structure declares python/ the only Python
+# root — the cost is that a second root would go unchecked silently rather than failing loudly.
 include = ["python"]
 
 [tool.pytest.ini_options]
