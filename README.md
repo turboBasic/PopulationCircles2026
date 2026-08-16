@@ -99,10 +99,13 @@ arc-second resolution — CIESIN / Columbia University, distributed by NASA SEDA
 it; [`data/README.md`](data/README.md#provenance) holds the citation, the grid details, and what
 about this copy is still unverified.
 
-**It is not in a release and not in a plain clone.**
-[Obtaining it](data/README.md#obtaining-it) is the download from NASA Earthdata — which needs a free
-login — and the extract, rename and checksum check that turn the granule into the file every command
-here expects.
+**It is not in a plain clone.** The [`data-v1` release][data-tag] carries it, and that copy needs no
+account.
+
+[Obtaining it](data/README.md#obtaining-it) is the other route — the download from NASA Earthdata,
+which needs a free login, and the extract, rename and checksum check that turn the granule into the
+file every command here expects. That one gets you an *independent* copy, which is what makes the
+published checksum worth checking.
 
 ## Layout
 
@@ -142,6 +145,7 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 [cc-by]: https://creativecommons.org/licenses/by/4.0/
 [ci]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml/badge.svg?branch=main
+[data-tag]: https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1
 [gpw]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
 [gpw-doi]: https://doi.org/10.7927/H4PN93PB
 [license]: LICENSE

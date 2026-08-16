@@ -63,8 +63,10 @@ circle, as a country is the spec error
 
 Both cache files land under `out/`, which is gitignored because a generated table is never committed.
 Building needs the raster, so `mise run data:pull` first — or, without access to this repository's LFS
-objects, [Obtaining it](data/README.md#obtaining-it), which is the download from NASA Earthdata and the
-rename that produces the path spelled above.
+objects, the [`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1),
+which needs no account and carries the checksum to verify
+what you got. [Obtaining it](data/README.md#obtaining-it) is the slower route, and the one that gets an
+independent copy.
 
 ## Circles
 
