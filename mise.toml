@@ -206,10 +206,10 @@ run = "cargo test --release --all-features --test decimated_search -- --ignored"
 description = "Measure the circle fold's error at magnitude against the predicate slack it is bounded by"
 run = "cargo test --release --all-features --test fold_at_magnitude -- --ignored"
 
-# Not in `test` or `ci` because it reads the registry raster, which a CI clone holds only as a pointer.
+# Not in `test` or `ci` because it reads the registry raster, which a CI checkout does not have.
 # It is the end-to-end one: the raster streamed into a table and the smallest circle holding half the
 # world searched for over it, checked against the published prior art. Selected by target rather than by
-# name so a second validation test needs no change here. When the raster is an unfetched pointer it skips
+# name so a second validation test needs no change here. When the raster is absent it skips
 # with a message rather than failing, which is why running it on a fresh clone is harmless.
 [tasks."test:validate"]
 description = "Search the real raster for half the world and check it against the published result"
@@ -273,8 +273,8 @@ depends = ["lint", "typecheck", "test"]
 description = "Compile both release legs on demand, macOS included, publishing nothing"
 run = "uv run release-smoke"
 
-# Not in `lint`, `test` or `ci`, and no later change can put it there: it reaches the network, and CI
-# deliberately holds pointers rather than data.
+# Not in `lint`, `test` or `ci`, and no later change can put it there: it reaches the network, and a CI
+# checkout deliberately has no raster.
 [tasks."data:get"]
 description = "Fetch every registered dataset not already present, verifying before it is placed"
 run = "uv run fetch-data"
