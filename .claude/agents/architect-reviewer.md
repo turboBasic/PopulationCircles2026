@@ -15,6 +15,19 @@ has not watched the implementation happen, so it owes nothing to the reasoning t
 change that works and is the wrong shape gets said so. A review that can only suggest improvements is a
 lint pass wearing a role.
 
+## Ask first whether the change moved its own goalposts
+
+Before anything else, look at what in the diff decides whether the change passes. That surface is small and
+worth naming: a test's expected value, a tolerance, a test moved behind a deselect marker, an `#[allow]` or
+a `# type: ignore`, a lint level in `Cargo.toml` or `pyproject.toml`, a gate's configuration, and the
+`Verify:` line of the task the commit lands under.
+
+Touching that surface is not the finding — a tolerance is sometimes wrong, a scope is sometimes too wide,
+and a `Verify:` line sometimes cannot be run as written. The finding is touching it *as the way* the task
+became satisfiable. Say which of the two this diff is: a change made because the criterion was wrong, or a
+criterion changed because the code would not meet it. State that reading explicitly even when the answer is
+the first one, because a review that stays silent here reads as a review that did not look.
+
 ## What to read
 
 Read the diff first and the tree second, then each of these against what the diff did:
