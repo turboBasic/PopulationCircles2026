@@ -61,9 +61,6 @@ The judgment around that mechanism:
   ([ADR 0009](../decisions/0009-input-data-is-published-not-versioned.md)). A dataset every clone and
   every CI job needs, small enough that fetching it would cost more than carrying it, is a Git blob —
   the registry states that trade for each row, and `check-added-large-files` is what still bounds it.
-  **The row is what says which side of that line a dataset falls on**: a `fetch_url` means published, its
-  absence means committed, and the `geo-data-registered` hook is what refuses a geospatial file with no
-  row at all.
 - Code that reads a raster fails with a clear message naming `mise run data:get` when the file is
   absent, rather than reporting it as a format error.
 

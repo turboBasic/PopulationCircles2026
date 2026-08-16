@@ -37,9 +37,8 @@ Run every check below even when an earlier one fails: a broken hook says nothing
    naming it. Run it; any output is a finding.
 4. **Dataset registry.** Every file under `data/<kind>/` has a row in `data/registry.toml` and an entry
    in `data/README.md`. Check each row's `path` for presence directly: a row carrying a `fetch_url`
-   naming no file is the expected state, because a published dataset is absent until someone fetches it,
-   and a fetched raster sitting in the tree is worth naming rather than fixing. A row without a
-   `fetch_url` names a committed file, so there its absence is a finding.
+   naming no file is the expected state, because a published dataset is absent until someone fetches it.
+   A row without a `fetch_url` names a committed file, so there its absence is a finding.
    A generated artifact anywhere under `data/` is a finding.
 5. **Follow-up register.** `docs/follow-ups.md` holds every follow-up this repository has recorded.
    Take the `dormant` and `due` entries, answer
