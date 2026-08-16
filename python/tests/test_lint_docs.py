@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import lint_docs
+from repo_tools import lint_docs
 
 
 def test_slugify_matches_github_anchor_style() -> None:

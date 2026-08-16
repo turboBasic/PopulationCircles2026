@@ -292,6 +292,7 @@ docs/follow-ups.md               the register of pending obligations
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search
 data/                            input datasets; registry in data/README.md
+python/                          Python project — src/ holds the packages, tests/ the suite
 scripts/                         standalone Python tooling, run via `uv run python`
 tests/                           pytest suite for scripts/
 ```

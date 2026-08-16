@@ -1,4 +1,4 @@
-import lint_version_bumps as lvb
+from repo_tools import lint_version_bumps as lvb
 
 SNAPSHOT = """---
 source: crates/popcircles/src/report.rs

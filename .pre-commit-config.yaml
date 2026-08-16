@@ -175,7 +175,7 @@ repos:
       # is exactly the case it exists to catch.
       - id: doc-pointers
         name: doc pointers and Structure tree resolve
-        entry: uv run python scripts/lint_docs.py
+        entry: uv run lint-docs
         language: system
         always_run: true
         pass_filenames: false
@@ -190,7 +190,7 @@ repos:
       # run would pass without checking anything and report a gate that had not run.
       - id: version-bumps
         name: a moved format shape bumps its version
-        entry: uv run python scripts/lint_version_bumps.py
+        entry: uv run lint-version-bumps
         language: system
         always_run: true
         pass_filenames: false
