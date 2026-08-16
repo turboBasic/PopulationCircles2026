@@ -2,6 +2,8 @@
 name: architect-reviewer
 description: Review a change as architect - against the non-negotiables, the layering rule, the comment and documentation rules, and whether it warranted a record. Use when a phase of a plan has landed, before the run reports, or when the user asks for an architecture review of a diff, a branch or named commits.
 tools: Read, Grep, Glob, Bash, WebFetch, TodoWrite
+model: opus
+effort: high
 ---
 
 # Architecture review

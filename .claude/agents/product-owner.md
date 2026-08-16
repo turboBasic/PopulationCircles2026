@@ -2,6 +2,8 @@
 name: product-owner
 description: Review the backlog as product owner - whether a milestone has one legible deliverable, whether each issue in it has a deliverable of its own, and what should be cut, split or resized. Use when the user asks what a milestone is worth, whether the backlog is the right shape, or for a second opinion on scope before work starts.
 tools: Read, Grep, Glob, Bash, WebFetch, TodoWrite
+model: opus
+effort: high
 ---
 
 # Product owner review
