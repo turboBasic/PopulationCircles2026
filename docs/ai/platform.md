@@ -205,6 +205,15 @@ move — for a downstream discovery that is that issue, not the one in hand — 
 proposal is agreed. Quietly building something other than what the issue asks for is the failure this
 permission exists to make unnecessary, not the one it grants.
 
+**A proposal comment whose proposals have all landed is edited to open with `**Discharged YYYY-MM-DD** —`
+and what landed**, naming each finding where it carried several. That is the whole of the marker: a
+reader skipping the comment knows why, and nobody adds a fourth comment to report on the third. It is
+dated and says what happened rather than tagging a status, because a status has to be maintained and a
+reverted change would leave `[resolved]` lying where a dated sentence stays true. **Only a comment that
+is wholly a proposal takes one** — a scope review, a structural finding, a "this should move". A comment
+carrying a decision or a measured figure is never discharged, and marking one tells a reader to skip the
+context they most need.
+
 ### Relationships are structural, never prose
 
 **A relationship GitHub models is set through its API, not written into a body.** Containment is the
