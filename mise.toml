@@ -112,24 +112,24 @@ description = "Lint GitHub Actions workflows"
 run = "actionlint"
 
 # CI never runs prek, so the commit hooks would be local-only advice. This task selects the
-# three data-integrity hooks by id and `lint` depends on it, which puts them in CI without a
+# two data-integrity hooks by id and `lint` depends on it, which puts them in CI without a
 # second copy of the logic: .pre-commit-config.yaml stays the only implementation.
 # --all-files rather than the staged set, because on a CI checkout nothing is staged.
-[tasks."lint:lfs"]
-description = "Check geo data is LFS-tracked and no large blob is committed outside LFS"
-run = "prek run --all-files check-added-large-files geo-data-lfs lfs-pointers"
+[tasks."lint:data"]
+description = "Check every geo data file has a registry row and no large blob is committed"
+run = "prek run --all-files check-added-large-files geo-data-registered"
 
 # CI never runs prek, so the formatting hooks would be local-only advice. This task selects the
-# three formatting hooks by id and `lint` depends on it, the same shape `lint:lfs` uses to put
+# three formatting hooks by id and `lint` depends on it, the same shape `lint:data` uses to put
 # hooks in CI without a second copy of the logic. Those hooks rewrite rather than check, so a CI
 # failure reads "files were modified by this hook" rather than naming the diff — the same report
-# `lint:lfs` gives, and enough to stop the merge.
+# `lint:data` gives, and enough to stop the merge.
 # --all-files rather than the staged set, because on a CI checkout nothing is staged.
 [tasks."lint:format"]
 description = "Check Rust, TOML and Python are formatted"
 run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 
-# Puts the prek hooks in CI; see `lint:lfs` for why. It matters more here than for the others: one of
+# Puts the prek hooks in CI; see `lint:data` for why. It matters more here than for the others: one of
 # them stands in for `unsafe_code = "forbid"`, so a branch pushed from a clone where `prek install`
 # never ran has to meet it too. Both hooks answer one question — what may silence a lint — which is why
 # they share a task rather than each having one.
@@ -137,17 +137,17 @@ run = "prek run --all-files cargo-fmt taplo-fmt ruff-format"
 description = "Check what may silence a lint: the one unsafe exception, and no blanket #![allow] in src"
 run = "prek run --all-files single-unsafe-allow no-blanket-allow"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:markdown"]
 description = "Lint Markdown with markdownlint-cli2"
 run = "prek run --all-files markdownlint-cli2"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:cspell"]
 description = "Spell-check every tracked file with cspell"
 run = "prek run --all-files cspell"
 
-# Puts the prek hook in CI; see `lint:lfs` for why.
+# Puts the prek hook in CI; see `lint:data` for why.
 [tasks."lint:docs"]
 description = "Check pointers and the Structure tree with the lint-docs entry point"
 run = "prek run --all-files doc-pointers"
@@ -159,7 +159,7 @@ depends = [
   "lint:rustdoc",
   "lint:python",
   "lint:workflows",
-  "lint:lfs",
+  "lint:data",
   "lint:format",
   "lint:exemptions",
   "lint:markdown",
