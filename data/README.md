@@ -30,10 +30,10 @@ job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` t
 
 | Property | Value |
 | --- | --- |
-| Grid | 43200 × 21600 (30 arc-second, 0.008333°) |
+| Grid | 43200 × 21600 (30 arc-second, 1/120°) |
 | Extent | whole globe, origin (−180°, 90°) |
 | CRS | EPSG:4326 (WGS 84) |
-| Pixel type | Float32, LZW compressed |
+| Pixel type | Float32, single band, LZW compressed |
 | Nodata | −3.40282306073709653e+38 (Float32, two ulps above −max) |
 | Size | 428 465 215 bytes (409 MiB) |
 | SHA-256 | `956993aa500774aed548c8e1af1a3a68fc164577be82ca799d4ae8568d445e9d` |
@@ -70,7 +70,7 @@ The raster is not in a normal clone. The [`data-v1` release][data-tag] carries i
 no account — its body holds the provenance, the licence and the checksum.
 
 What follows is the other route: obtaining an **independent** copy from the publisher, which is what
-makes the checksum below something more than a record of one download. The whole of it is four
+makes the `SHA-256` above something more than a record of one download. The whole of it is four
 commands, and the last one is the point.
 
 **It needs a free [NASA Earthdata Login][urs-new].** The archive is behind URS OAuth, so an
