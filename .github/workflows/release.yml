@@ -66,6 +66,11 @@ jobs:
       # No --generate-notes: the notes have to say that the wire format's schema_version still holds
       # and that a cache this release invalidates will be rebuilt, neither of which follows from the
       # merged PRs since the last tag. The body is created empty for a maintainer to write.
+      #
+      # --draft because that maintainer writes it after this job, so without it the window between the
+      # two is a published release promising nothing. A draft is not visible to a fetcher and can be
+      # deleted, so the version is not spent until someone publishes it, which is
+      # `gh release edit <tag> --draft=false` once the body says what it has to.
       - name: Attach both artifacts to the Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,6 +79,6 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes "" --verify-tag
+            gh release create "$TAG" --title "$TAG" --notes "" --draft --verify-tag
           fi
           gh release upload "$TAG" --clobber dist/*
