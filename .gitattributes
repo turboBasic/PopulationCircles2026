@@ -16,7 +16,9 @@
 
 *.png binary
 *.bin binary
-# No raster is committed, so these two are for the force-add that gets past .gitignore: without them
-# `text=auto` above would decide, and a raster it guessed wrong about would be line-ending mangled.
+# A decimated raster small enough to commit is sanctioned (platform.md "Testing"), and the
+# geo-data-registered hook passes one that has a registry row — so these two are load-bearing for the
+# raster this repository would really commit. Without them `text=auto` above decides, and a raster it
+# guessed wrong about is line-ending mangled.
 *.tif binary
 *.tiff binary

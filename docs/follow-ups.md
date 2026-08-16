@@ -290,38 +290,51 @@ Identifiers are flat, sequential and never reused.
 
 ### FU-22 - The registry-row hook does not tell a published row from a committed one
 
-- **Status** — `dormant`.
+- **Status** — `dormant` (2026-08-16).
 - **Condition** — a row in `data/registry.toml` carrying a `fetch_url` names a path that `git ls-files`
   also names. `geo-data-registered` asks only whether a row exists, so a published dataset committed to the
-  tree satisfies it: the row it needs is the row it has. ADR 0009's discriminator is the `fetch_url` —
-  present means fetched and never carried, absent means a committed blob — and nothing checks the first
-  half.
+  tree satisfies it: the row it needs is the row it has. ADR 0009 rules that which side of the line a
+  dataset falls on is stated per dataset rather than derived from where it sits, and `data/registry.toml`'s
+  own header is what states it — `fetch_url` present means fetched and never carried, absent means a
+  committed blob. Nothing checks the first half.
 
   `check-added-large-files --enforce-all` bounds the damage at 500 KB on size alone, which is why this is
   an entry and not a task: the raster it would matter most for is 428 MB and refused already. What is
-  unguarded is a *small* published dataset, and there is none today —
+  unguarded is a *small* published dataset, and on 2026-08-16 there is none —
   `rg -c '^fetch_url' data/registry.toml` is 1, and that row's path is gitignored and untracked.
-- **Fix** — the check reads the registry rather than grepping it, which puts it in
-  `python/src/repo_tools/` beside `lint_docs.py` where the registry is already parsed, and asserts both
-  halves: every file matching the extension set has a row, and no file whose row carries a `fetch_url` is
-  tracked. That also retires the grep's two accepted costs — a match inside a comment, and the coupling to
-  taplo's `path = "…"` spelling.
+- **Fix** — the check reads the registry rather than grepping it and asserts both halves: every file
+  matching the extension set has a row, and no file whose row carries a `fetch_url` is tracked. That means
+  a `python/src/repo_tools/` entry point reusing `population_circles.dataset_registry`, which is where the
+  registry is parsed — `repo_tools/fetch_data.py` is the precedent for a repo tool importing it, and
+  reusing it rather than writing a second parser is the constraint the hook's own comment raises.
+
+  **This reverses a decision the issue thread made outright**: #85 settled on a grep so the hook would stay
+  the six-line `bash -c` it is, with a comment match and the coupling to taplo's `path = "…"` spelling as
+  accepted costs. Both retire with the grep, and a later reader should not take the grep for an oversight.
 
 ### FU-23 - The busiest pointer hub in the tree is outside the pointer gate
 
-- **Status** — `dormant`.
+- **Status** — `dormant` (2026-08-16).
 - **Condition** — a repo-relative pointer or a quoted heading in `data/README.md` resolves to nothing.
   `lint_docs.py`'s `scope_files()` does not sweep that file, and `docs/ai-instructions.md` "Layering" names
   it a licensed restater of what `data/registry.toml` and the instruction layer own — so it carries
   pointers in both directions and none of them is checked.
 
-  Measured on the tree that rewrote it: two pointers went stale in that rewrite and both were found by
-  hand rather than by the gate — the registry's own header citing a `Provenance` heading that had gone, and
-  this file's only route to the relocated verification walkthrough written as prose rather than a link.
-- **Fix** — `scope_files()` includes `data/README.md`. It is a one-line change to a set, and the reason it
-  is an entry rather than a task is that the gate then reads a file whose licence to restate is what makes
-  some of its pointers legitimately loose; whether every existing pointer passes has to be measured before
-  the set grows, not assumed.
+  Measured on the tree that rewrote it, and the measurement cuts two ways. Every pointer the file carries
+  today passes: `check_pointers()` run over it by hand returns 0 findings, so the file is not currently
+  broken and the risk is the absence of a gate rather than a backlog behind one. But two pointers *did* go
+  stale in that rewrite and both were found by hand — and **neither is a form this gate checks even where it
+  runs**. One was in `data/registry.toml`, a TOML comment that no markdown scope would ever reach; the other
+  was in this file and written `` `CONTRIBUTING.md` under "…" ``, whose quote is not adjacent to the path,
+  which is what `_QUOTE_ADJACENT_RE` requires. So the evidence is that the file's pointers rot unobserved,
+  not that widening the scope would have caught these two.
+- **Fix** — `data/README.md` comes inside the pointer check. **Not a one-line addition to `scope_files()`**:
+  that set is shared, its own comment declaring it the scope of the `housekeeping` skill's "Duplication"
+  check as well, and that check's carve-out for licensed restatement covers the human layer —
+  `README.md`, `USAGE.md`, `CONTRIBUTING.md` — and not this file. Widening the set therefore reads
+  `data/README.md` for duplication too, where being a restater is the whole point and every legitimate
+  restatement would report. So the fix is to separate the two scopes, or to carve this file out of the
+  duplication half, and that shape is what makes it an entry rather than the one line it looks like.
 
 ## Closed and retired
 
