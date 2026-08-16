@@ -26,7 +26,7 @@ use popcircles::raster::{PixelType, RasterError, RasterSpec};
 use popcircles::smallest::{Share, smallest};
 use popcircles::table::{Decimation, Table, build};
 
-/// Every figure here is the `data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif` row of
+/// Every figure here is the `data/population/population-count-2020-30arcsec.tif` row of
 /// `data/README.md`. Literals for `tests/registry_raster.rs`'s reason: #8 owns how a user supplies a spec.
 const WIDTH: u32 = 43200;
 const HEIGHT: u32 = 21600;
@@ -67,7 +67,7 @@ fn registry_raster() -> PathBuf {
         "..",
         "data",
         "population",
-        "gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif",
+        "population-count-2020-30arcsec.tif",
     ]
     .iter()
     .collect()

@@ -141,7 +141,7 @@ Identifiers are flat, sequential and never reused.
   one citation is the whole mapping and a constant is indistinguishable from one.
 
   **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
-  `boundaries/ne-110m-coastline.geojson` is a basemap in the public domain, and its own registry entry
+  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain, and its own registry entry
   records that its terms ask for no attribution — so the count the Condition below sweeps for is now two
   against one citation while the failure the entry guards against is still impossible. What the Condition
   means, and what the correction beneath it now says, is a second row a figure would have to *credit*. The

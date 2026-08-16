@@ -27,7 +27,7 @@ mpl.use("Agg")
 # The committed basemap. Natural Earth 110m, public domain, outside LFS and small enough to read on
 # every render — `data/README.md` is the registry that owns its provenance and terms.
 COASTLINE = (
-    Path(__file__).resolve().parents[3] / "data" / "boundaries" / "ne-110m-coastline.geojson"
+    Path(__file__).resolve().parents[3] / "data" / "boundaries" / "coastline-1to110m.geojson"
 )
 
 # CC BY 4.0 requires attribution of anything published from the raster, and `data/README.md`

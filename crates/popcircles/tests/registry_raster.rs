@@ -14,7 +14,7 @@ use popcircles::raster::{PixelType, RasterSource, RasterSpec};
 #[ignore = "reads the registry raster from data/; run `mise run test:raster`"]
 fn the_registry_raster_reproduces_every_figure_the_registry_records() {
     // Literals rather than anything parsed, because #8 owns the way a user supplies a spec. Every one
-    // is the `data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif` row of
+    // is the `data/population/population-count-2020-30arcsec.tif` row of
     // `data/README.md`; the sentinel is that row's nodata value, which is two ulps off -f32::MAX.
     let grid = Grid::new(
         43200,
@@ -40,7 +40,7 @@ fn the_registry_raster_reproduces_every_figure_the_registry_records() {
         "..",
         "data",
         "population",
-        "gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif",
+        "population-count-2020-30arcsec.tif",
     ]
     .iter()
     .collect();

@@ -22,7 +22,7 @@ job has it without a fetch step. `.gitattributes` routes only `*.tif`/`*.tiff` t
 
 ## Registry
 
-### `population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif`
+### `population/population-count-2020-30arcsec.tif`
 
 | Property | Value |
 | --- | --- |
@@ -77,8 +77,8 @@ registry, tests and examples expect:
 ```sh
 unzip -j <granule>.zip '*.tif' -d data/population/
 mv data/population/gpw_v4_population_count_*_2020_30_sec.tif \
-   data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
-shasum -a 256 data/population/gpw-v4-11-unwpp-adjusted-count-2020-30arcsec.tif
+   data/population/population-count-2020-30arcsec.tif
+shasum -a 256 data/population/population-count-2020-30arcsec.tif
 ```
 
 The zip carries one `.tif` per year, so the glob is what selects 2020 rather than an assumption
@@ -112,7 +112,7 @@ The dataset is also mirrored in the Google Earth Engine catalog as
 [urs-curl]: https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget
 [urs-new]: https://urs.earthdata.nasa.gov/users/new
 
-### `boundaries/ne-110m-coastline.geojson`
+### `boundaries/coastline-1to110m.geojson`
 
 | Property | Value |
 | --- | --- |
