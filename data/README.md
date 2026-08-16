@@ -33,7 +33,7 @@ attribution each licence requires, which is the moment a user acquires the oblig
 A small dataset is a committed Git blob and needs none of this — the coastline below is one, so a clone
 draws a complete figure before fetching anything. Which of the two a dataset is, its row says.
 Obtaining an independent copy from the publisher, to check a republished asset against its source, is
-`CONTRIBUTING.md` under "Verifying a published dataset".
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#verifying-a-published-dataset).
 
 ## population-count-2020-30arcsec
 

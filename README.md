@@ -27,7 +27,6 @@ stays fast and cheap; the coastline basemap is a committed blob, because a hundr
 needs is cheaper carried than fetched:
 
 ```sh
-git clone …
 mise run data:get   # fetch what is missing and verify it — no account needed
 ```
 
@@ -97,8 +96,8 @@ the raster rather than a download.
 The population raster is [GPWv4.11 UN WPP-adjusted population count for 2020][gpw] at 30
 arc-second resolution — CIESIN / Columbia University, distributed by NASA SEDAC, DOI
 [10.7927/H4PN93PB][gpw-doi], [CC BY 4.0][cc-by]. Attribution is required of anything published from
-it; [`data/README.md`](data/README.md#population-count-2020-30arcsec) holds the citation, the grid
-details, and what about this copy is still unverified.
+it; [`data/README.md`](data/README.md#population-count-2020-30arcsec) holds the citation and the grid
+details.
 
 **It is not in a plain clone.** The [`data-v1` release][data-tag] carries it, `mise run data:get` fetches
 from there, and that copy needs no account. Obtaining an *independent* copy from NASA Earthdata instead —

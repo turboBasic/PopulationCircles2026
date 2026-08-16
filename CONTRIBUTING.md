@@ -45,17 +45,12 @@ Input datasets live in [`data/`](data/README.md), described for a machine in
 large one is published rather than carried, so a clone is cheap and fetching is a separate step:
 
 ```sh
-git clone <url>
-mise run setup
 mise run data:get   # fetch every registered dataset not already here, and verify it
 ```
 
 `data:get` needs no account anywhere: it reads the registry, verifies each file against the recorded
 checksum before putting it in place, and prints the attribution each licence requires
 ([`data/README.md`](data/README.md#getting-it)).
-
-**The raster used to be tracked, so a working copy that had fetched it loses it on the next pull** — the
-428 MB object is no longer in the tree, and `mise run data:get` is what puts it back.
 
 A new input dataset goes in `data/<kind>/` with a registry entry. Never make a test depend on raster
 content: a CI checkout has none.
