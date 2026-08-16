@@ -161,17 +161,20 @@ declares.
    any other change. Every report snapshot moves with it, because every document carries `tool_version`.
 2. Tag the merged commit `vX.Y.Z` for that same version and push the tag. The workflow's gate compares
    the two and refuses a tag that disagrees, so a mismatch costs a run rather than a wrong binary.
-3. Write the notes by hand. The workflow opens the body empty on purpose: the notes have to say that
+3. Write the notes by hand, then publish. The workflow attaches the binaries to a **draft** with an
+   empty body, so nothing is visible to a fetcher until you say so — the notes have to say that
    `schema_version` is a contract across releases while a cache or a ledger may be invalidated by this
-   one and rebuilt, and nothing can generate that from a commit range.
+   one and rebuilt, and nothing can generate that from a commit range. Publishing is
+   `gh release edit vX.Y.Z --draft=false`.
 
-When a run fails, what to do next turns on one fact — **whether the publish job ran.**
+When a run fails, what to do next turns on one fact — **whether the release is still a draft.**
 
-- **It did not.** No Release exists, so the tag is still retractable. Re-run the workflow if the cause
-  was the runner rather than the commit; otherwise delete the tag, fix the cause, and tag the same
-  version again.
-- **It did.** A Release exists and that version is spent, so the next attempt is a version bump rather
-  than a moved tag — a tag that moves lies to everyone who already fetched it.
+- **It is, or no Release exists.** The tag is still retractable and the version is not spent. Re-run the
+  workflow if the cause was the runner rather than the commit; otherwise delete the draft and the tag,
+  fix the cause, and tag the same version again.
+- **It is published.** That version is spent, so the next attempt is a version bump rather than a moved
+  tag — a tag that moves lies to everyone who already fetched it. Publishing the draft is therefore the
+  one step in this sequence that cannot be taken back, which is why it is yours and not the workflow's.
 
 ## The conventions
 
