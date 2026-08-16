@@ -221,6 +221,21 @@ Identifiers are flat, sequential and never reused.
   is the one part to leave out: `## Options` legitimately contains an ordered structure, and a lint that
   guesses at the difference is worse than the sweep reading the file.
 
+### FU-20 - The renderer resolves the committed basemap from its own source path
+
+- **Status** — `dormant` (2026-08-15): the project is installed editable, so `__file__` is in the
+  checkout and `data/boundaries/` is beside it. `COASTLINE` is `parents[3]` of
+  `python/src/population_circles/render_map.py`, which is the repository root for exactly as long as
+  that holds.
+- **Condition** — anything installs this project other than editable from a checkout: a `uv tool
+  install`, a `uv publish`, or a workflow running an entry point out of a built wheel. Then `COASTLINE`
+  resolves under `site-packages`, where no `data/` sits beside the package, and `basemap()` raises
+  `FileNotFoundError` at draw time rather than at import.
+- **Fix** — ship the basemap as package data, or take its path as an argument defaulting to the registry
+  location. The first duplicates a committed file into the wheel and owes
+  [`data/README.md`](../data/README.md) a line saying so; the second keeps one copy and moves the choice
+  to the caller, which is the shape the rest of the renderer already takes.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
