@@ -335,6 +335,7 @@ new root.
 ```text
 CLAUDE.md                        Claude entry point — imports only
 .github/copilot-instructions.md  Copilot entry point — routing only
+opencode.json                    the agent's entry point — routing only
 .github/workflows/               CI
 docs/ai-instructions.md          the router: invariants and layering
 docs/ai/                         the instruction layer, one file per subject

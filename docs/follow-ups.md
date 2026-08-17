@@ -384,6 +384,26 @@ Identifiers are flat, sequential and never reused.
   Not done at the time of writing because the arrangement is correct and only the cost is suspect, and a
   figure nobody has measured is not a reason to complicate a manifest.
 
+### FU-26 - Two entry points name the instruction layer, and nothing couples them
+
+- **Status** — `dormant` (2026-08-17): both lists name the same four files today, so the copy is correct and
+  nothing says it stays that way.
+- **Condition** — the lists diverge. One sweep, two halves compared:
+  `rg -o '^@\S+' CLAUDE.md | sed 's|^@||'` against
+  `python3 -c "import json;print('\n'.join(json.load(open('opencode.json'))['instructions']))"`. On
+  2026-08-17 both return `docs/ai-instructions.md`, `docs/ai/platform.md`, `docs/ai/code.md` and
+  `docs/ai/application.md`. What fires it is a fifth file added under `docs/ai/` and imported by one entry
+  point alone — `platform.md` "Structure" already says a new file there gets its `CLAUDE.md` import line in
+  the same change, and it now needs two lines rather than one, with nothing at commit time saying so. The
+  failure is silent and asymmetric: Claude reads the new subject and the agent holding a write token does
+  not.
+- **Fix** — the equality becomes a case in `python/src/repo_tools/lint_docs.py`, which is already the
+  entry point that checks a pointer resolves and is already wired into `lint:docs`. It fits that hook's
+  shape rather than `lint_version_bumps.py`'s: this is an equality that must hold on every run, not a
+  coupling that fires on a change. The duplication itself is not removable — opencode does not expand
+  `CLAUDE.md`'s `@` syntax, which is why `opencode.json` exists at all — so coupling the two lists is the
+  whole of what can be done.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
