@@ -25,7 +25,14 @@ withholding `Edit` does not make them read-only against `gh`: each brief says `g
    milestone's cost as a sum of bands. A brief carrying those buys a persona's context for judgment instead
    of discovery.
 3. **List what the owner has already settled** — an order, a split, a rejected tool, anything a record or a
-   thread closed — as not to be reopened. Otherwise a round goes on re-deriving a decision.
+   thread closed — as not to be reopened, or a round goes on re-deriving a decision. **Reporting that one
+   blocks a finding stays in bounds**; reopening it as a proposal does not, and the brief draws that line
+   rather than leaving it to judgment.
+4. **Pass the owner's own suspicions on as seeds, not findings.** Whoever holds the board has hunches about
+   where the coupling is, and both fates are bad without a channel for them: unsaid they are lost, asserted
+   they bias the round into confirming them. So a seed is handed over named as unverified, and the brief says
+   to verify each against the tree, discard what does not survive, and **not to stop at the list** — a review
+   returning only the seeds has found nothing. A seed that dies is a result, and it is relayed as one.
 
 ## The rounds
 
