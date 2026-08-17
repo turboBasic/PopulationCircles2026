@@ -135,6 +135,15 @@ jobs:
       # The instruction reaches the agent through the environment and never through the script's text: it
       # originates in a comment body, and interpolating one into a run block is remote code execution by
       # whoever wrote the comment.
+      # --auto because a workflow has nobody to answer a prompt, and it auto-approves only what is not
+      # explicitly denied — so the deny list in `opencode.json` is the other half of this flag and not an
+      # independent preference. It is what makes the split below a constraint rather than a convention: the
+      # agent edits files, and committing, pushing and opening the pull request stay with the steps after
+      # this one. Measured: `git push --dry-run` is refused before executing, `git status` runs.
+      #
+      # What neither half closes is exfiltration. This process holds the provider key and the installation
+      # token in its environment and can reach the network, so what bounds that is the owner-only trigger,
+      # an ephemeral runner and a cap on the provider's side — never this flag.
       - name: Run the agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

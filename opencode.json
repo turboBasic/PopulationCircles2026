@@ -5,5 +5,17 @@
     "docs/ai/platform.md",
     "docs/ai/code.md",
     "docs/ai/application.md"
-  ]
+  ],
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "git push*": "deny",
+      "git commit*": "deny",
+      "git reset*": "deny",
+      "git rebase*": "deny",
+      "git switch*": "deny",
+      "git checkout*": "deny",
+      "gh *": "deny"
+    }
+  }
 }
