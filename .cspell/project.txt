@@ -15,6 +15,7 @@ codesign
 iostat
 commitizen
 cspell
+deepseek
 flycheck
 mise
 notarytool
@@ -122,6 +123,7 @@ zune
 
 # --- Repository jargon ---
 backticked
+dispatchable
 docstrings
 frontmatter
 lockfiles
