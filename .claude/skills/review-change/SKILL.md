@@ -12,6 +12,50 @@ the tree, in a further commit, a task on the next phase, or an entry in `docs/fo
 
 The four sections every finding is measured against are that file's, and this one does not repeat them.
 
+## What is already settled
+
+The persona's rule is not to re-derive what a gate settled. This is how to know what that covers without
+running anything — **a review's budget goes to what no gate can see, and re-checking L0 is duplicating a
+layer.**
+
+**A commit implies its hooks ran** on the files each one matches: the formatters, `cargo fmt`,
+`cargo clippy`, cspell, markdownlint, the doc-pointer and structure-tree check, the two exemption guards,
+the large-file and registry checks, and commitizen on the message. `.pre-commit-config.yaml` is the roster.
+
+**A commit implies nothing about typecheck or tests.** No hook runs either; only `mise run ci` does. Those
+are the two facts a caller has to state, and absent a statement they are unknown.
+
+**A phase run by `run-plan` implies both**, because its step 7 runs `prek run --all-files` and
+`mise run ci` before every commit in the range.
+
+**A pushed ref needs no claim at all.** `gh api repos/:owner/:repo/commits/<sha>/check-runs` is
+authoritative in one call, and it outranks anything a brief says.
+
+**`--no-verify` is undetectable from a commit, and costs nothing to catch anyway.** A bypass leaves what the
+hooks would have fixed — unformatted code, a spelling the dictionary refuses, a stale structure tree — and
+that is visible while reading the diff. Finding one is a finding. Re-running the gate to look for one is not
+this review's work.
+
+## What the brief may say, and what it may not
+
+A caller hands over facts. Anything absent from the brief is **unknown, not settled**, and any of these that
+is missing and matters is asked for rather than assumed:
+
+- the commit range or ref under review;
+- whether `mise run ci` passed, at which commit, and whether the tree was clean;
+- anything bypassed, and how;
+- which touched files are generated rather than authored;
+- the `Verify:` line of the task each commit lands under;
+- the issue, record or follow-up entry the change claims to satisfy.
+
+**It may not carry the implementer's reasoning** — why that shape was chosen, what alternatives were
+rejected, or any self-assessment of the change. Reaching that independently is the whole reason this review
+runs in its own context, and a brief that supplies it hands over a conclusion dressed as a fact.
+
+**A false claim in the brief outranks every other finding**, and is reported first. It is not a slip to
+absorb: the review's economy rests on those statements, so a wrong one is the most expensive thing in the
+range.
+
 ## Ask first whether the change moved its own goalposts
 
 Before anything else, look at what in the diff decides whether the change passes. That surface is small and

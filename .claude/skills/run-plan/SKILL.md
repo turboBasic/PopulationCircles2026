@@ -53,7 +53,11 @@ issue checkbox the closing task reaches.
    under-reports what landed, and the next one re-derives work already committed.
 9. **Take the next unchecked task in the same phase and repeat from step 5.** At the phase boundary,
    stop. Do not roll into the next phase.
-10. **Run the `review-change` skill as the `architect` agent over the phase's commits**, once for the phase rather than per
+10. **Run the `review-change` skill as the `architect` agent over the phase's commits.** Hand it the facts
+    that skill's brief asks for, and state the one this loop owns: every commit in the range passed
+    `prek run --all-files` and `mise run ci` at step 7, so no gate in them is the review's to re-run. Facts
+    only — what the tasks were and what passed, never why a shape was chosen, because the verdict is worth
+    having only from a reader who has not been told. Once for the phase rather than per
     task — per-task invocation multiplies the cost by the task count for a commit that is still amendable
     inside its phase. Every task is committed and its box ticked by now, so a rejection cannot reopen
     anything; what it obliges is one of three answers, and ticked boxes stay ticked because the commit is
