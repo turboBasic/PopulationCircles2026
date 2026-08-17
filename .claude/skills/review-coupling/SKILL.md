@@ -32,12 +32,23 @@ withholding `Edit` does not make them read-only against `gh`: each brief says `g
    list as not to be reopened, or a round goes on re-deriving a decision — and **reporting that one blocks a
    finding stays in bounds** while reopening it as a proposal does not, a line the brief draws rather than
    leaving to judgment.
-4. **Take the owner's suspicions from the invocation, ask once if none came with it, and accept none as an
-   answer.** Whoever holds the board has hunches about where the coupling is, and both fates are bad without
-   a channel: unsaid they are lost, asserted they bias the round into confirming them. So each is handed on
-   named as a seed and unverified, and the brief says to verify it against the tree, discard what does not
-   survive, and **not to stop at the list** — a review returning only the seeds has found nothing. Add your
-   own from step 1 marked as yours, held to the same rule. A seed that dies is a result and is relayed as one.
+4. **Write the seeds while doing step 1, because that is when they are visible.** A seed is a candidate
+   noticed by whoever last held the whole graph at once, not an answer to "what do you suspect" — asked cold,
+   that question returns little. Sweep the read for these shapes, each of which is a coupling that no single
+   issue's thread shows:
+   - one small change gating several issues, especially across a milestone boundary;
+   - one fact solved locally in several issues, owned by none of them;
+   - a boundary crossed the wrong way, a layer naming something that sits above it;
+   - an unblocked issue ordered late while issues after it redo its work;
+   - one issue gating most of a milestone;
+   - two issues needing one artefact nobody has defined;
+   - a gate absent for a platform or target a milestone assumes;
+   - a debt or review backlog nobody has scheduled.
+
+   Fold in whatever the owner sent with the invocation, ask once if nothing came and **accept none as an
+   answer**, and mark whose each seed is. Then hand every one of them on **named as unverified**: the brief
+   says to check it against the tree, discard what does not survive, and **not to stop at the list**, since a
+   review returning only its seeds has found nothing. A seed that dies is a result and is relayed as one.
 
 **Confirm the range, the derived constraints and the seeds in one message before round 0**, then start. A wrong
 constraint list costs a whole context at high effort, which is a sixth of the budget.
