@@ -241,6 +241,15 @@ inside, so an area and a size on it are a sum of its children rather than a fact
 **The sizes exist to balance milestones against each other and for nothing else.** They are bands, and a
 date derived from summing them is arithmetic on guesses.
 
+## Prose published to GitHub
+
+**One paragraph is one line.** An issue body, a comment, a PR body and a release body are rendered as GFM
+with hard breaks on, so every newline inside a paragraph becomes a `<br>` and the wrapping habit of a
+committed file arrives as ragged short lines. Blank lines separate paragraphs; nothing else wraps. Tables,
+lists and fenced blocks are structure rather than wrapping and are unaffected. Committed Markdown is the
+opposite — MD013 is off, so wrapping there costs nothing — which is why this crosses over unnoticed.
+`gh api -X POST /markdown -f mode=gfm -f text=…` renders the difference against `mode=markdown`.
+
 ## Git
 
 - Conventional Commits, commitizen's default types; the PR title is held to the same format. Both
