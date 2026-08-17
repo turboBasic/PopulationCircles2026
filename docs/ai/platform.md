@@ -246,7 +246,9 @@ date derived from summing them is arithmetic on guesses.
 **One paragraph is one line.** An issue body, a comment, a PR body and a release body are rendered as GFM
 with hard breaks on, so every newline inside a paragraph becomes a `<br>` and the wrapping habit of a
 committed file arrives as ragged short lines. Blank lines separate paragraphs; nothing else wraps. Tables,
-lists and fenced blocks are structure rather than wrapping and are unaffected. Committed Markdown is the
+lists and fenced blocks are structure rather than wrapping and are unaffected — but one list item is still
+one line however long it runs, and consecutive blockquote lines join the same way, because a hard break
+reads no better inside a quote. Committed Markdown is the
 opposite — MD013 is off, so wrapping there costs nothing — which is why this crosses over unnoticed.
 `gh api -X POST /markdown -f mode=gfm -f text=…` renders the difference against `mode=markdown`.
 
