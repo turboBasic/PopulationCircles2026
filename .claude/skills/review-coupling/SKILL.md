@@ -1,6 +1,7 @@
 ---
 name: review-coupling
 description: Convene the architect and the product owner in dialog over the dependency structure of planned work - the debt no ticket carries, which blocking edges are real, and what re-cut shortens the flow - each position relayed verbatim, ruled by the owner, then applied to the board. Use when the user asks why a range of milestones is slow, whether its blockers are real, or for a re-cut of how planned work is decomposed.
+argument-hint: "<milestone range or issue set> [suspicions to treat as seeds]"
 model: opus
 effort: high
 ---
@@ -24,15 +25,22 @@ withholding `Edit` does not make them read-only against `gh`: each brief says `g
 2. **Compute what the review is measured against**: the live edge count, the longest chain in nodes, and each
    milestone's cost as a sum of bands. A brief carrying those buys a persona's context for judgment instead
    of discovery.
-3. **List what the owner has already settled** — an order, a split, a rejected tool, anything a record or a
-   thread closed — as not to be reopened, or a round goes on re-deriving a decision. **Reporting that one
-   blocks a finding stays in bounds**; reopening it as a proposal does not, and the brief draws that line
-   rather than leaving it to judgment.
-4. **Pass the owner's own suspicions on as seeds, not findings.** Whoever holds the board has hunches about
-   where the coupling is, and both fates are bad without a channel for them: unsaid they are lost, asserted
-   they bias the round into confirming them. So a seed is handed over named as unverified, and the brief says
-   to verify each against the tree, discard what does not survive, and **not to stop at the list** — a review
-   returning only the seeds has found nothing. A seed that dies is a result, and it is relayed as one.
+3. **Derive what the owner has already settled rather than asking them to recite it.** An order, a split, a
+   rejected tool, a declined fix: accepted records in `docs/decisions/`, the epic bodies, the register's
+   declined entries and the comments where a thread cut a scope or settled a figure are where these are
+   written down, and the one an owner forgets to mention is the one a persona reopens. Each brief carries the
+   list as not to be reopened, or a round goes on re-deriving a decision — and **reporting that one blocks a
+   finding stays in bounds** while reopening it as a proposal does not, a line the brief draws rather than
+   leaving to judgment.
+4. **Take the owner's suspicions from the invocation, ask once if none came with it, and accept none as an
+   answer.** Whoever holds the board has hunches about where the coupling is, and both fates are bad without
+   a channel: unsaid they are lost, asserted they bias the round into confirming them. So each is handed on
+   named as a seed and unverified, and the brief says to verify it against the tree, discard what does not
+   survive, and **not to stop at the list** — a review returning only the seeds has found nothing. Add your
+   own from step 1 marked as yours, held to the same rule. A seed that dies is a result and is relayed as one.
+
+**Confirm the range, the derived constraints and the seeds in one message before round 0**, then start. A wrong
+constraint list costs a whole context at high effort, which is a sixth of the budget.
 
 ## The rounds
 
