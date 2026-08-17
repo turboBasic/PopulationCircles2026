@@ -170,10 +170,15 @@ jobs:
 
       # continue-on-error, because a red gate is a result this run reports rather than a reason to end
       # without one. An agent that hides its own failure is worse than an agent that does not run.
+      #
+      # The output is kept because reporting only that it failed sends a reader to the run log to find out
+      # what did, which is the one errand the pull request body exists to save. `shell: bash` is what
+      # supplies pipefail, without which `tee` would mask the status this step is judged on.
       - name: Run the gates
         id: gates
         continue-on-error: true
-        run: mise run ci
+        shell: bash
+        run: mise run ci 2>&1 | tee "$RUNNER_TEMP/ci.log"
 
       # The message is composed here rather than left to the agent because main's ruleset checks it:
       # commitizen runs over every commit in the pull request, so a message the agent improvised would
@@ -213,6 +218,13 @@ jobs:
 
           EOF
           sed 's/^/> /' "$RUNNER_TEMP/instruction.txt" >> "$body"
+          if [ "$GATES" != success ] && [ -f "$RUNNER_TEMP/ci.log" ]; then
+            {
+              printf '\n<details><summary>What <code>mise run ci</code> reported</summary>\n\n```\n'
+              sed -r 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/ci.log" | tail -n 40
+              printf '```\n\n</details>\n'
+            } >> "$body"
+          fi
           printf '\n\n[The run that produced this](%s)\n' "$RUN_URL" >> "$body"
           # A resumed branch already has its pull request, and `gh pr create` fails outright while one is
           # open for the same head. The body is the newest run's, so the report at the top describes the
