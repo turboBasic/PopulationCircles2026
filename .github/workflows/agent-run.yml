@@ -85,6 +85,13 @@ jobs:
 
       # The bot's numeric id is what makes a commit attributable to the App rather than to an address
       # nothing owns, and it is only discoverable from the API.
+      #
+      # The branch is resumed where it already exists, rather than always cut from the default branch, and
+      # no naming scheme substitutes for that: `run_id` and `run_number` are both stable across a re-run —
+      # only `run_attempt` increments — so a run that pushed and then failed later would collide with itself
+      # on re-run whatever the name held. Starting from `origin/$branch` is what makes the later push a
+      # fast-forward. Iterating on one issue is therefore additive, and starting over is closing the pull
+      # request and deleting the branch, which is a deliberate act rather than a side effect of asking twice.
       - name: Identify as the App and branch
         id: branch
         env:
@@ -97,7 +104,12 @@ jobs:
           git config user.name "${SLUG}[bot]"
           git config user.email "${bot_id}+${SLUG}[bot]@users.noreply.github.com"
           branch="agent/${ISSUE:-run-${RUN_ID}}"
-          git switch -c "$branch"
+          if git fetch --quiet origin "$branch" 2>/dev/null; then
+            echo "Resuming $branch, which already exists on the remote."
+            git switch -c "$branch" FETCH_HEAD
+          else
+            git switch -c "$branch"
+          fi
           echo "name=$branch" >> "$GITHUB_OUTPUT"
 
       # `agent.yml` hands over the comment verbatim, because GitHub's expression language can neither trim
@@ -193,5 +205,13 @@ jobs:
           EOF
           sed 's/^/> /' "$RUNNER_TEMP/instruction.txt" >> "$body"
           printf '\n\n[The run that produced this](%s)\n' "$RUN_URL" >> "$body"
-          gh pr create --draft --head "$BRANCH" \
-            --title "chore(agent): ${subject}" --body-file "$RUNNER_TEMP/pr-body.md"
+          # A resumed branch already has its pull request, and `gh pr create` fails outright while one is
+          # open for the same head. The body is the newest run's, so the report at the top describes the
+          # commits now on the branch rather than the first attempt's.
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = 0 ]; then
+            gh pr create --draft --head "$BRANCH" \
+              --title "chore(agent): ${subject}" --body-file "$body"
+          else
+            gh pr edit "$BRANCH" --body-file "$body"
+            gh pr comment "$BRANCH" --body "Another run pushed to this branch. The description above is now that run's."
+          fi
