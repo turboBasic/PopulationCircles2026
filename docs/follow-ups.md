@@ -404,6 +404,26 @@ Identifiers are flat, sequential and never reused.
   `CLAUDE.md`'s `@` syntax, which is why `opencode.json` exists at all — so coupling the two lists is the
   whole of what can be done.
 
+### FU-27 - The agent's authorisation is one association string, trustworthy because one person has write access
+
+- **Status** — `dormant` (2026-08-17): one account can write here, so `OWNER` and "whoever may spend the
+  provider key" are the same set. The gate is correct today for a reason that is about the repository rather
+  than about the gate.
+- **Condition** — a second account gains **write** access:
+  `gh api repos/:owner/:repo/collaborators --jq 'length'` returning more than 1. Write is the event, not
+  admin, which is what separates this from [FU-21](#fu-21---the-direct-push-to-main-is-a-concession-to-an-early-solo-repository) —
+  that entry's condition is a second *admin* and its Fix is the direct-push concession. A contributor with
+  write access can push branches and open pull requests but is not `OWNER`, so `/agent` silently keeps
+  refusing them while the intent behind the gate has changed: the question stops being "is this the owner"
+  and becomes "may this person spend the key".
+- **Fix** — `.github/workflows/agent.yml`'s condition stops being an equality against one string. What it
+  becomes is the decision this entry defers rather than pre-empts: a set of associations, a team check, or a
+  label a trusted person applies. The cost of getting it wrong is not a broken build — a public repository,
+  a metered credential and a write-scoped token are three things whose composition is the security boundary
+  [ADR 0010](decisions/0010-automation-brings-its-own-provider.md) names, so loosening it is argued for on
+  the tree as it is then. Note while deciding: `author_association` is computed by GitHub per comment and
+  cannot be narrowed to "this person may spend money", so whatever replaces it is a proxy too.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
