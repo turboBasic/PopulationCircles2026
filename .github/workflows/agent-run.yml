@@ -21,6 +21,16 @@ on:
         required: false
         type: string
         default: openrouter/deepseek/deepseek-v4-pro-0813
+    # Declared one by one so a caller passes them explicitly, which is what makes this workflow's whole
+    # credential surface readable from its own signature. A dispatched run reads the same three from the
+    # repository directly.
+    secrets:
+      AGENT_APP_ID:
+        required: true
+      AGENT_APP_PRIVATE_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       instruction:
@@ -119,6 +129,24 @@ jobs:
           MODEL: ${{ inputs.model }}
         run: opencode run --auto --model "$MODEL" "$(cat "$RUNNER_TEMP/instruction.txt")"
 
+      # Staged before the gates run, and that order is load-bearing rather than tidy: every hook
+      # `mise run lint` reaches goes through `prek run --all-files`, whose file list is the git index, so a
+      # file the agent created but nobody staged is invisible to cspell, markdownlint,
+      # check-added-large-files and geo-data-registered alike. Measured on this tree: an untracked file
+      # holding two misspellings passes, and the same file staged fails. Gating after the add is what makes
+      # the result this run reports cover what the agent actually wrote — including the large-file and
+      # registry hooks, which stand behind an invariant a later commit cannot undo.
+      - name: Stage what the agent changed
+        id: staged
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The agent changed nothing."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # continue-on-error, because a red gate is a result this run reports rather than a reason to end
       # without one. An agent that hides its own failure is worse than an agent that does not run.
       - name: Run the gates
@@ -130,25 +158,22 @@ jobs:
       # commitizen runs over every commit in the pull request, so a message the agent improvised would
       # block its own branch.
       - name: Commit and push
-        id: commit
+        if: steps.staged.outputs.changed == 'true'
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "The agent changed nothing."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           subject=$(head -n 1 "$RUNNER_TEMP/instruction.txt" | cut -c1-64)
+          # Staged again, because the formatting hooks in `mise run ci` rewrite files rather than only
+          # reporting on them, so the gate may have left changes of its own.
           git add -A
           git commit -m "chore(agent): ${subject}"
           git push -u origin "$BRANCH"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      # No --base: gh defaults to the repository's default branch, so no step here names it and nothing
-      # can push to it by having the name to hand.
+      # No --base: gh defaults to the repository's default branch. What keeps the agent off that branch is
+      # the ruleset, which refuses a direct push from an actor holding no bypass — not the absence of the
+      # word here.
       - name: Open the draft pull request
-        if: steps.commit.outputs.changed == 'true'
+        if: steps.staged.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           MODEL: ${{ inputs.model }}

@@ -15,8 +15,7 @@ permissions: {}
 jobs:
   # Both halves of the condition are load-bearing. The prefix is what makes an ordinary comment free;
   # author_association is what keeps a public repository's commenters away from a metered key and a
-  # write-scoped token. OWNER is the only trusted value because one account has write access here — that
-  # this is a single string is recorded as FU-25 rather than left to be rediscovered.
+  # write-scoped token. OWNER is the only trusted value because one account has write access here.
   agent:
     if: >-
       startsWith(github.event.comment.body, '/agent')
@@ -30,4 +29,10 @@ jobs:
       # takes an API call.
       instruction: ${{ github.event.comment.body }}
       issue: ${{ github.event.issue.number }}
-    secrets: inherit
+    # Named one by one rather than inherited: these three are every secret the repository has today, so
+    # `inherit` would cost nothing now and would silently widen the agent's scope the moment a fourth is
+    # added, with no diff in either workflow to show it.
+    secrets:
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

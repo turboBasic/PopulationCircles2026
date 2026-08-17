@@ -142,9 +142,11 @@ it. [`data/README.md`](data/README.md) is where the provenance that identifies t
 
 ## Asking the agent
 
-Comment `/agent <what you want done>` on an issue or a pull request. A bare `/agent` takes the issue's own
-body as the instruction. The agent works on a branch, runs `mise run ci`, and opens a **draft** pull
-request whose body reports whether that gate passed — read that line before the diff, because a red gate
+Comment `/agent <what you want done>` **on an issue**. A bare `/agent` takes the issue's own body as the
+instruction. On a pull request it does not do the useful thing — it would branch from `main` rather than
+from that pull request's head and open a second, unrelated one — so it is an issue or nothing until
+something resolves the head ref. The agent works on a branch, runs `mise run ci`, and opens a **draft**
+pull request whose body reports whether that gate passed — read that line before the diff, because a red gate
 there is the agent saying so rather than hiding it. It cannot push to `main`, and its pull request needs
 the same three green checks as anyone else's.
 

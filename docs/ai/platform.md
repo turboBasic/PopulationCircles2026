@@ -288,11 +288,10 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
 - **A second actor may write here, and it is not a person.** A GitHub App authors the agent's branches and
   pull requests ([ADR 0010](../decisions/0010-automation-brings-its-own-provider.md)). It holds contents,
   issues and pull requests write and nothing else — never `Workflows`, which would let it rewrite the
-  checks it has to pass. It is no bypass actor, so its pull request needs the same three green checks
-  anyone else's does, and that is exactly why its identity has to be distinct from the token a workflow is
-  issued: GitHub starts no run for a pull request opened with that token, so two of the three would never
-  report and the result would be mergeable by nobody. Nothing scopes an installation token to a branch, so
-  what keeps it off `main` is that no step of the agent's workflow names `main`.
+  checks it has to pass. **It is no bypass actor, and that is what refuses it `main`**, exactly as it
+  refuses any contributor: not the workflow's step list, which bounds nothing once the agent's own shell
+  holds a credential. What the workflow's scope does still leave is repository-wide `contents: write`, so
+  any branch but `main` is force-pushable by it.
 - Never commit a secret, a generated artefact, or a raster.
 - An issue this work closes is closed by the PR that carries it — a `Closes #N` (or `Fixes`/
   `Resolves`) line in the PR body, merged into the default branch — not by a direct close run before
