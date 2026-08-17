@@ -340,6 +340,29 @@ Identifiers are flat, sequential and never reused.
   restatement would report. So the fix is to separate the two scopes, or to carve this file out of the
   duplication half, and that shape is what makes it an entry rather than the one line it looks like.
 
+### FU-24 - The reader hand-copies the wire format's version and its kinds
+
+- **Status** — `dormant` (2026-08-17): the two sides agree today, so the copy is correct and nothing
+  says it has to stay that way.
+- **Condition** — the constants diverge. Two halves, each a one-line sweep:
+  `rg -o 'const KIND: &.static str = "[a-z-]+"' crates/popcircles/src/report.rs` against the
+  `DocumentKind` literal in `python/src/population_circles/circle_document.py`, and `SCHEMA_VERSION` in
+  each file. On 2026-08-17 the Rust sweep returns ten and the reader lists nine, which is the count
+  agreeing rather than disagreeing: the tenth is `envelope-fixture` under `#[cfg(test)]`, so a sweep that
+  does not exclude the test module reads a divergence that is not one. `SCHEMA_VERSION` is `1` on both
+  sides. What fires it is a kind added to `report.rs` — the reader then refuses a document the format
+  says is valid, at a boundary whose whole job is to refuse the ones that are not — or the constant
+  rising on one side alone, where the version gate stops meaning what it says.
+- **Fix** — a pair in `python/src/repo_tools/lint_version_bumps.py`, which is where a wire-format
+  constant is already coupled to what governs it. It does not fit that hook's existing shape and the
+  entry says so rather than leaving it to be discovered: `STRUCT_TRIGGERS` compares HEAD against the
+  index, so it fires on a *change*, while what is wanted here is an equality between two files that
+  holds on every run — which is a `lint:docs`-shaped check living in a hook that is not. Whoever fires
+  this decides which of the two it joins, and the reason the copy exists at all is not a defect to
+  remove: `circle_document.py` is the boundary [ADR 0002](decisions/0002-rust-computes-python-presents.md)
+  puts between the halves, and reading the Rust source at runtime would be the coupling that record
+  exists to prevent.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
