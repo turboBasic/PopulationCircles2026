@@ -9,6 +9,7 @@ alexmijo
 # --- Repository and tooling ---
 turboBasic
 actionlint
+anomalyco
 binstall
 codesign
 iostat
@@ -17,6 +18,8 @@ cspell
 flycheck
 mise
 notarytool
+opencode
+OpenRouter
 popcircles
 prek
 pyright
