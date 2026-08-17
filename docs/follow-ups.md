@@ -9,6 +9,10 @@ worse than no entry at all.
 hook's result — something a sweep can evaluate without asking the user what they have experienced.
 Prose that cannot meet that bar is not a follow-up and does not belong here.
 
+**An entry arrives when work stumbles over one, so this register is not a survey.** A module named
+nowhere below has not been found clean; it has not been looked at, and finding out takes a deliberate
+sweep rather than a read of this file.
+
 ## Statuses
 
 - `dormant` — the condition is checkable and has not been met.
