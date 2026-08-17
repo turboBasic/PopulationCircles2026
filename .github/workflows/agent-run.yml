@@ -90,15 +90,34 @@ jobs:
           git switch -c "$branch"
           echo "name=$branch" >> "$GITHUB_OUTPUT"
 
+      # `agent.yml` hands over the comment verbatim, because GitHub's expression language can neither trim
+      # nor replace. Both halves of the resolution therefore happen here, in shell, where the body is an
+      # environment variable rather than text about to be interpolated: strip a leading `/agent`, and where
+      # nothing is left, take the issue's own body as the instruction. A dispatched run carries no prefix,
+      # so the strip is a no-op for it.
+      # A file rather than a step output, because an instruction is arbitrary multi-line text and a
+      # heredoc-delimited output can be broken by text containing the delimiter.
+      - name: Resolve the instruction
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RAW: ${{ inputs.instruction }}
+          ISSUE: ${{ inputs.issue }}
+        run: |
+          instruction=$(printf '%s' "$RAW" | sed -E '1s|^[[:space:]]*/agent[[:space:]]*||')
+          if [ -z "$(printf '%s' "$instruction" | tr -d '[:space:]')" ]; then
+            [ -n "$ISSUE" ] || { echo "::error::No instruction, and no issue to take one from."; exit 1; }
+            instruction=$(gh issue view "$ISSUE" --json body --jq .body)
+          fi
+          printf '%s' "$instruction" > "$RUNNER_TEMP/instruction.txt"
+
       # The instruction reaches the agent through the environment and never through the script's text: it
       # originates in a comment body, and interpolating one into a run block is remote code execution by
       # whoever wrote the comment.
       - name: Run the agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          INSTRUCTION: ${{ inputs.instruction }}
           MODEL: ${{ inputs.model }}
-        run: opencode run --auto --model "$MODEL" "$INSTRUCTION"
+        run: opencode run --auto --model "$MODEL" "$(cat "$RUNNER_TEMP/instruction.txt")"
 
       # continue-on-error, because a red gate is a result this run reports rather than a reason to end
       # without one. An agent that hides its own failure is worse than an agent that does not run.
@@ -113,7 +132,6 @@ jobs:
       - name: Commit and push
         id: commit
         env:
-          INSTRUCTION: ${{ inputs.instruction }}
           BRANCH: ${{ steps.branch.outputs.name }}
         run: |
           if [ -z "$(git status --porcelain)" ]; then
@@ -121,7 +139,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          subject=$(printf '%s' "$INSTRUCTION" | head -n 1 | cut -c1-64)
+          subject=$(head -n 1 "$RUNNER_TEMP/instruction.txt" | cut -c1-64)
           git add -A
           git commit -m "chore(agent): ${subject}"
           git push -u origin "$BRANCH"
@@ -133,17 +151,22 @@ jobs:
         if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          INSTRUCTION: ${{ inputs.instruction }}
           MODEL: ${{ inputs.model }}
           BRANCH: ${{ steps.branch.outputs.name }}
           GATES: ${{ steps.gates.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          subject=$(printf '%s' "$INSTRUCTION" | head -n 1 | cut -c1-64)
-          printf '%s\n\n%s\n\n%s\n\n%s\n' \
-            "\`mise run ci\` on this branch: **${GATES}**. Read it before the diff — a failed gate here is the agent's own failure, reported rather than hidden." \
-            "**Model:** \`${MODEL}\`" \
-            "**Instruction**"$'\n\n'"> ${INSTRUCTION}" \
-            "[The run that produced this](${RUN_URL})" > /tmp/pr-body.md
+          subject=$(head -n 1 "$RUNNER_TEMP/instruction.txt" | cut -c1-64)
+          body="$RUNNER_TEMP/pr-body.md"
+          cat > "$body" <<EOF
+          \`mise run ci\` on this branch: **${GATES}**. Read that before the diff — a failed gate here is the agent reporting its own failure rather than hiding it.
+
+          **Model:** \`${MODEL}\`
+
+          **Instruction**
+
+          EOF
+          sed 's/^/> /' "$RUNNER_TEMP/instruction.txt" >> "$body"
+          printf '\n\n[The run that produced this](%s)\n' "$RUN_URL" >> "$body"
           gh pr create --draft --head "$BRANCH" \
-            --title "chore(agent): ${subject}" --body-file /tmp/pr-body.md
+            --title "chore(agent): ${subject}" --body-file "$RUNNER_TEMP/pr-body.md"
