@@ -1,0 +1,38 @@
+# The gate in front of the agent, and nothing else: this file decides whether a comment may spend the
+# provider key, and `agent-run.yml` is what it spends it on.
+#
+# The job runs no step of its own. That is the security property, not a simplification — a gate with a
+# script in it is a place the comment body could reach, and there is nothing here for it to reach.
+
+name: Agent
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  # Both halves of the condition are load-bearing. The prefix is what makes an ordinary comment free;
+  # author_association is what keeps a public repository's commenters away from a metered key and a
+  # write-scoped token. OWNER is the only trusted value because one account has write access here.
+  agent:
+    if: >-
+      startsWith(github.event.comment.body, '/agent')
+      && github.event.comment.author_association == 'OWNER'
+    uses: ./.github/workflows/agent-run.yml
+    with:
+      # The whole comment, unparsed. GitHub's expression language has neither `trim` nor `replace`, so
+      # stripping the prefix cannot happen here — and it should not: the called workflow does it in shell
+      # with the body already in an environment variable, which is the one place it is data rather than
+      # text about to be interpolated. That is also where the fall back to the issue body lives, since it
+      # takes an API call.
+      instruction: ${{ github.event.comment.body }}
+      issue: ${{ github.event.issue.number }}
+    # Named one by one rather than inherited: these three are every secret the repository has today, so
+    # `inherit` would cost nothing now and would silently widen the agent's scope the moment a fourth is
+    # added, with no diff in either workflow to show it.
+    secrets:
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

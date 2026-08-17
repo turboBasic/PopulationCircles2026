@@ -1,0 +1,217 @@
+# The agent itself, callable and dispatchable. It is separate from `agent.yml` because an
+# `issue_comment` workflow only ever runs the default branch's copy, so a single-file design could not be
+# tested until it was already merged; `workflow_dispatch` here is what makes a change to the agent
+# runnable on its own.
+
+name: Agent run
+
+on:
+  workflow_call:
+    inputs:
+      instruction:
+        description: What the agent is asked to do
+        required: true
+        type: string
+      issue:
+        description: The issue the run belongs to, which names its branch
+        required: false
+        type: number
+      model:
+        description: An opencode provider/model identifier
+        required: false
+        type: string
+        default: openrouter/deepseek/deepseek-v4-pro-0813
+    # Declared one by one so a caller passes them explicitly, which is what makes this workflow's whole
+    # credential surface readable from its own signature. A dispatched run reads the same three from the
+    # repository directly.
+    secrets:
+      AGENT_APP_ID:
+        required: true
+      AGENT_APP_PRIVATE_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      instruction:
+        description: What the agent is asked to do
+        required: true
+        type: string
+      issue:
+        description: The issue the run belongs to, which names its branch
+        required: false
+        type: number
+      model:
+        description: An opencode provider/model identifier
+        required: false
+        type: string
+        default: openrouter/deepseek/deepseek-v4-pro-0813
+
+# Every write in this workflow goes through the App installation token, never GITHUB_TOKEN: a pull request
+# opened with GITHUB_TOKEN creates no workflow run, so two of main's three required checks would never
+# report on it and the result would be unmergeable by everyone but the one bypass actor.
+permissions: {}
+
+jobs:
+  agent:
+    name: Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Not cancel-in-progress: a cancelled run leaves a half-written branch behind, which is worse than
+    # making the second invocation wait.
+    concurrency:
+      group: agent-${{ inputs.issue || github.run_id }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      # persist-credentials is left at its default here, where ci.yml turns it off: this job pushes a
+      # branch and opens a pull request, so the token has to survive the checkout into the git steps.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      - name: Sync Python tooling
+        run: uv sync --locked
+
+      # The bot's numeric id is what makes a commit attributable to the App rather than to an address
+      # nothing owns, and it is only discoverable from the API.
+      #
+      # The branch is resumed where it already exists, rather than always cut from the default branch, and
+      # no naming scheme substitutes for that: `run_id` and `run_number` are both stable across a re-run —
+      # only `run_attempt` increments — so a run that pushed and then failed later would collide with itself
+      # on re-run whatever the name held. Starting from `origin/$branch` is what makes the later push a
+      # fast-forward. Iterating on one issue is therefore additive, and starting over is closing the pull
+      # request and deleting the branch, which is a deliberate act rather than a side effect of asking twice.
+      - name: Identify as the App and branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+          ISSUE: ${{ inputs.issue }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          bot_id=$(gh api "/users/${SLUG}[bot]" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${bot_id}+${SLUG}[bot]@users.noreply.github.com"
+          branch="agent/${ISSUE:-run-${RUN_ID}}"
+          if git fetch --quiet origin "$branch" 2>/dev/null; then
+            echo "Resuming $branch, which already exists on the remote."
+            git switch -c "$branch" FETCH_HEAD
+          else
+            git switch -c "$branch"
+          fi
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+
+      # `agent.yml` hands over the comment verbatim, because GitHub's expression language can neither trim
+      # nor replace. Both halves of the resolution therefore happen here, in shell, where the body is an
+      # environment variable rather than text about to be interpolated: strip a leading `/agent`, and where
+      # nothing is left, take the issue's own body as the instruction. A dispatched run carries no prefix,
+      # so the strip is a no-op for it.
+      # A file rather than a step output, because an instruction is arbitrary multi-line text and a
+      # heredoc-delimited output can be broken by text containing the delimiter.
+      - name: Resolve the instruction
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RAW: ${{ inputs.instruction }}
+          ISSUE: ${{ inputs.issue }}
+        run: |
+          instruction=$(printf '%s' "$RAW" | sed -E '1s|^[[:space:]]*/agent[[:space:]]*||')
+          if [ -z "$(printf '%s' "$instruction" | tr -d '[:space:]')" ]; then
+            [ -n "$ISSUE" ] || { echo "::error::No instruction, and no issue to take one from."; exit 1; }
+            instruction=$(gh issue view "$ISSUE" --json body --jq .body)
+          fi
+          printf '%s' "$instruction" > "$RUNNER_TEMP/instruction.txt"
+
+      # The instruction reaches the agent through the environment and never through the script's text: it
+      # originates in a comment body, and interpolating one into a run block is remote code execution by
+      # whoever wrote the comment.
+      - name: Run the agent
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MODEL: ${{ inputs.model }}
+        run: opencode run --auto --model "$MODEL" "$(cat "$RUNNER_TEMP/instruction.txt")"
+
+      # Staged before the gates run, and that order is load-bearing rather than tidy: every hook
+      # `mise run lint` reaches goes through `prek run --all-files`, whose file list is the git index, so a
+      # file the agent created but nobody staged is invisible to cspell, markdownlint,
+      # check-added-large-files and geo-data-registered alike. Measured on this tree: an untracked file
+      # holding two misspellings passes, and the same file staged fails. Gating after the add is what makes
+      # the result this run reports cover what the agent actually wrote — including the large-file and
+      # registry hooks, which stand behind an invariant a later commit cannot undo.
+      - name: Stage what the agent changed
+        id: staged
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The agent changed nothing."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # continue-on-error, because a red gate is a result this run reports rather than a reason to end
+      # without one. An agent that hides its own failure is worse than an agent that does not run.
+      - name: Run the gates
+        id: gates
+        continue-on-error: true
+        run: mise run ci
+
+      # The message is composed here rather than left to the agent because main's ruleset checks it:
+      # commitizen runs over every commit in the pull request, so a message the agent improvised would
+      # block its own branch.
+      - name: Commit and push
+        if: steps.staged.outputs.changed == 'true'
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          subject=$(head -n 1 "$RUNNER_TEMP/instruction.txt" | cut -c1-64)
+          # Staged again, because the formatting hooks in `mise run ci` rewrite files rather than only
+          # reporting on them, so the gate may have left changes of its own.
+          git add -A
+          git commit -m "chore(agent): ${subject}"
+          git push -u origin "$BRANCH"
+
+      # No --base: gh defaults to the repository's default branch. What keeps the agent off that branch is
+      # the ruleset, which refuses a direct push from an actor holding no bypass — not the absence of the
+      # word here.
+      - name: Open the draft pull request
+        if: steps.staged.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ inputs.model }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          GATES: ${{ steps.gates.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          subject=$(head -n 1 "$RUNNER_TEMP/instruction.txt" | cut -c1-64)
+          body="$RUNNER_TEMP/pr-body.md"
+          cat > "$body" <<EOF
+          \`mise run ci\` on this branch: **${GATES}**. Read that before the diff — a failed gate here is the agent reporting its own failure rather than hiding it.
+
+          **Model:** \`${MODEL}\`
+
+          **Instruction**
+
+          EOF
+          sed 's/^/> /' "$RUNNER_TEMP/instruction.txt" >> "$body"
+          printf '\n\n[The run that produced this](%s)\n' "$RUN_URL" >> "$body"
+          # A resumed branch already has its pull request, and `gh pr create` fails outright while one is
+          # open for the same head. The body is the newest run's, so the report at the top describes the
+          # commits now on the branch rather than the first attempt's.
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = 0 ]; then
+            gh pr create --draft --head "$BRANCH" \
+              --title "chore(agent): ${subject}" --body-file "$body"
+          else
+            gh pr edit "$BRANCH" --body-file "$body"
+            gh pr comment "$BRANCH" --body "Another run pushed to this branch. The description above is now that run's."
+          fi

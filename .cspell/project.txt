@@ -9,14 +9,18 @@ alexmijo
 # --- Repository and tooling ---
 turboBasic
 actionlint
+anomalyco
 binstall
 codesign
 iostat
 commitizen
 cspell
+deepseek
 flycheck
 mise
 notarytool
+opencode
+OpenRouter
 popcircles
 prek
 pyright
@@ -119,6 +123,7 @@ zune
 
 # --- Repository jargon ---
 backticked
+dispatchable
 docstrings
 frontmatter
 lockfiles

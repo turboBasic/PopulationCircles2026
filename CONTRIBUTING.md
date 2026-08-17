@@ -140,6 +140,29 @@ it. [`data/README.md`](data/README.md) is where the provenance that identifies t
   written from a description of the algorithm are welcome; transliterations are not.
 - Documentation moves with the change. Stale framing is a defect, not a follow-up.
 
+## Asking the agent
+
+Comment `/agent <what you want done>` **on an issue**. A bare `/agent` takes the issue's own body as the
+instruction. On a pull request it does not do the useful thing — it would branch from `main` rather than
+from that pull request's head and open a second, unrelated one — so it is an issue or nothing until
+something resolves the head ref. The agent works on a branch, runs `mise run ci`, and opens a **draft**
+pull request whose body reports whether that gate passed — read that line before the diff, because a red gate
+there is the agent saying so rather than hiding it. It cannot push to `main`, and its pull request needs
+the same three green checks as anyone else's.
+
+Two things to know before using it:
+
+- **Only the repository owner can.** A `/agent` comment from anyone else starts nothing and says nothing —
+  there is no reply, deliberately. The run would hold a metered API key and a write-scoped token, which is
+  not a combination a public repository hands to whoever asks.
+- **Every run spends real money**, billed per token rather than by subscription
+  ([ADR 0010](docs/decisions/0010-automation-brings-its-own-provider.md)). The cost follows what the agent
+  chooses to read, not the length of what you asked, so a vague instruction over a large tree is the
+  expensive shape. Nothing in this repository caps it; a ceiling belongs on the provider's side.
+
+`.github/workflows/agent-run.yml` declares the `model` input and its default, and can also be run on its
+own with `gh workflow run agent-run.yml -f instruction='…'` when there is no issue to comment on.
+
 ## Releasing
 
 A release is a tag and the two binaries it attaches, from one workspace version and no registry; this is

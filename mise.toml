@@ -11,6 +11,17 @@ taplo = "latest"
 node = "24.19.0"
 "npm:markdownlint-cli2" = "0.23.2"
 "npm:cspell-cli" = "10.0.1"
+# Not `npm:opencode-ai`, though it is published there and the two lines above are how this file installs
+# from npm: that package ships a stub whose postinstall fetches the real binary, and mise's npm backend
+# runs no postinstall — the install reports success and every invocation then fails with "postinstall
+# script was not run". The registry entry is `aqua:anomalyco/opencode`, which fetches the platform binary
+# itself and needs no script.
+#
+# Pinned exactly, where most tools here take `latest`, because this one decides what a workflow does
+# rather than whether a file is formatted: an agent whose behaviour moves under `agent-run.yml` produces a
+# run nobody can reproduce, and the diff that changed it is not in this repository. Named here rather than
+# installed in a workflow step so CI and a terminal get the same binary.
+opencode = "1.18.18"
 
 [env]
 _.python.venv = { path = ".venv", create = true }

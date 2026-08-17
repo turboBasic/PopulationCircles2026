@@ -363,6 +363,27 @@ Identifiers are flat, sequential and never reused.
   puts between the halves, and reading the Rust source at runtime would be the coupling that record
   exists to prevent.
 
+### FU-25 - Three workflows install a 137 MB agent none of them runs
+
+- **Status** — `dormant` (2026-08-17): `opencode` sits in `mise.toml` `[tools]`, which is where
+  `platform.md` "Tooling hierarchy" says a pinned tool belongs, and the roster is installed whole by
+  whoever asks for any of it.
+- **Condition** — the cost stops being paid only by cache misses. `jdx/mise-action` installs the whole
+  `[tools]` roster, and `rg -l 'jdx/mise-action' .github/workflows/` names four workflows on 2026-08-17 —
+  `ci.yml`, `build-binaries.yml`, `release.yml` and `agent-run.yml` — of which only the last invokes
+  `opencode`. Measured the same day: `du -sh ~/.local/share/mise/installs/opencode/1.18.18` is 137 MB, one
+  binary, the largest single entry the roster has. What fires this is a figure rather than the arrangement:
+  the mise install step in `ci.yml` taking materially longer than it did before the pin, on a cold cache,
+  which is what a reader of a slow pull request would go looking for. Every clone's `mise run setup` pays
+  it once too, which is the smaller half.
+- **Fix** — move the pin from `[tools]` to the task that uses it, so the roster stops carrying it: mise
+  takes a `tools` table on a task, and `agent-run.yml` calls `opencode` from exactly one step. That keeps
+  the version pinned in `mise.toml` where `platform.md` wants it and keeps the comment beside it, while
+  taking the download off three workflows that never run the binary. Checked against the shape those
+  workflows have now: none of them invokes `opencode`, so none needs a second install step added back.
+  Not done at the time of writing because the arrangement is correct and only the cost is suspect, and a
+  figure nobody has measured is not a reason to complicate a manifest.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
