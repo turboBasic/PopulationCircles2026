@@ -49,7 +49,7 @@ pub(crate) fn build_table(dataset: &str, table: &TableArgs) -> Result<String, Fa
     })
     .map_err(|error| Failure::build(&error))?;
     writer
-        .publish(&built)
+        .publish(&built, Some(dataset))
         .map_err(|error| Failure::cache(&error))?;
     progress.finish();
 

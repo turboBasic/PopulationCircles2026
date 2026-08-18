@@ -89,7 +89,7 @@ impl Fixture {
             writer.write_row(row)
         })
         .expect("a synthetic source and a fresh cache cannot fail");
-        writer.publish(&built).expect("the cache publishes");
+        writer.publish(&built, None).expect("the cache publishes");
 
         Self {
             directory,
