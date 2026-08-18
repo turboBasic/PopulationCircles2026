@@ -168,6 +168,18 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Only the no-diff branch: a diff gets its answer in the pull request body below, and a comment
+      # here would say the same thing twice. `repo_tools.post_agent_answer` holds the logic — reading the
+      # session back through `opencode export` rather than this run's own stdout, and posting it — because
+      # a shell fragment doing both would outgrow a workflow step.
+      - name: Post the answer to the issue
+        if: steps.staged.outputs.changed == 'false' && inputs.issue
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: uv run post-agent-answer
+
       # continue-on-error, because a red gate is a result this run reports rather than a reason to end
       # without one. An agent that hides its own failure is worse than an agent that does not run.
       #

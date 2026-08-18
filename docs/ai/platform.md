@@ -195,6 +195,11 @@ comments are where scope was cut, a figure settled or a step reordered, and none
 back up into the body. Read them, and the roadmap issue this one hangs from, before starting — else the
 requirement implemented may be one withdrawn three comments in.
 
+The agent working this repository from Actions has no `gh` at all — `opencode.json` denies it wholesale,
+reads included. Read an issue and its thread there through `WebFetch` against
+`api.github.com/repos/:owner/:repo/issues/<n>` and `.../issues/<n>/comments`, rather than retrying
+`gh issue view`.
+
 **Proposing a change of scope or requirements is always in bounds** — for the issue in hand and for any
 other open issue a discovery affects. Executing a step is what exposes that a later one is unnecessary,
 misordered or resting on something untrue, and whoever hits that is the only one positioned to say so.

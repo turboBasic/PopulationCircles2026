@@ -11,6 +11,7 @@ dependencies = []
 fetch-data = "repo_tools.fetch_data:main"
 lint-docs = "repo_tools.lint_docs:main"
 lint-version-bumps = "repo_tools.lint_version_bumps:main"
+post-agent-answer = "repo_tools.post_agent_answer:main"
 release-smoke = "repo_tools.release_smoke:main"
 render-map = "population_circles.render_map:main"
 
