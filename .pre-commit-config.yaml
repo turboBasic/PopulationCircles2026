@@ -41,16 +41,9 @@ repos:
 
   - repo: local
     hooks:
-      # The tripwire for a geospatial file arriving with nothing describing it: every input
-      # dataset is a data/registry.toml row, so one with no row is either a generated product
-      # that does not belong under data/ or an input nobody declared. The extension list lives
-      # beside the check rather than in the registry, which describes the datasets that exist
-      # rather than the formats one might arrive in.
-      #
-      # grep for the `path` line rather than a TOML parse, because a tripwire runs on the crudest
-      # path that answers the question and a parse would be a second reader of the registry beside
-      # `dataset_registry`. Two accepted costs: a match inside a comment satisfies it, and it is
-      # coupled to taplo's spelling, so a row written `path='…'` would fail for a file that has one.
+      # The tripwire for a geospatial file with no data/registry.toml row: grep for the `path` line
+      # rather than a TOML parse, since a parse would be a second reader of the registry beside
+      # `dataset_registry` — coupled to taplo's spelling, so a row written `path='…'` would still fail.
       - id: geo-data-registered
         name: geospatial data has a registry row
         language: system
@@ -62,18 +55,9 @@ repos:
           echo "  fix: add a row for it, or publish it to a data tag and give the row a fetch_url";
           echo "  — ADR 0009 is which of those applies."; rc=1; done; exit $rc' --
 
-      # ADR 0006 demoted `unsafe_code` from forbid to deny for one site, and `deny` is
-      # overridable by definition — so this is what replaces the property `forbid` bought. It fails on a
-      # second exception anywhere under crates/, and on the exception moving out of the file that record
-      # reviewed. Zero fails too, and deliberately: an exception disappearing means the mapping went with
-      # it, which is a decision to record rather than a tree to wave through. grep rather than rg
-      # because a CI runner is not promised one.
-      # The half of "never silence a lint with a blanket #[allow]" a machine can settle. A crate-level
-      # `#![allow(…)]` exempts every item beneath it, including ones written later by someone who never
-      # read the attribute; an item-level one cannot. So the shape is what gets checked, not the count —
-      # a count would rise legitimately every time a module gains a test module of its own. `src` only:
-      # `tests/` and `benches/` are where the blanket form is the right answer, and all ten of them live
-      # there. Whether an item-level exception is narrow and justified stays a review question.
+      # The half of "never silence a lint with a blanket #[allow]" a machine can settle: a crate-level
+      # `#![allow(…)]` exempts every item beneath it, including ones written later, where an item-level
+      # one cannot. `src` only — `tests/` and `benches/` are where the blanket form is the right answer.
       - id: no-blanket-allow
         name: "no crate-level #![allow] under src"
         language: system
@@ -87,6 +71,9 @@ repos:
           echo "  fix: move the exception onto the item that needs it, with a comment saying why;";
           echo "  docs/ai/code.md \"Comments and docs\" holds the rule."; exit 1' --
 
+      # ADR 0006 demoted `unsafe_code` from forbid to deny for exactly one site — `deny` is overridable
+      # by definition, so this hook is what replaces the property `forbid` bought. Zero exceptions
+      # fails too: the mapping disappearing is a decision to record, not a tree to wave through.
       - id: single-unsafe-allow
         name: "one unsafe exception, where ADR 0006 put it"
         language: system
@@ -102,12 +89,8 @@ repos:
           echo "  fix: keep the exception where it was reviewed, or supersede ADR 0006.";
           exit 1'
 
-      # No filenames: `cargo fmt --all` already covers every target in the workspace, and appending
-      # the staged paths reaches rustfmt as extra inputs to a command that has already formatted them.
-      #
-      # An empty .rs file cannot get past this hook and end-of-file-fixer together: the fixer strips
-      # the lone newline, rustfmt puts it back, and neither yields. A placeholder module needs a line
-      # of content — a comment naming what the module will hold does.
+      # No filenames: `cargo fmt --all` already covers every target in the workspace, and the staged
+      # paths would only reach rustfmt as extra inputs to a command that has already formatted them.
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all
@@ -165,14 +148,10 @@ repos:
         always_run: true
         pass_filenames: false
 
-      # FU-03 and FU-06 (docs/follow-ups.md). A tripwire and not a lint: it cannot judge whether a
-      # shape change was breaking, only that one landed under an unchanged version number.
-      #
-      # always_run rather than gated on the three trigger paths, measured on prek 0.4.13: a `files:`
-      # hook is skipped when the only staged change is a deletion, and a deleted snapshot is a whole
-      # payload type withdrawn. There is no `mise run lint:` half for the reason the others have one —
-      # it reads the index against HEAD, so on a CI checkout, where nothing is staged, an --all-files
-      # run would pass without checking anything and report a gate that had not run.
+      # FU-03 and FU-06 (docs/follow-ups.md). A tripwire, not a lint: it cannot judge whether a shape
+      # change was breaking, only that one landed under an unchanged version number. always_run,
+      # measured on prek 0.4.13: a `files:` hook is skipped when the only staged change is a deletion,
+      # and a deleted snapshot is a whole payload type withdrawn.
       - id: version-bumps
         name: a moved format shape bumps its version
         entry: uv run lint-version-bumps
@@ -180,14 +159,9 @@ repos:
         always_run: true
         pass_filenames: false
 
-      # main's ruleset carries one bypass actor, the Repository admin role, so the owner can push
-      # straight to main and nobody else can. The three server-side checks never report on a commit
-      # that arrived without a pull request, and this is what runs in their place: the same task CI
-      # runs, before the push rather than after it.
-      #
-      # A guardrail and not a gate, the same way git:ff-only is one. `--no-verify` skips it, and it
-      # tests the current branch rather than the refspec, so `git push origin HEAD:main` from
-      # elsewhere is not seen. What it is for is the ordinary case of committing on main and pushing.
+      # The owner's one bypass actor lets a direct push to main skip the three server-side checks —
+      # this runs the same task CI runs, before the push, in their place. A guardrail, not a gate:
+      # `--no-verify` skips it, same as `git:ff-only`.
       - id: guard-direct-push
         name: a direct push to main runs ci first
         language: system

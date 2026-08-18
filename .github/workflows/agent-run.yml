@@ -1,7 +1,5 @@
-# The agent itself, callable and dispatchable. It is separate from `agent.yml` because an
-# `issue_comment` workflow only ever runs the default branch's copy, so a single-file design could not be
-# tested until it was already merged; `workflow_dispatch` here is what makes a change to the agent
-# runnable on its own.
+# Separate from `agent.yml`: an `issue_comment` workflow only ever runs the default branch's copy, so a
+# single-file design could not be tested until already merged. `workflow_dispatch` is the escape hatch.
 
 name: Agent run
 
@@ -83,15 +81,9 @@ jobs:
       - name: Sync Python tooling
         run: uv sync --locked
 
-      # The bot's numeric id is what makes a commit attributable to the App rather than to an address
-      # nothing owns, and it is only discoverable from the API.
-      #
-      # The branch is resumed where it already exists, rather than always cut from the default branch, and
-      # no naming scheme substitutes for that: `run_id` and `run_number` are both stable across a re-run —
-      # only `run_attempt` increments — so a run that pushed and then failed later would collide with itself
-      # on re-run whatever the name held. Starting from `origin/$branch` is what makes the later push a
-      # fast-forward. Iterating on one issue is therefore additive, and starting over is closing the pull
-      # request and deleting the branch, which is a deliberate act rather than a side effect of asking twice.
+      # The bot's numeric id is only discoverable from the API — it's what makes a commit attributable
+      # to the App rather than an address nothing owns. Resumed from `origin/$branch` where one already
+      # exists, so iterating on one issue is additive; starting over means deleting the branch.
       - name: Identify as the App and branch
         id: branch
         env:
@@ -112,13 +104,9 @@ jobs:
           fi
           echo "name=$branch" >> "$GITHUB_OUTPUT"
 
-      # `agent.yml` hands over the comment verbatim, because GitHub's expression language can neither trim
-      # nor replace. Both halves of the resolution therefore happen here, in shell, where the body is an
-      # environment variable rather than text about to be interpolated: strip a leading `/agent`, and where
-      # nothing is left, take the issue's own body as the instruction. A dispatched run carries no prefix,
-      # so the strip is a no-op for it.
-      # A file rather than a step output, because an instruction is arbitrary multi-line text and a
-      # heredoc-delimited output can be broken by text containing the delimiter.
+      # GitHub's expression language can neither trim nor replace, so the `/agent` strip and the
+      # issue-body fallback happen here in shell instead. A file, not a step output: an instruction is
+      # arbitrary text, and a heredoc-delimited output breaks on text containing the delimiter.
       - name: Resolve the instruction
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -132,51 +120,28 @@ jobs:
           fi
           printf '%s' "$instruction" > "$RUNNER_TEMP/instruction.txt"
 
-      # The instruction reaches the agent through the environment and never through the script's text: it
-      # originates in a comment body, and interpolating one into a run block is remote code execution by
-      # whoever wrote the comment.
-      # --auto because a workflow has nobody to answer a prompt, and it auto-approves only what is not
-      # explicitly denied — so the deny list in `opencode.json` is the other half of this flag and not an
-      # independent preference. It is what makes the split below a constraint rather than a convention: the
-      # agent edits files, and committing, pushing and opening the pull request stay with the steps after
-      # this one. Measured: `git push --dry-run` is refused before executing, `git status` runs.
-      #
-      # What neither half closes is exfiltration. This process holds the provider key and the installation
-      # token in its environment and can reach the network, so what bounds that is the owner-only trigger,
-      # an ephemeral runner and a cap on the provider's side — never this flag.
+      # The instruction reaches the agent through the environment, not the script's text — it originates
+      # in a comment body, and interpolating one into a run block is remote code execution by whoever
+      # wrote the comment. `--auto` auto-approves only what `opencode.json`'s deny list does not refuse,
+      # which is what keeps committing, pushing and opening the pull request off this step.
       - name: Run the agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           MODEL: ${{ inputs.model }}
         run: opencode run --auto --model "$MODEL" "$(cat "$RUNNER_TEMP/instruction.txt")"
 
-      # Reads the session back rather than this step's own stdout, which is the pretty terminal
-      # rendering — tool calls and prose interleaved with ANSI escapes — with no reliable seam to cut
-      # the final answer from once those are stripped. Unconditional and cheap: `opencode export` is a
-      # local read, no second model call, and whether there is an answer worth publishing is exactly
-      # what decides the later step below.
-      #
-      # `AGENT_SECRET_OPENROUTER_API_KEY` is not the credential — `repo_tools.redact` scrubs by that
-      # prefix, not by name, so this is the one line that has to change when a provider key does.
-      # This step never gets the real `OPENROUTER_API_KEY`: reading a session back needs no API call,
-      # so nothing here can spend it, and it stays exactly as narrow as "Run the agent" already is.
-      #
-      # continue-on-error, the same call as "Run the gates" below and for the same reason: this step's
-      # only output is a nicety, so a run that produced a diff still reaches staging, the gates and the
-      # pull request whether or not reading the answer back succeeds.
+      # Reads the session back rather than this step's own stdout — the pretty terminal rendering has
+      # no reliable seam to cut the final answer from. `AGENT_SECRET_OPENROUTER_API_KEY` is the scrub
+      # twin `repo_tools.redact` matches by prefix, not the real credential: this step makes no API
+      # call, so it never needs one. continue-on-error for the same reason as "Run the gates" below.
       - name: Capture the agent's answer
         continue-on-error: true
         env:
           AGENT_SECRET_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: uv run capture-agent-answer
 
-      # Staged before the gates run, and that order is load-bearing rather than tidy: every hook
-      # `mise run lint` reaches goes through `prek run --all-files`, whose file list is the git index, so a
-      # file the agent created but nobody staged is invisible to cspell, markdownlint,
-      # check-added-large-files and geo-data-registered alike. Measured on this tree: an untracked file
-      # holding two misspellings passes, and the same file staged fails. Gating after the add is what makes
-      # the result this run reports cover what the agent actually wrote — including the large-file and
-      # registry hooks, which stand behind an invariant a later commit cannot undo.
+      # Before the gates, not tidiness: `prek run --all-files` reads the git index, so an untracked
+      # file the agent wrote is invisible to every hook until it is staged.
       - name: Stage what the agent changed
         id: staged
         run: |
@@ -200,12 +165,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: uv run post-agent-answer
 
-      # continue-on-error, because a red gate is a result this run reports rather than a reason to end
-      # without one. An agent that hides its own failure is worse than an agent that does not run.
-      #
-      # The output is kept because reporting only that it failed sends a reader to the run log to find out
-      # what did, which is the one errand the pull request body exists to save. `shell: bash` is what
-      # supplies pipefail, without which `tee` would mask the status this step is judged on.
+      # continue-on-error: a red gate is a result this run reports, not a reason to end without one.
+      # `shell: bash` supplies pipefail, without which `tee` would mask the status this step is judged on.
       - name: Run the gates
         id: gates
         continue-on-error: true
