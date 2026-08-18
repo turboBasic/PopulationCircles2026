@@ -1,8 +1,6 @@
-# The gate in front of the agent, and nothing else: this file decides whether a comment may spend the
-# provider key, and `agent-run.yml` is what it spends it on.
-#
-# The job runs no step of its own. That is the security property, not a simplification — a gate with a
-# script in it is a place the comment body could reach, and there is nothing here for it to reach.
+# The gate in front of the agent: decides whether a comment may spend the provider key,
+# `agent-run.yml` is what spends it. Runs no step of its own — a script here would be a place the
+# comment body could reach.
 
 name: Agent
 
@@ -22,11 +20,9 @@ jobs:
       && github.event.comment.author_association == 'OWNER'
     uses: ./.github/workflows/agent-run.yml
     with:
-      # The whole comment, unparsed. GitHub's expression language has neither `trim` nor `replace`, so
-      # stripping the prefix cannot happen here — and it should not: the called workflow does it in shell
-      # with the body already in an environment variable, which is the one place it is data rather than
-      # text about to be interpolated. That is also where the fall back to the issue body lives, since it
-      # takes an API call.
+      # The whole comment, unparsed: GitHub's expression language has neither `trim` nor `replace`, so
+      # the called workflow strips the prefix in shell instead, where the body is data, not text about
+      # to be interpolated.
       instruction: ${{ github.event.comment.body }}
       issue: ${{ github.event.issue.number }}
     # Named one by one rather than inherited: these three are every secret the repository has today, so
