@@ -116,7 +116,11 @@ pub(crate) struct CachedTableArgs {
 }
 
 /// The grid a raster is declared to be. The declared grid wins over the file's own tags, which is why
-/// every command that reads a raster or a table over one asks for the same six numbers.
+/// every command naming a table asks for the same six numbers.
+///
+/// Two sources now, and this is the second: `table build` reads them out of a registry row rather than off
+/// the command line, so a table's grid is declared once where the dataset is described and repeated on
+/// every command that afterwards names that table.
 #[derive(Args, Debug, Clone, Copy)]
 pub(crate) struct GridArgs {
     #[arg(long)]

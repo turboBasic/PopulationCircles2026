@@ -425,7 +425,7 @@ fn a_build_naming_no_registered_dataset_is_refused_before_any_raster_is_opened()
     assert!(output.stdout.is_empty(), "{output:?}");
     let complaint = String::from_utf8_lossy(&output.stderr);
     assert!(
-        complaint.contains("not a registered dataset"),
+        complaint.contains("not a registered population raster"),
         "{complaint}"
     );
     assert!(

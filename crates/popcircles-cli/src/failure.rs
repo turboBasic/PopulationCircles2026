@@ -124,9 +124,10 @@ const fn exit_code_for_table_error(error: &TableError) -> u8 {
     }
 }
 
-/// Every disagreement between the file and the declaration is bad input, because the declaration is an
-/// argument: `--nodata` and the six grid numbers are what the file is being held to. Bytes that are not
-/// there to read are missing data, which is the class that names `mise run data:get`.
+/// Every disagreement between the file and the declaration is bad input, because the caller chose the
+/// declaration: the registry row `--dataset` names is what the file is being held to, and a file that no
+/// longer answers to its own row is a dataset picked wrongly rather than a broken program. Bytes that are
+/// not there to read are missing data, which is the class that names `mise run data:get`.
 fn exit_code_for_raster_error(error: &RasterError) -> u8 {
     match error {
         RasterError::Dimensions { .. }
@@ -214,9 +215,10 @@ fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
 }
 
 /// A name that is not registered and a name registered as something else are both what the caller typed, so
-/// both are bad input. A registry that is not where the run was started from is missing data, which is the
-/// class that names what to fetch; one that is there and does not hold together is neither, and says which
-/// file.
+/// both are bad input. A registry that is not at the path this run resolved is missing data — nothing
+/// fetches it, because it is committed, so the message carries the path it looked at and the answer is
+/// usually to run from the repository root. One that is there and does not hold together is neither the
+/// caller's doing nor a fetch away from being right.
 fn exit_code_for_registry_error(error: &RegistryError) -> u8 {
     match error {
         RegistryError::Unknown { .. } | RegistryError::NotARaster { .. } => EXIT_BAD_INPUT,

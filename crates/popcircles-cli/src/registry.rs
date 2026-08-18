@@ -24,7 +24,13 @@ pub(crate) const REGISTRY_PATH: &str = "data/registry.toml";
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum RegistryError {
-    #[error("the dataset registry at {} could not be read", path.display())]
+    // Nothing fetches this file — it is committed — so the message says where it was looked for and why
+    // that might not be where it is.
+    #[error(
+        "the dataset registry at {} could not be read; the path is resolved against the working \
+         directory, and the file is committed at the repository root",
+        path.display()
+    )]
     Read {
         path: PathBuf,
         #[source]
@@ -38,7 +44,9 @@ pub(crate) enum RegistryError {
         source: toml::de::Error,
     },
 
-    #[error("`{name}` is not a registered dataset; the registered ones are {known}")]
+    // The rasters rather than every row: what a typo needs is the list it could have meant, and offering a
+    // boundary vector here would cost a second run to be told it is not one.
+    #[error("`{name}` is not a registered population raster; the registered ones are {known}")]
     Unknown { name: String, known: String },
 
     #[error("`{name}` is not a population raster, so no table can be built from it")]
@@ -153,8 +161,9 @@ impl Registry {
                 // running rather than whatever order a file happened to be in.
                 known: self
                     .datasets
-                    .keys()
-                    .map(String::as_str)
+                    .iter()
+                    .filter(|(_, row)| matches!(row, Row::PopulationRaster(_)))
+                    .map(|(key, _)| key.as_str())
                     .collect::<Vec<_>>()
                     .join(", "),
             })?;
@@ -227,17 +236,19 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_name_is_refused_naming_the_registered_ones() {
+    fn an_unknown_name_is_refused_naming_the_rasters_and_only_those() {
+        // Only the rows a table can be built from: a name offered here and then refused as the wrong kind
+        // would cost a second run to learn what the first could have said.
         let error = committed()
             .raster("gpw-v4")
             .expect_err("no such dataset is registered")
             .to_string();
         assert!(
-            error.contains("`gpw-v4` is not a registered dataset"),
+            error.contains("`gpw-v4` is not a registered population raster"),
             "{error}"
         );
         assert!(error.contains("population-count-2020-30arcsec"), "{error}");
-        assert!(error.contains("coastline-1to110m"), "{error}");
+        assert!(!error.contains("coastline-1to110m"), "{error}");
     }
 
     #[test]

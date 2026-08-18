@@ -15,19 +15,19 @@ use crate::observe::StderrProgress;
 use crate::registry::{REGISTRY_PATH, Registry};
 
 pub(crate) fn build_table(dataset: &str, table: &TableArgs) -> Result<String, Failure> {
-    let source = Registry::load(Path::new(REGISTRY_PATH))
+    let row = Registry::load(Path::new(REGISTRY_PATH))
         .and_then(|registry| registry.raster(dataset))
         .map_err(|error| Failure::registry(&error))?;
 
-    let raster = source.raster.as_path();
-    let grid = source.grid.grid().map_err(|error| Failure::grid(&error))?;
+    let raster = row.raster.as_path();
+    let grid = row.grid.grid().map_err(|error| Failure::grid(&error))?;
     let decimation =
         Decimation::new(grid, table.decimate).map_err(|error| Failure::table(&error))?;
     let spec = RasterSpec {
         grid,
-        epsg: source.epsg,
+        epsg: row.epsg,
         pixel: PixelType::Float32,
-        nodata: source.nodata,
+        nodata: row.nodata,
     };
     let source = GeoTiffSource::open(raster, &spec).map_err(|error| Failure::raster(&error))?;
 

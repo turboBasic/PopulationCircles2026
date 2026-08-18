@@ -49,7 +49,7 @@ Input datasets live in `data/`, one directory per kind. A large one is published
 than carried in the repository, a small one is committed.
 [`data/registry.toml`](../../data/registry.toml) is the registry and owns each dataset's grid, CRS,
 nodata value, byte length, checksum, fetch URL, licence and the attribution a figure owes — it is what
-`mise run data:get` and the renderer read. [`data/README.md`](../../data/README.md) is the same datasets
+`mise run data:get`, the CLI and the renderer read, and naming a row is how a build says what to open. [`data/README.md`](../../data/README.md) is the same datasets
 described for a person, and owns the provenance that identifies each one, plus the mechanics of fetching
 them ([Getting it](../../data/README.md#getting-it)). A dataset gets its row in both, in the same change
 that adds it.
