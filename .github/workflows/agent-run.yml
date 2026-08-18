@@ -160,7 +160,12 @@ jobs:
       # prefix, not by name, so this is the one line that has to change when a provider key does.
       # This step never gets the real `OPENROUTER_API_KEY`: reading a session back needs no API call,
       # so nothing here can spend it, and it stays exactly as narrow as "Run the agent" already is.
+      #
+      # continue-on-error, the same call as "Run the gates" below and for the same reason: this step's
+      # only output is a nicety, so a run that produced a diff still reaches staging, the gates and the
+      # pull request whether or not reading the answer back succeeds.
       - name: Capture the agent's answer
+        continue-on-error: true
         env:
           AGENT_SECRET_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: uv run capture-agent-answer
