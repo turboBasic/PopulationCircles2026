@@ -346,6 +346,7 @@ docs/ai-instructions.md          the router: invariants and layering
 docs/ai/                         the instruction layer, one file per subject
 docs/decisions/                  decision records, one ruling and one page each
 docs/follow-ups.md               the register of pending obligations
+docs/ponytail.md                 the ponytail plugin's use here, and its limits
 .claude/agents/                  one file per standing persona
 .claude/skills/                  one directory per task workflow
 crates/                          Rust workspace — the search

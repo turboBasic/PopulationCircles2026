@@ -21,6 +21,7 @@ mise
 notarytool
 opencode
 OpenRouter
+ponytail
 popcircles
 prek
 pyright
@@ -129,6 +130,7 @@ frontmatter
 lockfiles
 misordered
 negotiables
+newtypes
 overexplanation
 relitigate
 rescope
