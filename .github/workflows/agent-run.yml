@@ -176,6 +176,9 @@ jobs:
         if: steps.staged.outputs.changed == 'false' && inputs.issue
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Not spent again here — held only so post_agent_answer can scrub a stray copy of it out of
+          # the answer before the answer becomes a public comment.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ISSUE: ${{ inputs.issue }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: uv run post-agent-answer

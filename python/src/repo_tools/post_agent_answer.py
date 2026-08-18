@@ -44,10 +44,10 @@ def latest_session_id() -> str | None:
 # Read back from `export` rather than the run's own stdout: that stream is the pretty terminal
 # rendering — tool calls and prose interleaved with ANSI escapes — and has no reliable seam to cut
 # the final answer from once those are stripped. `export` gives the same session as structured JSON,
-# with no second model call. `--sanitize` because the answer is about to become a public comment and
-# the session held both the provider key and the installation token in its environment.
+# with no second model call. No `--sanitize`: that flag redacts every text part wholesale — shares a
+# session's shape, not its content — and would blank the very answer this posts.
 def final_answer(session_id: str) -> str:
-    exported = opencode("export", session_id, "--sanitize")
+    exported = opencode("export", session_id)
     if not exported:
         return ""
     data = json.loads(exported)
@@ -56,6 +56,17 @@ def final_answer(session_id: str) -> str:
         return ""
     parts = assistant[-1]["parts"]
     return "".join(part["text"] for part in parts if part["type"] == "text")
+
+
+# The session held both secrets in its environment for the run that produced it, and export applies
+# no scrubbing of its own — a targeted replace of the two known values, not opencode's `--sanitize`,
+# which blanks content rather than credentials.
+def scrub(answer: str) -> str:
+    for name in ("OPENROUTER_API_KEY", "GH_TOKEN"):
+        secret = os.environ.get(name)
+        if secret:
+            answer = answer.replace(secret, f"[redacted:{name}]")
+    return answer
 
 
 def main() -> int:
@@ -72,7 +83,7 @@ def main() -> int:
         print("the agent changed nothing and said nothing either — no comment to post")
         return 0
     run_url = os.environ.get("RUN_URL", "")
-    body = f"{answer}\n\n[The run that answered this]({run_url})\n"
+    body = f"{scrub(answer)}\n\n[The run that answered this]({run_url})\n"
     return 0 if gh("issue", "comment", issue, "--body-file", "-", stdin=body) is not None else 1
 
 
