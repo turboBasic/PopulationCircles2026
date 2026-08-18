@@ -317,10 +317,10 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
 - A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
   call rather than a condition on the event. `ci.yml` is the stated exception, because `main`'s ruleset
   matches its required checks by the names a call would prefix.
-- A comment in a workflow explains the configuration beside it and nothing else. No ADR, issue or
-  follow-up citation, no account of what the file used to be, and no sentence a reader has to unpack
-  before it parses — `docs/decisions/` owns the reasoning, and a citation in a YAML file is a second
-  place it goes stale. This narrows [`code.md`](code.md) "Comments and docs" for workflows only.
+- A comment in a workflow keeps to [`code.md`](code.md) "Comments and docs", which already governs it,
+  and adds one restriction that section does not: no ADR, issue or follow-up citation, no account of
+  what the file used to be, and no sentence a reader has to unpack before it parses — `docs/decisions/`
+  owns the reasoning, and a citation in a YAML file is a second place it goes stale.
 - Drive CI through mise tasks so what CI runs and what `mise run ci` runs cannot drift apart.
 - Lint, typecheck, test only.
 - Secrets via CI environment secrets or OIDC.
