@@ -1,9 +1,11 @@
 # Code
 
-Read this when writing or changing code in either language, including its comments and the
-documentation that travels with it. The lint levels that back these rules
-are declared once in the root `Cargo.toml` and in `pyproject.toml`; this file holds the judgment
-those levels cannot express, and loosening one to clear an error is a non-negotiable.
+"Rust" and "Python" below are what is specific to each language. "Comments and docs" is not — it
+governs a comment anywhere in the repository: a `.toml`, `.yaml` or `.jsonc` file is still code once
+it drives a build, a hook or a workflow, and owns its own comments exactly as a function does. The
+lint levels that back the language-specific rules are declared once in the root `Cargo.toml` and in
+`pyproject.toml`; this file holds the judgment those levels cannot express, and loosening one to clear
+an error is a non-negotiable.
 
 ## Rust
 
