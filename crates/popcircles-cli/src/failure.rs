@@ -14,6 +14,8 @@ use popcircles::smallest::cache::LedgerError;
 use popcircles::table::cache::CacheError;
 use popcircles::table::{BuildError, TableError};
 
+use crate::registry::RegistryError;
+
 /// Bad input, and data that is not there; `application.md`'s "interrupted" class has no caller yet and
 /// is not coded here ahead of one.
 pub(crate) const EXIT_BAD_INPUT: u8 = 2;
@@ -67,6 +69,10 @@ impl Failure {
             code: EXIT_BAD_INPUT,
             message: message.into(),
         }
+    }
+
+    pub(crate) fn registry(error: &RegistryError) -> Self {
+        Self::new(exit_code_for_registry_error(error), error)
     }
 
     pub(crate) fn ledger(error: &LedgerError) -> Self {
@@ -204,6 +210,18 @@ fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
         | LedgerError::Syntax { .. }
         | LedgerError::CentreOffGrid { .. }
         | LedgerError::DuplicateRadius { .. } => EXIT_FAILURE,
+    }
+}
+
+/// A name that is not registered and a name registered as something else are both what the caller typed, so
+/// both are bad input. A registry that is not where the run was started from is missing data, which is the
+/// class that names what to fetch; one that is there and does not hold together is neither, and says which
+/// file.
+fn exit_code_for_registry_error(error: &RegistryError) -> u8 {
+    match error {
+        RegistryError::Unknown { .. } | RegistryError::NotARaster { .. } => EXIT_BAD_INPUT,
+        RegistryError::Read { .. } => EXIT_MISSING_DATA,
+        RegistryError::Syntax { .. } | RegistryError::KeyIsNotTheStem { .. } => EXIT_FAILURE,
     }
 }
 

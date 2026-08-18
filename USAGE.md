@@ -25,10 +25,8 @@ this file's doing rather than the CLI's, because the same grid, table and digest
 only the window changes:
 
 ```sh
-$ mise run cli -- table build --raster data/population/population-count-2020-30arcsec.tif \
-    --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
-    --lon-step 0.008333333333333333 --lat-step -0.008333333333333333 \
-    --nodata -3.40282306073709653e38 --epsg 4326 --decimate 10 --cache out/gpw-5arcmin
+$ mise run cli -- table build --dataset population-count-2020-30arcsec \
+    --decimate 10 --cache out/gpw-5arcmin
 {"schema_version":1, …,"result":{"digest":"0xf17aa802a6890f0c","total_population":7757982599.323671, …}}
 
 $ query() { mise run cli -- table query --width 43200 --height 21600 --origin-lat 90 \

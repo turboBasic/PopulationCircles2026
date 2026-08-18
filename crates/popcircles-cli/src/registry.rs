@@ -1,0 +1,267 @@
+// `data/registry.toml` read for the one thing a build needs of it: which file, and what that file must say
+// about itself. Here rather than in the library because resolving a dataset is the shell's work — the
+// library keeps taking a `Grid` and a `RasterSpec`, and `application.md` "Architecture" is why.
+//
+// A row is the only way `table build` learns what to read, which is what keeps the sentinel, the CRS and the
+// six grid numbers spelled once — in the registry that owns them — rather than retyped on a command line.
+//
+// No `deny_unknown_fields`: the licence, the checksum and the attribution are keys this reader has no use
+// for, and `python/src/population_circles/dataset_registry.py` forbids an unknown one — so a typo is caught
+// by the reader that claims every field rather than by the one that claims eight.
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
+
+use crate::args::GridArgs;
+
+/// Relative to the working directory, which is where `out/table` and `out/radii.json` already resolve
+/// from.
+pub(crate) const REGISTRY_PATH: &str = "data/registry.toml";
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum RegistryError {
+    #[error("the dataset registry at {} could not be read", path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("the dataset registry at {} is not the TOML document it should be", path.display())]
+    Syntax {
+        path: PathBuf,
+        #[source]
+        source: toml::de::Error,
+    },
+
+    #[error("`{name}` is not a registered dataset; the registered ones are {known}")]
+    Unknown { name: String, known: String },
+
+    #[error("`{name}` is not a population raster, so no table can be built from it")]
+    NotARaster { name: String },
+
+    #[error("dataset `{name}` has path {path}, whose stem is not `{name}`")]
+    KeyIsNotTheStem { name: String, path: String },
+}
+
+/// What a build needs to read a raster: the file, and everything the file is held to.
+///
+/// `grid` is [`GridArgs`] rather than six numbers of its own, because that struct already owns the
+/// conversion into a [`Grid`](popcircles::grid::Grid) and a second one here would be a second place a
+/// declared grid is assembled.
+#[derive(Debug, Clone)]
+pub(crate) struct Dataset {
+    pub(crate) raster: PathBuf,
+    pub(crate) grid: GridArgs,
+    pub(crate) epsg: u16,
+    pub(crate) nodata: f32,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct Registry {
+    datasets: BTreeMap<String, Row>,
+}
+
+/// A row by its kind, which is what says whether the eight grid fields are there to read. An unregistered
+/// kind is a refusal rather than a row to skip, for the reason the Python reader discriminates too: a kind
+/// arrives in the commit that teaches both readers to use it.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum Row {
+    PopulationRaster(PopulationRaster),
+    BoundaryVector(BoundaryVector),
+}
+
+#[derive(Debug, Deserialize)]
+struct PopulationRaster {
+    path: PathBuf,
+    width: u32,
+    height: u32,
+    origin_lat: f64,
+    origin_lon: f64,
+    lon_step: f64,
+    lat_step: f64,
+    epsg: u16,
+    /// Narrowed from the f64 TOML parses to the f32 the raster reader compares bit for bit, which is the
+    /// one conversion in this file and the reason `the_sentinel_narrows_to_the_f32_a_raster_is_held_to`
+    /// exists.
+    nodata: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct BoundaryVector {
+    path: PathBuf,
+}
+
+impl Row {
+    fn path(&self) -> &Path {
+        match self {
+            Self::PopulationRaster(row) => &row.path,
+            Self::BoundaryVector(row) => &row.path,
+        }
+    }
+}
+
+impl Registry {
+    /// # Errors
+    /// [`RegistryError::Syntax`] when the text is not the document this reads, and
+    /// [`RegistryError::KeyIsNotTheStem`] when a key and its file disagree.
+    pub(crate) fn parse(path: &Path, text: &str) -> Result<Self, RegistryError> {
+        let registry: Self = toml::from_str(text).map_err(|source| RegistryError::Syntax {
+            path: path.to_path_buf(),
+            source,
+        })?;
+
+        // The property that makes one string the key, the file, the release asset and the heading in
+        // `data/README.md`. Checked here rather than trusted, exactly as the Python reader checks it.
+        for (name, row) in &registry.datasets {
+            let stem = row.path().file_stem().and_then(|stem| stem.to_str());
+            if stem != Some(name.as_str()) {
+                return Err(RegistryError::KeyIsNotTheStem {
+                    name: name.clone(),
+                    path: row.path().display().to_string(),
+                });
+            }
+        }
+        Ok(registry)
+    }
+
+    /// # Errors
+    /// [`RegistryError::Read`] when the file is not there, and [`Self::parse`]'s grounds.
+    pub(crate) fn load(path: &Path) -> Result<Self, RegistryError> {
+        let text = fs::read_to_string(path).map_err(|source| RegistryError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        Self::parse(path, &text)
+    }
+
+    /// # Errors
+    /// [`RegistryError::Unknown`] naming the keys that exist, and [`RegistryError::NotARaster`] for a row
+    /// no table can be built from.
+    pub(crate) fn raster(&self, name: &str) -> Result<Dataset, RegistryError> {
+        let row = self
+            .datasets
+            .get(name)
+            .ok_or_else(|| RegistryError::Unknown {
+                name: name.to_owned(),
+                // Ordered, because a `BTreeMap` is: the message a typo gets is the same message twice
+                // running rather than whatever order a file happened to be in.
+                known: self
+                    .datasets
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            })?;
+
+        match row {
+            Row::PopulationRaster(row) => Ok(Dataset {
+                raster: row.path.clone(),
+                grid: GridArgs {
+                    width: row.width,
+                    height: row.height,
+                    origin_lat: row.origin_lat,
+                    origin_lon: row.origin_lon,
+                    lon_step: row.lon_step,
+                    lat_step: row.lat_step,
+                },
+                epsg: row.epsg,
+                nodata: row.nodata,
+            }),
+            Row::BoundaryVector(_) => Err(RegistryError::NotARaster {
+                name: name.to_owned(),
+            }),
+        }
+    }
+}
+
+// unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
+// exemption; docs/ai/code.md allows both in tests. float_cmp because what is asserted below is a bit
+// pattern, which a tolerance would not check.
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::float_cmp)]
+mod tests {
+    use super::*;
+
+    /// The committed registry, reached from the manifest rather than from the working directory: a unit
+    /// test runs with its package as the working directory, and the file is two levels above that.
+    fn committed() -> Registry {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(REGISTRY_PATH);
+        Registry::load(&path).expect("the committed registry is this reader's own document")
+    }
+
+    #[test]
+    fn the_registry_declares_the_grid_the_population_raster_is_held_to() {
+        let dataset = committed()
+            .raster("population-count-2020-30arcsec")
+            .expect("the registry's population raster");
+        assert_eq!(
+            dataset.raster,
+            PathBuf::from("data/population/population-count-2020-30arcsec.tif")
+        );
+        assert_eq!((dataset.grid.width, dataset.grid.height), (43200, 21600));
+        assert_eq!(dataset.epsg, 4326);
+        // The steps to full precision, because a truncated 1/120 misses a 180 degree span by 7.1e-13 over
+        // the height and the registry's own comment says so.
+        assert_eq!(dataset.grid.lon_step, 1.0 / 120.0);
+        assert_eq!(dataset.grid.lat_step, -1.0 / 120.0);
+    }
+
+    #[test]
+    fn the_sentinel_narrows_to_the_f32_a_raster_is_held_to() {
+        // The one number in the registry that decides whether a raster opens at all: it is compared bit
+        // for bit against the file's own tag, so the f64 TOML parses has to narrow to this exact f32 —
+        // two ulps above -f32::MAX, which is what every fixture in this workspace spells -3.402_823e38.
+        let dataset = committed()
+            .raster("population-count-2020-30arcsec")
+            .expect("the registry's population raster");
+        assert_eq!(dataset.nodata.to_bits(), 0xff7f_fffd);
+        assert_eq!(dataset.nodata, -3.402_823e38);
+    }
+
+    #[test]
+    fn an_unknown_name_is_refused_naming_the_registered_ones() {
+        let error = committed()
+            .raster("gpw-v4")
+            .expect_err("no such dataset is registered")
+            .to_string();
+        assert!(
+            error.contains("`gpw-v4` is not a registered dataset"),
+            "{error}"
+        );
+        assert!(error.contains("population-count-2020-30arcsec"), "{error}");
+        assert!(error.contains("coastline-1to110m"), "{error}");
+    }
+
+    #[test]
+    fn a_dataset_no_table_can_be_built_from_is_refused_as_such() {
+        // Registered, and not a raster: the message says which of the two it is, because "unknown" would
+        // send a reader looking for a typo that is not there.
+        let error = committed()
+            .raster("coastline-1to110m")
+            .expect_err("a boundary vector is no raster")
+            .to_string();
+        assert!(error.contains("is not a population raster"), "{error}");
+    }
+
+    #[test]
+    fn a_key_that_is_not_its_files_stem_is_refused() {
+        let text = r#"
+[datasets.coastline]
+kind = "boundary-vector"
+path = "data/boundaries/coastline-1to110m.geojson"
+"#;
+        let error = Registry::parse(Path::new("fixture.toml"), text)
+            .expect_err("the key is not the stem")
+            .to_string();
+        assert!(error.contains("dataset `coastline`"), "{error}");
+        assert!(error.contains("coastline-1to110m.geojson"), "{error}");
+    }
+}

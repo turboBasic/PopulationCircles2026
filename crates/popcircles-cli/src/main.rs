@@ -2,14 +2,14 @@ mod args;
 mod commands;
 mod failure;
 mod observe;
+mod registry;
 
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
 use args::{
-    CachedTableArgs, GridArgs, LedgerArgs, LogArgs, RasterSpecArgs, SearchArgs, SweepArgs,
-    TableArgs, WindowArgs, parse_radius, parse_share,
+    CachedTableArgs, GridArgs, LedgerArgs, LogArgs, SearchArgs, SweepArgs, TableArgs, WindowArgs,
+    parse_radius, parse_share,
 };
 use clap::{Parser, Subcommand};
 use commands::distance::distance_json;
@@ -120,15 +120,13 @@ enum GridCommand {
 
 #[derive(Subcommand, Debug, Clone)]
 enum TableCommand {
-    /// Build a summation table from a raster and publish it to the cache.
+    /// Build a summation table from a registered dataset and publish it to the cache.
     Build {
-        /// The raster to read. Its tags must agree with the grid declared below.
+        /// The dataset to build from, which names the raster and everything its file is held to:
+        /// `data/registry.toml` is the roster, and a raster it does not carry gets a row there rather
+        /// than eight flags here.
         #[arg(long)]
-        raster: PathBuf,
-        #[command(flatten)]
-        grid: GridArgs,
-        #[command(flatten)]
-        raster_spec: RasterSpecArgs,
+        dataset: String,
         #[command(flatten)]
         table: TableArgs,
     },
@@ -175,14 +173,8 @@ fn run(command: Command) -> Result<String, Failure> {
             command: GridCommand::Describe { grid },
         } => describe_grid(grid),
         Command::Table {
-            command:
-                TableCommand::Build {
-                    raster,
-                    grid,
-                    raster_spec,
-                    table,
-                },
-        } => build_table(&raster, grid, raster_spec, &table),
+            command: TableCommand::Build { dataset, table },
+        } => build_table(&dataset, &table),
         Command::Table {
             command: TableCommand::Query { cached, window },
         } => query_table(&cached, window.window()),

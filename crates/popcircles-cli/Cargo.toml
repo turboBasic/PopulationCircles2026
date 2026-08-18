@@ -28,7 +28,12 @@ clap.workspace = true
 # every crate's.
 log.workspace = true
 popcircles = { path = "../popcircles" }
+# Deriving the registry's rows, not a document this crate publishes: `report.rs` owns the wire format and
+# is the library's only serde surface.
+serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
 
 # `tests/commands.rs` builds a real cache to run the binary against, and a temporary directory is what
 # keeps that out of the working tree. `tests/help.rs` pins every help surface, which is eleven strings no

@@ -408,3 +408,28 @@ fn a_coordinate_off_the_grid_is_bad_input() {
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
 }
+
+#[test]
+fn a_build_naming_no_registered_dataset_is_refused_before_any_raster_is_opened() {
+    // The one case that reaches the registry, and it is here rather than in a unit test because what it
+    // asserts is the exit code and the sentence a person sees. From the repository root, because the
+    // registry path is resolved against the working directory and a test's is its own package.
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_popcircles"))
+        .current_dir(&root)
+        .args(["table", "build", "--dataset", "nonesuch"])
+        .output()
+        .expect("the binary cargo just built runs");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let complaint = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        complaint.contains("not a registered dataset"),
+        "{complaint}"
+    );
+    assert!(
+        complaint.contains("population-count-2020-30arcsec"),
+        "{complaint}"
+    );
+}
