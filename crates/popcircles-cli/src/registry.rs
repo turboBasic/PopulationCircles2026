@@ -24,13 +24,8 @@ pub(crate) const REGISTRY_PATH: &str = "data/registry.toml";
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum RegistryError {
-    // Nothing fetches this file — it is committed — so the message says where it was looked for and why
-    // that might not be where it is.
-    #[error(
-        "the dataset registry at {} could not be read; the path is resolved against the working \
-         directory, and the file is committed at the repository root",
-        path.display()
-    )]
+    // Nothing fetches this file — it is committed — so the message says what to do instead.
+    #[error("the dataset registry at {} could not be read; run from the repository root", path.display())]
     Read {
         path: PathBuf,
         #[source]
@@ -44,13 +39,11 @@ pub(crate) enum RegistryError {
         source: toml::de::Error,
     },
 
-    // The rasters rather than every row: what a typo needs is the list it could have meant, and offering a
-    // boundary vector here would cost a second run to be told it is not one.
+    // One ground for a name no table can be built from, whether nothing is registered under it or a
+    // boundary vector is: either way what a caller does is pick a name off the list, and the list is the
+    // rasters. A second variant would distinguish two cases with one answer.
     #[error("`{name}` is not a registered population raster; the registered ones are {known}")]
     Unknown { name: String, known: String },
-
-    #[error("`{name}` is not a population raster, so no table can be built from it")]
-    NotARaster { name: String },
 
     #[error("dataset `{name}` has path {path}, whose stem is not `{name}`")]
     KeyIsNotTheStem { name: String, path: String },
@@ -61,7 +54,7 @@ pub(crate) enum RegistryError {
 /// `grid` is [`GridArgs`] rather than six numbers of its own, because that struct already owns the
 /// conversion into a [`Grid`](popcircles::grid::Grid) and a second one here would be a second place a
 /// declared grid is assembled.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Dataset {
     pub(crate) raster: PathBuf,
     pub(crate) grid: GridArgs,
@@ -149,49 +142,45 @@ impl Registry {
     }
 
     /// # Errors
-    /// [`RegistryError::Unknown`] naming the keys that exist, and [`RegistryError::NotARaster`] for a row
-    /// no table can be built from.
+    /// [`RegistryError::Unknown`] naming the rasters, for a name no table can be built from.
     pub(crate) fn raster(&self, name: &str) -> Result<Dataset, RegistryError> {
-        let row = self
-            .datasets
-            .get(name)
-            .ok_or_else(|| RegistryError::Unknown {
-                name: name.to_owned(),
-                // Ordered, because a `BTreeMap` is: the message a typo gets is the same message twice
-                // running rather than whatever order a file happened to be in.
-                known: self
-                    .datasets
-                    .iter()
-                    .filter(|(_, row)| matches!(row, Row::PopulationRaster(_)))
-                    .map(|(key, _)| key.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            })?;
+        let row = match self.datasets.get(name) {
+            Some(Row::PopulationRaster(row)) => row,
+            Some(Row::BoundaryVector(_)) | None => {
+                return Err(RegistryError::Unknown {
+                    name: name.to_owned(),
+                    // Ordered, because a `BTreeMap` is: the message a typo gets is the same message twice
+                    // running rather than whatever order a file happened to be in.
+                    known: self
+                        .datasets
+                        .iter()
+                        .filter(|(_, row)| matches!(row, Row::PopulationRaster(_)))
+                        .map(|(key, _)| key.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            }
+        };
 
-        match row {
-            Row::PopulationRaster(row) => Ok(Dataset {
-                raster: row.path.clone(),
-                grid: GridArgs {
-                    width: row.width,
-                    height: row.height,
-                    origin_lat: row.origin_lat,
-                    origin_lon: row.origin_lon,
-                    lon_step: row.lon_step,
-                    lat_step: row.lat_step,
-                },
-                epsg: row.epsg,
-                nodata: row.nodata,
-            }),
-            Row::BoundaryVector(_) => Err(RegistryError::NotARaster {
-                name: name.to_owned(),
-            }),
-        }
+        Ok(Dataset {
+            raster: row.path.clone(),
+            grid: GridArgs {
+                width: row.width,
+                height: row.height,
+                origin_lat: row.origin_lat,
+                origin_lon: row.origin_lon,
+                lon_step: row.lon_step,
+                lat_step: row.lat_step,
+            },
+            epsg: row.epsg,
+            nodata: row.nodata,
+        })
     }
 }
 
 // unwrap/expect are warn at workspace level and lint:rust runs --all-targets, so tests need this narrow
-// exemption; docs/ai/code.md allows both in tests. float_cmp because what is asserted below is a bit
-// pattern, which a tolerance would not check.
+// exemption; docs/ai/code.md allows both in tests. float_cmp because the steps are asserted against
+// 1.0 / 120.0 exactly, which is the claim — a tolerance is what would let a truncated literal pass.
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::float_cmp)]
 mod tests {
@@ -232,7 +221,6 @@ mod tests {
             .raster("population-count-2020-30arcsec")
             .expect("the registry's population raster");
         assert_eq!(dataset.nodata.to_bits(), 0xff7f_fffd);
-        assert_eq!(dataset.nodata, -3.402_823e38);
     }
 
     #[test]
@@ -249,17 +237,17 @@ mod tests {
         );
         assert!(error.contains("population-count-2020-30arcsec"), "{error}");
         assert!(!error.contains("coastline-1to110m"), "{error}");
-    }
 
-    #[test]
-    fn a_dataset_no_table_can_be_built_from_is_refused_as_such() {
-        // Registered, and not a raster: the message says which of the two it is, because "unknown" would
-        // send a reader looking for a typo that is not there.
-        let error = committed()
+        // And a name the registry does carry, as something no table can be built from, is refused the same
+        // way rather than by a variant of its own.
+        let vector = committed()
             .raster("coastline-1to110m")
             .expect_err("a boundary vector is no raster")
             .to_string();
-        assert!(error.contains("is not a population raster"), "{error}");
+        assert!(
+            vector.contains("`coastline-1to110m` is not a registered population raster"),
+            "{vector}"
+        );
     }
 
     #[test]

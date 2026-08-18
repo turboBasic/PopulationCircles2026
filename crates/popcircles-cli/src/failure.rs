@@ -214,14 +214,13 @@ fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
     }
 }
 
-/// A name that is not registered and a name registered as something else are both what the caller typed, so
-/// both are bad input. A registry that is not at the path this run resolved is missing data — nothing
-/// fetches it, because it is committed, so the message carries the path it looked at and the answer is
-/// usually to run from the repository root. One that is there and does not hold together is neither the
+/// A name no table can be built from is what the caller typed, so it is bad input. A registry that is not at
+/// the path this run resolved is missing data — nothing fetches it, because it is committed, so the message
+/// says to run from the repository root instead. One that is there and does not hold together is neither the
 /// caller's doing nor a fetch away from being right.
 fn exit_code_for_registry_error(error: &RegistryError) -> u8 {
     match error {
-        RegistryError::Unknown { .. } | RegistryError::NotARaster { .. } => EXIT_BAD_INPUT,
+        RegistryError::Unknown { .. } => EXIT_BAD_INPUT,
         RegistryError::Read { .. } => EXIT_MISSING_DATA,
         RegistryError::Syntax { .. } | RegistryError::KeyIsNotTheStem { .. } => EXIT_FAILURE,
     }
