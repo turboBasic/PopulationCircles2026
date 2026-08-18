@@ -65,10 +65,13 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      # client-id, not app-id: the action deprecated the latter in this same v3.2.0, but takes either
+      # the numeric App ID or the App's own Client ID under that name — AGENT_APP_ID still holds the
+      # former and needs no change, only the input key renamed.
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
         with:
-          app-id: ${{ secrets.AGENT_APP_ID }}
+          client-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
 
       # persist-credentials is left at its default here, where ci.yml turns it off: this job pushes a
