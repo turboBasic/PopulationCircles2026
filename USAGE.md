@@ -3,15 +3,20 @@
 Worked commands and their real output, and how to choose the two flags that decide what a run costs.
 [`README.md`](README.md) has the overview, the measured result and the release artifacts.
 
-Great-circle distance, Wiesbaden to Rome:
+## Distances, grids and tables
+
+### A great-circle distance
+
+Wiesbaden to Rome:
 
 ```sh
 $ mise run cli -- distance 50.0782 8.2398 41.9028 12.4964
 {"schema_version":1,"tool":"popcircles","result":{"great_circle_km":966.3013398709427, …}}
 ```
 
-Grid geometry for the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading
-the file itself:
+### Grid geometry
+
+For the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading the file itself:
 
 ```sh
 $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
@@ -19,10 +24,11 @@ $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --o
 {"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048113, …}}
 ```
 
-A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then
-population queries answered from it by mmap — the payload is never resident. The `query` function is
-this file's doing rather than the CLI's, because the same grid, table and digest go to every query and
-only the window changes:
+### The summation table, and the queries over it
+
+A table over that raster, decimated to 5 arcmin so the cache stays small, and then population queries
+answered from it by mmap — the payload is never resident. The `query` function is this file's doing rather
+than the CLI's, because the same grid, table and digest go to every query and only the window changes:
 
 ```sh
 $ mise run cli -- table build --dataset population-count-2020-30arcsec \
@@ -77,7 +83,14 @@ $ search() { local command="$1"; shift; mise run cli -- "$command" --width 43200
     --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
 ```
 
-The population inside a circle you name. A thousand kilometres around Dhaka is a tenth of everyone:
+**Every figure below is a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
+each direction, so a radius here is good to about the width of one of its cells — which for half the world
+turns out to be no error at all. [Validation](README.md#validation) is where that was checked at full
+resolution.
+
+### The population inside a circle you name
+
+A thousand kilometres around Dhaka is a tenth of everyone:
 
 ```sh
 $ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
@@ -88,8 +101,10 @@ $ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
 The centre is not the coordinate asked for: it is the centre of the cell containing it, and both are
 published because they are different questions.
 
-The most populous circle of that radius, found by branch and bound over every cell centre — a good deal
-further west, and holding 16% of the world rather than 10%:
+### The most populous circle of a radius
+
+Found by branch and bound over every cell centre — a good deal further west than the last one, and holding
+16% of the world rather than 10%:
 
 ```sh
 $ search most-populous --radius-km 1000 --spacing 32
@@ -102,7 +117,9 @@ $ search most-populous --radius-km 1000 --spacing 32
 and the useful value is a property of the raster and the radius that nothing here has measured.
 `blocks_pruned` against `blocks_examined` is how you tell the bound is biting — 12 725 of 13 908 here.
 
-And the question the program is named for. The smallest circle holding half the world's population:
+### The smallest circle holding a share
+
+The question the program is named for — here, half the world's population:
 
 ```sh
 $ search smallest-for-share --share 50 --spacing 32 --ledger out/radii.json
@@ -123,6 +140,8 @@ This answer is separated by 174 088 people against a `predicate_slack_persons` o
 ocean — grows one, naming the probed radii the arithmetic cannot tell apart, and the run says so once on
 stderr as well.
 
+### A sweep of shares over one ledger
+
 Every radius tried goes in the ledger, so a sweep of several shares pays for each radius once. Here the
 50% record costs no search at all, because the run above already settled its radii:
 
@@ -138,11 +157,6 @@ $ search sweep --from 10 --to 50 --step 20 --spacing 32 --ledger out/radii.json
 `records` ascend by requested share, which is part of the format rather than an accident of iteration.
 A ledger describing another table is refused rather than resumed from, which is why there is no way to
 turn it off.
-
-**These figures are a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
-each direction, so a radius here is good to about the width of one of its cells — which for half the
-world turns out to be no error at all. [Validation](README.md#validation) is where that was checked at
-full resolution.
 
 ## Maps
 
