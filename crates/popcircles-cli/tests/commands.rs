@@ -206,6 +206,9 @@ fn one_document_naming_the_fixture(fixture: &Fixture, output: &Output) -> serde_
         document["provenance"]["digest"],
         serde_json::Value::from(hexadecimal(fixture.digest))
     );
+    // And no dataset, because this fixture is published through the library rather than by `table build`:
+    // the absent case of that field, end to end through the binary rather than over a constructed value.
+    assert!(document["provenance"]["dataset"].is_null(), "{document}");
     document
 }
 

@@ -20,9 +20,13 @@
 //!
 //! # Provenance, and what it does not attest
 //!
-//! [`Provenance`] is where a document's **identity** lives: which table it was answered from, and where
-//! that table sits. It is absent — the key omitted, not null — from a document whose command read no
-//! cached table.
+//! [`Provenance`] is where a document's **identity** lives: which table it was answered from, where that
+//! table sits, and which registered dataset its cells came from. It is absent — the key omitted, not null —
+//! from a document whose command read no cached table.
+//!
+//! **`dataset` is the field a figure's credit is selected by**, and it is a registry key rather than a
+//! citation: `data/registry.toml` owns the wording each licence requires, so a renderer resolves the key
+//! there and this format carries no attribution text of its own.
 //!
 //! A payload's own `digest` or `grid` is a different thing and not a second answer to the same question.
 //! [`TableQueryReport`] is the one place the distinction is visible: it carries both in its payload and
@@ -210,20 +214,27 @@ impl<T: Document> Envelope<T> {
 /// **attested** to, because the header binds the whole geometry and compares it (ADR 0005). The geometry
 /// is compared within `BOUNDARY_TOLERANCE_DEG`, so what a document names is the caller's spelling of a
 /// grid the header accepted rather than the header's own bits.
+/// `dataset` is the exception to that: it is the registry key the cache header records, so it names what the
+/// cells came from rather than what they are, and it is what a consumer reads to credit the raster a figure
+/// was drawn from. Absent — the key omitted, not null — from a table built without one, which is every table
+/// a caller of this crate publishes for itself.
 #[derive(Debug, Clone, Serialize)]
 pub struct Provenance {
     digest: String,
     decimation: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dataset: Option<String>,
     grid: GridSummary,
     cache: CacheFiles,
 }
 
 impl Provenance {
     #[must_use]
-    pub fn new(identity: &Identity, header: &Path, payload: &Path) -> Self {
+    pub fn new(identity: &Identity, dataset: Option<&str>, header: &Path, payload: &Path) -> Self {
         Self {
             digest: hexadecimal(identity.digest),
             decimation: identity.decimation.factor(),
+            dataset: dataset.map(str::to_owned),
             grid: GridSummary::from(identity.decimation.grid()),
             cache: CacheFiles::new(header, payload),
         }
@@ -878,14 +889,15 @@ mod tests {
         assert!(json.starts_with(r#"{"schema_version":1,"#), "{json}");
     }
 
-    /// The provenance of a table over [`degree_grid`], for the two tests that want one and vary nothing
-    /// about it.
-    fn provenance() -> Provenance {
+    /// The provenance of a table over [`degree_grid`], for the tests that want one and vary nothing about it
+    /// but the dataset.
+    fn provenance(dataset: Option<&str>) -> Provenance {
         Provenance::new(
             &Identity {
                 digest: 0x3a5d_5e3b_082f_2fb7,
                 decimation: Decimation::none(degree_grid()),
             },
+            dataset,
             Path::new("out/table.header.json"),
             Path::new("out/table.payload.bin"),
         )
@@ -900,8 +912,29 @@ mod tests {
     }
 
     #[test]
+    fn a_provenance_naming_a_dataset_publishes_it_and_one_naming_none_omits_the_key() {
+        // The additive half of the field, asserted on the text for
+        // `an_envelope_without_provenance_carries_no_key_for_it`'s reason: a document from a table built
+        // before this field existed is byte-identical to what it was, so a consumer ignoring the key reads
+        // it exactly as before.
+        let named = serde_json::to_string(&Envelope::with_provenance(
+            (),
+            provenance(Some("population-count-2020-30arcsec")),
+        ))
+        .unwrap();
+        assert!(
+            named.contains(r#""dataset":"population-count-2020-30arcsec""#),
+            "{named}"
+        );
+
+        let nameless =
+            serde_json::to_string(&Envelope::with_provenance((), provenance(None))).unwrap();
+        assert!(!nameless.contains("dataset"), "{nameless}");
+    }
+
+    #[test]
     fn provenance_is_published_before_the_result_it_produced() {
-        let json = serde_json::to_string(&Envelope::with_provenance((), provenance())).unwrap();
+        let json = serde_json::to_string(&Envelope::with_provenance((), provenance(None))).unwrap();
         let at = json.find(r#""provenance":"#).expect("the key is emitted");
         let result = json.find(r#""result":"#).expect("the payload is emitted");
         assert!(at < result, "{json}");
