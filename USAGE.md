@@ -214,9 +214,16 @@ stdout stays exactly one JSON document at every level.
 
 ## Choosing the inputs
 
-If you just want a good answer without reading further: **build at `--decimate 2` and search with
-`--spacing 1280`.** That gives the same radius as the full-resolution run, a centre within a kilometre of
-it, and takes 34 seconds instead of about an hour.
+**Two flags decide what a run costs.** `--decimate` coarsens the image before searching — bigger cells,
+fewer of them, so everything is faster and the circle's centre lands less precisely. `--spacing` sets how
+coarsely the first pass sweeps the globe for candidate centres, and it changes the time only, never the
+answer.
+
+**If you read nothing else: build at `--decimate 2` and search with `--spacing 1280`.** That is the same
+radius as the full raster gives, a centre within a kilometre of it, and 34 seconds against 78 minutes.
+
+The rest of this section is why those are the only two knobs and how to trade differently: the words, what
+actually costs time, what limits precision, the measured numbers, and how to pick a spacing.
 
 ### The five words you need
 
