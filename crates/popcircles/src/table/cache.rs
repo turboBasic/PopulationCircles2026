@@ -16,7 +16,7 @@ use crate::grid::BOUNDARY_TOLERANCE_DEG;
 
 /// Bumped when a change to the header's fields or the payload's layout is one an older reader would
 /// misread rather than refuse.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 const HEADER_SUFFIX: &str = ".header.json";
 const PAYLOAD_SUFFIX: &str = ".payload.bin";
@@ -308,18 +308,26 @@ struct HeaderVersion {
 /// flattened [`Attestation`], so the header stays the flat object a person can read with `cat` and the
 /// comparison is not written here; `byte_order` is last and is the header's alone, because it describes a
 /// payload of raw f64 and a ledger's numbers are JSON text with no order to disagree about.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// `dataset` is what the cells came from rather than what they are, which is why it is second and why
+/// [`Self::check`] does not compare it: the digest already binds the cells, so a name is a fact about
+/// provenance that travels with the table rather than a ground for refusing one. Absent — the key omitted,
+/// not null — when a build named none, which is every build driven through this crate's own API.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Header {
     format_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dataset: Option<String>,
     #[serde(flatten)]
     attestation: Attestation,
     byte_order: ByteOrder,
 }
 
 impl Header {
-    fn new(identity: &Identity) -> Self {
+    fn new(identity: &Identity, dataset: Option<&str>) -> Self {
         Self {
             format_version: FORMAT_VERSION,
+            dataset: dataset.map(str::to_owned),
             attestation: Attestation::new(identity),
             byte_order: ByteOrder::HOST,
         }
@@ -340,6 +348,14 @@ impl Header {
             .check(wanted)
             .map_err(CacheError::NotThisTable)
     }
+}
+
+/// What a checked header leaves a reader holding, which is not the header: the payload length the caller's
+/// own identity implies, and the one fact the document carries that no caller could have supplied.
+#[derive(Debug)]
+struct Described {
+    cells: usize,
+    dataset: Option<String>,
 }
 
 /// The two files a cache is, at one location.
@@ -422,8 +438,8 @@ impl Cache {
     /// [`CacheError::Absent`] when no header is there, and one variant per ground when what is there
     /// is not this table: see [`CacheError`].
     pub fn open(&self, wanted: &Identity) -> Result<Mapped, CacheError> {
-        let cells = self.checked_header(wanted)?;
-        Mapped::open(&self.payload, cells)
+        let described = self.checked_header(wanted)?;
+        Mapped::open(&self.payload, described)
     }
 
     /// The payload behind a header that describes the table `wanted`, read into memory.
@@ -431,7 +447,7 @@ impl Cache {
     /// # Errors
     /// As [`open`](Self::open).
     pub fn read(&self, wanted: &Identity) -> Result<Payload, CacheError> {
-        let cells = self.checked_header(wanted)?;
+        let cells = self.checked_header(wanted)?.cells;
         let bytes = fs::read(&self.payload).map_err(|source| CacheError::PayloadRead {
             path: self.payload.clone(),
             source,
@@ -444,9 +460,10 @@ impl Cache {
         Ok(payload)
     }
 
-    /// The header, checked against what the caller wants, and the payload length it therefore implies.
-    /// Both read paths go through here, so neither can be the lenient one.
-    fn checked_header(&self, wanted: &Identity) -> Result<usize, CacheError> {
+    /// The header, checked against what the caller wants, and what a reader takes from it: the payload
+    /// length it implies, and the dataset it names. Both read paths go through here, so neither can be the
+    /// lenient one.
+    fn checked_header(&self, wanted: &Identity) -> Result<Described, CacheError> {
         let document = fs::read(&self.header).map_err(|source| {
             if source.kind() == io::ErrorKind::NotFound {
                 CacheError::Absent {
@@ -480,13 +497,16 @@ impl Cache {
                 source,
             })?;
         header.check(wanted)?;
-        Ok(padded_len(wanted.decimation.grid()))
+        Ok(Described {
+            cells: padded_len(wanted.decimation.grid()),
+            dataset: header.dataset,
+        })
     }
 
     /// The commit record, and the last thing publication does: a reader that finds a header finds a
     /// complete payload behind it.
-    fn commit_header(&self, identity: &Identity) -> Result<(), CacheError> {
-        let document = serde_json::to_vec(&Header::new(identity)).map_err(|source| {
+    fn commit_header(&self, identity: &Identity, dataset: Option<&str>) -> Result<(), CacheError> {
+        let document = serde_json::to_vec(&Header::new(identity, dataset)).map_err(|source| {
             CacheError::HeaderWrite {
                 path: self.header.clone(),
                 source: io::Error::other(source),
@@ -541,15 +561,17 @@ impl Writer<'_> {
     /// replaces a directory entry rather than an inode, and a mapping already established keeps the
     /// bytes it mapped while a fresh build publishes over the same path.
     ///
+    /// `dataset` is what the cells came from, for a caller that resolved one; this crate resolves none.
+    ///
     /// # Errors
     /// [`CacheError::PayloadTruncated`] or [`CacheError::PayloadTrailing`] when the rows written are not
     /// the table `built` describes; [`CacheError::PayloadWrite`] and [`CacheError::HeaderWrite`] when a
     /// sync or a rename fails.
-    pub fn publish(self, built: &BuiltTable) -> Result<(), CacheError> {
+    pub fn publish(self, built: &BuiltTable, dataset: Option<&str>) -> Result<(), CacheError> {
         let cache = self.cache;
         let identity = Identity::from(built);
         self.commit_payload(&identity)?;
-        cache.commit_header(&identity)
+        cache.commit_header(&identity, dataset)
     }
 
     fn commit_payload(self, identity: &Identity) -> Result<(), CacheError> {
@@ -587,14 +609,22 @@ impl Writer<'_> {
 pub struct Mapped {
     map: Mmap,
     cells: usize,
+    dataset: Option<String>,
 }
 
 impl Mapped {
+    /// The dataset the header names, for a caller publishing where an answer came from. Absent when the
+    /// build that wrote this cache named none.
+    #[must_use]
+    pub fn dataset(&self) -> Option<&str> {
+        self.dataset.as_deref()
+    }
+
     // The one exception in this workspace: `Cargo.toml` says why `unsafe_code` is `deny` rather than
     // `forbid`, and the `single-unsafe-allow` hook is what asserts this is still the only one. The hook
     // counts the attribute below as text, so naming it a second time anywhere under `crates/` fires it.
     #[allow(unsafe_code)]
-    fn open(path: &Path, cells: usize) -> Result<Self, CacheError> {
+    fn open(path: &Path, described: Described) -> Result<Self, CacheError> {
         let read = |source| CacheError::PayloadRead {
             path: path.to_path_buf(),
             source,
@@ -612,7 +642,11 @@ impl Mapped {
         let map = unsafe { Mmap::map(&file) }.map_err(read)?;
         drop(file);
 
-        let mapped = Self { map, cells };
+        let mapped = Self {
+            map,
+            cells: described.cells,
+            dataset: described.dataset,
+        };
         // The checked cast at open, once, for [`Cache::read`]'s reason.
         mapped.cells()?;
         Ok(mapped)
@@ -734,12 +768,16 @@ mod tests {
 
     /// Builds a table straight into the cache and commits both files, returning what the build settled.
     fn publish(cache: &Cache, decimation: Decimation) -> BuiltTable {
+        publish_named(cache, decimation, None)
+    }
+
+    fn publish_named(cache: &Cache, decimation: Decimation, dataset: Option<&str>) -> BuiltTable {
         let mut writer = cache.writer().unwrap();
         let built = build(source(*decimation.source()), decimation, &mut (), |row| {
             writer.write_row(row)
         })
         .expect("a synthetic source cannot fail and the sink writes to a temporary directory");
-        writer.publish(&built).unwrap();
+        writer.publish(&built, dataset).unwrap();
         built
     }
 
@@ -759,7 +797,7 @@ mod tests {
     }
 
     fn header_of(built: &BuiltTable) -> Header {
-        Header::new(&Identity::from(built))
+        Header::new(&Identity::from(built), None)
     }
 
     fn write_header(cache: &Cache, header: &Header) {
@@ -982,9 +1020,42 @@ mod tests {
         publish(&cache, Decimation::none(grid(4, 3)));
         let document = fs::read_to_string(cache.header_path()).unwrap();
         assert!(
-            document.starts_with(r#"{"format_version":2,"#),
+            document.starts_with(r#"{"format_version":3,"#),
             "{document}"
         );
+    }
+
+    #[test]
+    fn a_table_published_with_no_dataset_names_none_and_carries_no_key_for_it() {
+        // The absent case as text rather than as a parsed value: what the skip promises is that the key is
+        // not there at all, so a consumer distinguishing absent from null reads the document.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let built = publish(&cache, Decimation::none(grid(4, 3)));
+
+        let document = fs::read_to_string(cache.header_path()).unwrap();
+        assert!(!document.contains("dataset"), "{document}");
+        assert_eq!(cache.open(&Identity::from(&built)).unwrap().dataset(), None);
+    }
+
+    #[test]
+    fn the_dataset_a_build_named_is_what_a_reader_of_that_cache_gets_back() {
+        // The whole point of the field: a name resolved once, where a dataset is resolved, and read back by
+        // every later command answering from this table rather than passed to each of them.
+        let directory = TempDir::new().unwrap();
+        let cache = cache_in(&directory);
+        let identity = Identity::from(&publish_named(
+            &cache,
+            Decimation::none(grid(4, 3)),
+            Some("population-count-2020-30arcsec"),
+        ));
+
+        assert_eq!(
+            cache.open(&identity).unwrap().dataset(),
+            Some("population-count-2020-30arcsec")
+        );
+        // And it is not part of the identity: the same table is still this table, whatever it was named.
+        assert!(cache.read(&identity).is_ok());
     }
 
     #[test]
@@ -1000,7 +1071,7 @@ mod tests {
             writer.write_row(row)
         })
         .unwrap();
-        writer.publish(&built).unwrap();
+        writer.publish(&built, None).unwrap();
 
         let payload = cache.read(&Identity::from(&built)).unwrap();
         let reloaded = Table::new(*decimation.grid(), payload.cells().unwrap()).unwrap();
@@ -1142,7 +1213,7 @@ mod tests {
         assert!(matches!(
             cache.read(&Identity::from(&built)),
             Err(CacheError::FormatVersion {
-                expected: 2,
+                expected: 3,
                 found: 1
             })
         ));
@@ -1285,7 +1356,7 @@ mod tests {
             digest: built.digest,
             decimation: Decimation::none(grid(6, 3)),
         };
-        write_header(&cache, &Header::new(&wanted));
+        write_header(&cache, &Header::new(&wanted, None));
 
         assert!(matches!(
             cache.read(&wanted),
@@ -1357,7 +1428,7 @@ mod tests {
         writer.write_row(&[0.0; 5]).unwrap();
 
         assert!(matches!(
-            writer.publish(&built),
+            writer.publish(&built, None),
             Err(CacheError::PayloadTruncated {
                 expected: 160,
                 found: 40

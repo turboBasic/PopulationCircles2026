@@ -29,6 +29,11 @@ const HEIGHT: u32 = 18;
 /// The registry raster's sentinel, so the fixture reaches the table by the path a real raster takes.
 const NODATA: f32 = -3.402_823e38;
 
+/// Distinct at every cell, so a payload read at the wrong offset shows up as a wrong sum.
+fn dense(row: u32, col: u32) -> f32 {
+    (row * WIDTH + col + 1) as f32
+}
+
 /// The library's spelling of a digest, which is what a build prints and a flag takes back.
 fn hexadecimal(digest: u64) -> String {
     format!("{digest:#018x}")
@@ -58,7 +63,13 @@ impl Fixture {
     }
 
     fn build() -> Self {
-        Self::over(|row, col| (row * WIDTH + col + 1) as f32)
+        Self::over(dense, None)
+    }
+
+    /// The same cache, published under a dataset name — which is what `table build --dataset` writes and
+    /// what a document answered from such a table has to carry.
+    fn named(dataset: &str) -> Self {
+        Self::over(dense, Some(dataset))
     }
 
     /// Everyone in a four-cell patch and the sentinel everywhere else, which is the shape whose answer the
@@ -69,13 +80,16 @@ impl Fixture {
     /// through the nodata-to-zero conversion a real raster takes rather than around it. The library's own
     /// tests build this shape with a helper private to them; this is the same four cells, rebuilt.
     fn clustered() -> Self {
-        Self::over(|row, col| {
-            let inside = (8..=9).contains(&row) && (15..=16).contains(&col);
-            if inside { 100.0 } else { NODATA }
-        })
+        Self::over(
+            |row, col| {
+                let inside = (8..=9).contains(&row) && (15..=16).contains(&col);
+                if inside { 100.0 } else { NODATA }
+            },
+            None,
+        )
     }
 
-    fn over(cell: impl Fn(u32, u32) -> f32) -> Self {
+    fn over(cell: impl Fn(u32, u32) -> f32, dataset: Option<&str>) -> Self {
         let directory = TempDir::new().expect("a temporary directory");
         let grid = Self::grid();
         let rows: Vec<Vec<f32>> = (0..HEIGHT)
@@ -89,7 +103,9 @@ impl Fixture {
             writer.write_row(row)
         })
         .expect("a synthetic source and a fresh cache cannot fail");
-        writer.publish(&built).expect("the cache publishes");
+        writer
+            .publish(&built, dataset)
+            .expect("the cache publishes");
 
         Self {
             directory,
@@ -206,6 +222,9 @@ fn one_document_naming_the_fixture(fixture: &Fixture, output: &Output) -> serde_
         document["provenance"]["digest"],
         serde_json::Value::from(hexadecimal(fixture.digest))
     );
+    // And no dataset, because this fixture is published through the library rather than by `table build`:
+    // the absent case of that field, end to end through the binary rather than over a constructed value.
+    assert!(document["provenance"]["dataset"].is_null(), "{document}");
     document
 }
 
@@ -407,4 +426,50 @@ fn a_coordinate_off_the_grid_is_bad_input() {
     );
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
+}
+
+#[test]
+fn a_build_naming_no_registered_dataset_is_refused_before_any_raster_is_opened() {
+    // The one case that reaches the registry, and it is here rather than in a unit test because what it
+    // asserts is the exit code and the sentence a person sees. From the repository root, because the
+    // registry path is resolved against the working directory and a test's is its own package.
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_popcircles"))
+        .current_dir(&root)
+        .args(["table", "build", "--dataset", "nonesuch"])
+        .output()
+        .expect("the binary cargo just built runs");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let complaint = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        complaint.contains("not a registered population raster"),
+        "{complaint}"
+    );
+    assert!(
+        complaint.contains("population-count-2020-30arcsec"),
+        "{complaint}"
+    );
+}
+
+#[test]
+fn a_document_answered_from_a_named_table_names_that_dataset() {
+    // The other side of the assertion in `one_document_naming_the_fixture`, and the only thing that pins
+    // the name reaching a document at all: the four search commands take no `--dataset`, so what they
+    // publish comes off the header of the table they opened. A command that stopped reading it would leave
+    // every other case in this file green.
+    let fixture = Fixture::named("population-count-2020-30arcsec");
+    let output = fixture.run_ok(
+        "population-at",
+        &["--lat", "48", "--lon", "11", "--radius-km", "1200"],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let document: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(
+        document["provenance"]["dataset"],
+        serde_json::Value::from("population-count-2020-30arcsec")
+    );
 }

@@ -18,7 +18,7 @@ from shapely.ops import unary_union
 
 from population_circles.circle_document import Circle, circle_of
 from population_circles.circle_geometry import cap, linestrings, polygons
-from population_circles.dataset_registry import load
+from population_circles.dataset_registry import Registry, load
 from population_circles.map_frame import PLATE_CARREE, PROJECTIONS, Frame, frame, graticule, project
 
 # Every figure this writes goes to a file, so an interactive backend is never wanted — and asking
@@ -32,17 +32,21 @@ COASTLINE = (
 )
 
 
-# The dataset a figure credits. Named here rather than read from the document because `report`'s
-# provenance identifies the summation table, not the raster behind it — so nothing published could
-# select between two attributed datasets. That gap is FU-16, and this constant is its whole extent.
-POPULATION_KEY = "population-count-2020-30arcsec"
+class UnregisteredDatasetError(ValueError):
+    def __init__(self, key: str) -> None:
+        super().__init__(f"the document names dataset {key!r}, which the registry does not carry")
+        self.key = key
 
 
-def citation() -> str:
-    # `data/registry.toml` owns the wording a licence requires, so a figure credits what the
-    # registry says is owed rather than what this file was written believing. Resolved by `main`
-    # and passed down, so `render` takes the string and never reaches for a dataset.
-    return load().datasets[POPULATION_KEY].attribution
+def citation(registry: Registry, key: str) -> str:
+    # Keyed by the document rather than by this file: `data/registry.toml` owns the wording a
+    # licence requires, and which row is owed it is the answer's own property. The registry arrives
+    # as an argument so a caller can select from one it parsed itself, and `render` still takes only
+    # the text — nothing below here resolves a dataset.
+    dataset = registry.datasets.get(key)
+    if dataset is None:
+        raise UnregisteredDatasetError(key)
+    return dataset.attribution
 
 
 # Bottom to top: the graticule under the coastlines, the circle over both, its centre over that, and
@@ -191,7 +195,13 @@ def main(argv: list[str] | None = None) -> int:
     no_coastlines: bool = args.no_coastlines
 
     document = json.loads(input_path.read_text(encoding="utf-8"))
-    figure = render(circle_of(document), projection, citation(), coastlines=not no_coastlines)
+    circle = circle_of(document)
+    figure = render(
+        circle,
+        projection,
+        citation(load(), circle.dataset),
+        coastlines=not no_coastlines,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # No bbox_inches="tight": the title and citation are placed at figure coordinates, and cropping
     # to the drawn content moves them off the positions they were given.

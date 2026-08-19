@@ -35,6 +35,14 @@ class UnsupportedDocumentError(ValueError):
         self.kind = kind
 
 
+class MissingDatasetError(ValueError):
+    def __init__(self) -> None:
+        super().__init__(
+            "the document names no dataset under provenance, so there is no attribution for a "
+            "figure to carry; rebuild the table with `table build --dataset <name>`",
+        )
+
+
 class Coordinate(BaseModel):
     model_config = _CONFIG
 
@@ -56,10 +64,22 @@ class Circle(BaseModel):
     radius_km: float
     population: float
     share: float
+    # The registry key the document was answered from, carried down for the same reason as the
+    # radius below: what a figure credits is a property of the answer, not of the renderer.
+    dataset: str
     # The document's own earth model, carried down so a caller sizing a cap never needs a radius of
     # its own — `geodesy.rs` owns that number and a second copy in Python is the defect the "Ground
     # distance" invariant names.
     earth_radius_km: float
+
+
+class Provenance(BaseModel):
+    model_config = _CONFIG
+
+    # Optional in the format, per `report.rs` "Growth", and required by this reader: a figure whose
+    # credit cannot be read off its own document would be credited from whatever the renderer was
+    # written against, so a document that cannot say is refused rather than drawn.
+    dataset: str | None = None
 
 
 class Envelope(BaseModel):
@@ -68,13 +88,16 @@ class Envelope(BaseModel):
     schema_version: Annotated[int, Field(le=SCHEMA_VERSION)]
     document: DocumentKind
     earth_model: EarthModel
+    # Absent from a document whose command read no cached table, which is every kind this reader
+    # refuses anyway.
+    provenance: Provenance | None = None
 
 
 class _Payload(BaseModel, ABC):
     model_config = _CONFIG
 
     @abstractmethod
-    def as_circle(self, earth_radius_km: float) -> Circle: ...
+    def as_circle(self, earth_radius_km: float, dataset: str) -> Circle: ...
 
 
 class _Measured(_Payload):
@@ -83,12 +106,13 @@ class _Measured(_Payload):
     population: float
     share_of_total: float
 
-    def as_circle(self, earth_radius_km: float) -> Circle:
+    def as_circle(self, earth_radius_km: float, dataset: str) -> Circle:
         return Circle(
             centre=self.centre,
             radius_km=self.radius_km,
             population=self.population,
             share=self.share_of_total,
+            dataset=dataset,
             earth_radius_km=earth_radius_km,
         )
 
@@ -105,12 +129,13 @@ class _Smallest(BaseModel):
 class _Searched(_Payload):
     circle: _Smallest
 
-    def as_circle(self, earth_radius_km: float) -> Circle:
+    def as_circle(self, earth_radius_km: float, dataset: str) -> Circle:
         return Circle(
             centre=self.circle.centre,
             radius_km=self.circle.radius_km,
             population=self.circle.population,
             share=self.circle.share_achieved,
+            dataset=dataset,
             earth_radius_km=earth_radius_km,
         )
 
@@ -132,4 +157,10 @@ def circle_of(document: Mapping[str, object]) -> Circle:
     payload = _PAYLOADS.get(envelope.document)
     if payload is None:
         raise UnsupportedDocumentError(envelope.document)
-    return payload.model_validate(document.get("result")).as_circle(envelope.earth_model.radius_km)
+    dataset = envelope.provenance.dataset if envelope.provenance else None
+    if dataset is None:
+        raise MissingDatasetError
+    return payload.model_validate(document.get("result")).as_circle(
+        envelope.earth_model.radius_km,
+        dataset,
+    )

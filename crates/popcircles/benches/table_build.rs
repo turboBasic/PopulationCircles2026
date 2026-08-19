@@ -150,7 +150,9 @@ fn through_the_cache(source: Grid, factor: u32, base: &std::path::Path) -> (f64,
         writer.write_row(row)
     })
     .expect("a generated source, and a sink that only fails on I/O");
-    writer.publish(&built).expect("the payload is published");
+    writer
+        .publish(&built, None)
+        .expect("the payload is published");
     let seconds = started.elapsed().as_secs_f64();
     let bytes = std::fs::metadata(cache.payload_path())
         .expect("the payload was just published")

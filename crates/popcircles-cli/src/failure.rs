@@ -14,6 +14,8 @@ use popcircles::smallest::cache::LedgerError;
 use popcircles::table::cache::CacheError;
 use popcircles::table::{BuildError, TableError};
 
+use crate::registry::RegistryError;
+
 /// Bad input, and data that is not there; `application.md`'s "interrupted" class has no caller yet and
 /// is not coded here ahead of one.
 pub(crate) const EXIT_BAD_INPUT: u8 = 2;
@@ -69,6 +71,10 @@ impl Failure {
         }
     }
 
+    pub(crate) fn registry(error: &RegistryError) -> Self {
+        Self::new(exit_code_for_registry_error(error), error)
+    }
+
     pub(crate) fn ledger(error: &LedgerError) -> Self {
         Self::new(exit_code_for_ledger_error(error), error)
     }
@@ -118,9 +124,10 @@ const fn exit_code_for_table_error(error: &TableError) -> u8 {
     }
 }
 
-/// Every disagreement between the file and the declaration is bad input, because the declaration is an
-/// argument: `--nodata` and the six grid numbers are what the file is being held to. Bytes that are not
-/// there to read are missing data, which is the class that names `mise run data:get`.
+/// Every disagreement between the file and the declaration is bad input, because the caller chose the
+/// declaration: the registry row `--dataset` names is what the file is being held to, and a file that no
+/// longer answers to its own row is a dataset picked wrongly rather than a broken program. Bytes that are
+/// not there to read are missing data, which is the class that names `mise run data:get`.
 fn exit_code_for_raster_error(error: &RasterError) -> u8 {
     match error {
         RasterError::Dimensions { .. }
@@ -204,6 +211,18 @@ fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
         | LedgerError::Syntax { .. }
         | LedgerError::CentreOffGrid { .. }
         | LedgerError::DuplicateRadius { .. } => EXIT_FAILURE,
+    }
+}
+
+/// A name no table can be built from is what the caller typed, so it is bad input. A registry that is not at
+/// the path this run resolved is missing data — nothing fetches it, because it is committed, so the message
+/// says to run from the repository root instead. One that is there and does not hold together is neither the
+/// caller's doing nor a fetch away from being right.
+fn exit_code_for_registry_error(error: &RegistryError) -> u8 {
+    match error {
+        RegistryError::Unknown { .. } => EXIT_BAD_INPUT,
+        RegistryError::Read { .. } => EXIT_MISSING_DATA,
+        RegistryError::Syntax { .. } | RegistryError::KeyIsNotTheStem { .. } => EXIT_FAILURE,
     }
 }
 

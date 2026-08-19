@@ -93,7 +93,14 @@ impl CachedTable {
     }
 
     pub(crate) fn provenance(&self) -> Provenance {
-        Provenance::new(&self.identity, &self.header, &self.payload)
+        // The name comes off the header rather than off a flag, which is what lets a command that takes no
+        // `--dataset` publish one.
+        Provenance::new(
+            &self.identity,
+            self.mapped.dataset(),
+            &self.header,
+            &self.payload,
+        )
     }
 }
 

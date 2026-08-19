@@ -142,36 +142,6 @@ Identifiers are flat, sequential and never reused.
   of its own to scale it to. Issue #45 already ruled out the two shortcuts: exact bit equality
   on the four numbers, and a per-caller tolerance.
 
-### FU-16 - A figure names the dataset it credits rather than reading it from the document
-
-- **Status** — `dormant` (2026-08-15): the registry holds one dataset a figure needs a citation for, so
-  one mapping is the whole mapping.
-
-  **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
-  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its
-  terms ask for no attribution — so the count the Condition sweeps for is two rows against one selectable
-  dataset while the failure the entry guards against is still impossible. What the Condition means is a
-  second row a figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s
-  reason: a reader should be able to tell "the row arrived and the entry held" from "nobody looked".
-
-  **Half of this closed** (2026-08-16, issue #57). The citation was a Python constant, which the original
-  title named; it is now read from `data/registry.toml`, so the text a figure carries is the text the
-  registry says is owed and `rg -n 'CIESIN' python/src/` returns nothing. What remains — and what the
-  entry is now titled for — is the selecting: `render_map.py` names `POPULATION_KEY`, so a figure credits
-  the dataset the renderer was written against rather than the one its document was answered from.
-- **Condition** — [`data/registry.toml`](../data/registry.toml) carries a second dataset **whose licence
-  requires attribution**. The sweep is the count of rows with a non-empty `attribution` against the number
-  of datasets `python/src/population_circles/render_map.py` can select between: one and one today. A second
-  such dataset makes the credited dataset whichever one `POPULATION_KEY` happens to name, and a figure
-  rendered from the other credits the wrong source while `python/tests/test_render_map.py` still passes —
-  the test compares the drawn text against that same key's row, so it stays true of the wrong entry.
-- **Fix** — key the citation by the document's own dataset, which means publishing enough in the document
-  to choose with. That is the reason this is an entry and not a task: `report`'s `provenance` names the
-  table a document was answered from by digest and grid, not the dataset the raster came from, so there is
-  nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
-  additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
-  the value to publish first exists.
-
 ### FU-17 - The full-resolution search is page faults, not arithmetic
 
 - **Status** — `dormant` (2026-08-15): measured under issue #10, and dormant rather than due
@@ -423,6 +393,22 @@ Identifiers are flat, sequential and never reused.
   [ADR 0010](decisions/0010-automation-brings-its-own-provider.md) names, so loosening it is argued for on
   the tree as it is then. Note while deciding: `author_association` is computed by GitHub per comment and
   cannot be narrowed to "this person may spend money", so whatever replaces it is a proxy too.
+
+### FU-28 - `Circle` is the transport for facts a figure needs and a circle does not
+
+- **Status** — `dormant` (2026-08-19, issue #94): one such field exists. `dataset` is a registry key the
+  renderer resolves a citation from, and no geometry reads it — it rides `Circle` because that is what
+  `circle_of` returns, following the precedent `earth_radius_km` set.
+- **Condition** — a second field on `Circle` in
+  [`python/src/population_circles/circle_document.py`](../python/src/population_circles/circle_document.py)
+  is read by no caller that draws or measures. The sweep is the field list of `Circle` against what
+  `circle_geometry.py` and `map_frame.py` reference: `centre`, `radius_km` and `earth_radius_km` are the
+  geometry's, `population` and `share` are the caption's, and `dataset` is the credit's. A digest, a
+  decimation or a table path arriving for a caption is the event.
+- **Fix** — `circle_of` returns the answer rather than the circle: one frozen model carrying the circle it
+  draws and the provenance the figure states, so the geometry takes a type whose every field it reads.
+  Not now, because with one such field the split is a second model for one string, and the seam is one
+  function's return type — reversing it costs a signature and its two callers.
 
 ## Closed and retired
 
@@ -772,3 +758,40 @@ Identifiers are flat, sequential and never reused.
   outlives its reason silently: a reader a year from now finds a cache keyed on `uv.lock` and no way to
   tell whether removing it costs 25 seconds a job or nothing at all. The 25.55 s in the Status above is
   that figure, so the entry firing is what licenses removing the step rather than guessing at it.
+
+### FU-16 - A figure names the dataset it credits rather than reading it from the document
+
+- **Status** — `closed` (2026-08-19, issue #94): the citation is keyed by the document. `report`'s
+  `provenance` carries the registry key of the dataset a table was built from, read out of the cache
+  header, and `python/src/population_circles/render_map.py` resolves that key rather than a constant of its
+  own — `rg -n 'POPULATION_KEY' python/` returns nothing. Closed while still dormant: the registry carries
+  one attributed row, so the Condition never fired, and what the entry guarded against is now impossible
+  rather than merely absent. A document that names no dataset is refused rather than credited from a
+  fallback; the two-attributed-dataset case is a fixture in `python/tests/test_render_map.py` because the
+  registry cannot supply it, and one case there renders through `main` over that fixture, so putting a
+  constant back where the key is read fails the suite rather than passing it.
+
+  **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
+  `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its
+  terms ask for no attribution — so the count the Condition sweeps for is two rows against one selectable
+  dataset while the failure the entry guards against is still impossible. What the Condition means is a
+  second row a figure would have to *credit*. The note is here rather than a silent edit for `FU-08`'s
+  reason: a reader should be able to tell "the row arrived and the entry held" from "nobody looked".
+
+  **Half of this closed** (2026-08-16, issue #57). The citation was a Python constant, which the original
+  title named; it is now read from `data/registry.toml`, so the text a figure carries is the text the
+  registry says is owed and `rg -n 'CIESIN' python/src/` returns nothing. What remains — and what the
+  entry is now titled for — is the selecting: `render_map.py` names `POPULATION_KEY`, so a figure credits
+  the dataset the renderer was written against rather than the one its document was answered from.
+- **Condition** — [`data/registry.toml`](../data/registry.toml) carries a second dataset **whose licence
+  requires attribution**. The sweep is the count of rows with a non-empty `attribution` against the number
+  of datasets `python/src/population_circles/render_map.py` can select between: one and one today. A second
+  such dataset makes the credited dataset whichever one `POPULATION_KEY` happens to name, and a figure
+  rendered from the other credits the wrong source while `python/tests/test_render_map.py` still passes —
+  the test compares the drawn text against that same key's row, so it stays true of the wrong entry.
+- **Fix** — key the citation by the document's own dataset, which means publishing enough in the document
+  to choose with. That is the reason this is an entry and not a task: `report`'s `provenance` names the
+  table a document was answered from by digest and grid, not the dataset the raster came from, so there is
+  nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
+  additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
+  the value to publish first exists.

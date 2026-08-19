@@ -8,25 +8,26 @@ use popcircles::report::{Envelope, TableBuildReport, TableQueryReport};
 use popcircles::table::cache::Cache;
 use popcircles::table::{Decimation, Window, build};
 
-use crate::args::{CachedTableArgs, GridArgs, RasterSpecArgs, TableArgs};
+use crate::args::{CachedTableArgs, TableArgs};
 use crate::commands::{CachedTable, make_room_for, serialised};
 use crate::failure::Failure;
 use crate::observe::StderrProgress;
+use crate::registry::{REGISTRY_PATH, Registry};
 
-pub(crate) fn build_table(
-    raster: &Path,
-    grid: GridArgs,
-    raster_spec: RasterSpecArgs,
-    table: &TableArgs,
-) -> Result<String, Failure> {
-    let grid = grid.grid().map_err(|error| Failure::grid(&error))?;
+pub(crate) fn build_table(dataset: &str, table: &TableArgs) -> Result<String, Failure> {
+    let row = Registry::load(Path::new(REGISTRY_PATH))
+        .and_then(|registry| registry.raster(dataset))
+        .map_err(|error| Failure::registry(&error))?;
+
+    let raster = row.raster.as_path();
+    let grid = row.grid.grid().map_err(|error| Failure::grid(&error))?;
     let decimation =
         Decimation::new(grid, table.decimate).map_err(|error| Failure::table(&error))?;
     let spec = RasterSpec {
         grid,
-        epsg: raster_spec.epsg,
+        epsg: row.epsg,
         pixel: PixelType::Float32,
-        nodata: raster_spec.nodata,
+        nodata: row.nodata,
     };
     let source = GeoTiffSource::open(raster, &spec).map_err(|error| Failure::raster(&error))?;
 
@@ -48,7 +49,7 @@ pub(crate) fn build_table(
     })
     .map_err(|error| Failure::build(&error))?;
     writer
-        .publish(&built)
+        .publish(&built, Some(dataset))
         .map_err(|error| Failure::cache(&error))?;
     progress.finish();
 

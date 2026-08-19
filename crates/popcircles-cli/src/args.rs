@@ -116,7 +116,11 @@ pub(crate) struct CachedTableArgs {
 }
 
 /// The grid a raster is declared to be. The declared grid wins over the file's own tags, which is why
-/// every command that reads a raster or a table over one asks for the same six numbers.
+/// every command naming a table asks for the same six numbers.
+///
+/// Two sources now, and this is the second: `table build` reads them out of a registry row rather than off
+/// the command line, so a table's grid is declared once where the dataset is described and repeated on
+/// every command that afterwards names that table.
 #[derive(Args, Debug, Clone, Copy)]
 pub(crate) struct GridArgs {
     #[arg(long)]
@@ -146,17 +150,6 @@ impl GridArgs {
             self.lat_step,
         )
     }
-}
-
-/// What the file must say about itself beyond its grid. No defaults: `data/registry.toml` owns each
-/// dataset's sentinel and CRS, and a copy of them here would be a second owner drifting from the first.
-#[derive(Args, Debug, Clone, Copy)]
-pub(crate) struct RasterSpecArgs {
-    /// The nodata sentinel the file declares, compared bit for bit.
-    #[arg(long, allow_negative_numbers = true)]
-    pub(crate) nodata: f32,
-    #[arg(long)]
-    pub(crate) epsg: u16,
 }
 
 #[derive(Args, Debug, Clone)]

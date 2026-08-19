@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from population_circles.circle_document import (
     CIRCLE_KINDS,
     SCHEMA_VERSION,
+    MissingDatasetError,
     UnsupportedDocumentError,
     circle_of,
 )
@@ -15,6 +16,8 @@ from population_circles.circle_document import (
 # figures are `report.rs`'s own snapshots, named so a change to one moves every assertion over it.
 EARTH_RADIUS_KM = 6371.0088
 EARTH_MODEL = {"model": "sphere", "radius_km": EARTH_RADIUS_KM}
+
+DATASET = "population-count-2020-30arcsec"
 
 MEASURED_LAT = 45.0
 MEASURED_LON = 15.0
@@ -34,6 +37,11 @@ def envelope(kind: str, result: dict[str, Any]) -> dict[str, Any]:
         "tool": "popcircles",
         "tool_version": "0.1.0",
         "earth_model": EARTH_MODEL,
+        "provenance": {
+            "digest": "0xf17aa802a6890f0c",
+            "decimation": 10,
+            "dataset": DATASET,
+        },
         "result": result,
     }
 
@@ -75,6 +83,7 @@ def test_a_named_circle_reads_as_a_circle() -> None:
     assert circle.radius_km == MEASURED_RADIUS_KM
     assert circle.population == MEASURED_POPULATION
     assert circle.earth_radius_km == EARTH_RADIUS_KM
+    assert circle.dataset == DATASET
 
 
 def test_the_most_populous_circle_reads_as_a_circle() -> None:
@@ -134,3 +143,28 @@ def test_a_field_the_reader_does_not_know_is_ignored_rather_than_refused() -> No
     document["result"]["a_field_from_a_later_release"] = 1
     document["a_document_level_field_from_a_later_release"] = 2
     assert circle_of(document).radius_km == MEASURED_RADIUS_KM
+
+
+def test_a_document_naming_no_dataset_is_refused_rather_than_drawn() -> None:
+    # Both shapes of "cannot say": provenance absent altogether, which is a command that read no
+    # cached table, and provenance from a table built before a name reached its header. Neither is
+    # drawable, because the figure would credit whatever the renderer was written against.
+    without = envelope("circle", measured())
+    del without["provenance"]
+    with pytest.raises(MissingDatasetError):
+        circle_of(without)
+
+    unnamed = envelope("circle", measured())
+    del unnamed["provenance"]["dataset"]
+    with pytest.raises(MissingDatasetError) as caught:
+        circle_of(unnamed)
+    assert "names no dataset" in str(caught.value)
+
+
+def test_a_kind_that_cannot_be_drawn_is_refused_before_its_dataset_is_looked_for() -> None:
+    # The order matters: a `distance` document has no provenance at all, and reporting that as a
+    # missing dataset would send its reader to rebuild a table the command never read.
+    document = envelope("distance", {"great_circle_km": 966.3013398709427})
+    del document["provenance"]
+    with pytest.raises(UnsupportedDocumentError):
+        circle_of(document)
