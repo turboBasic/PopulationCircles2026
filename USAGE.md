@@ -72,7 +72,9 @@ Counting a country needs a mask over the grid, which is a later step — and tre
 circle, as a country is the spec error
 [the application doc](docs/ai/application.md#what-this-program-does) names.
 
-Both cache files land under `out/`, which is gitignored because a generated table is never committed.
+Both cache files land under `out/`, which is gitignored because a generated table is never committed. A
+build killed part way leaves a `.payload.bin.tmp`, and the next build into that `--cache` refuses rather than
+deleting it — that file is what stops two builds writing one payload. Remove it and build again.
 Building needs the raster, so `mise run data:get` first: it fetches from the
 [`data-v1` release](https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1), which needs
 no account, and verifies what it got against the registry's checksum before placing it. Getting an

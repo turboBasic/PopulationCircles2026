@@ -154,6 +154,10 @@ fn exit_code_for_raster_error(error: &RasterError) -> u8 {
 /// A cache that is absent and a cache of some other table share a class, because a caller's answer to
 /// both is to build. A cache that is there and broken is neither the caller's doing nor a rebuild away
 /// from being trusted, so it is a plain failure and says which file.
+///
+/// A held temporary is a third answer — remove the file, or wait for the build holding it — and takes the
+/// failure class because the other two would both be wrong: nothing is missing, and building again is
+/// exactly what it refuses. The message carries the action, since no exit code here can.
 fn exit_code_for_cache_error(error: &CacheError) -> u8 {
     match error {
         CacheError::Absent { .. }
@@ -168,6 +172,7 @@ fn exit_code_for_cache_error(error: &CacheError) -> u8 {
         | CacheError::PayloadWrite { .. }
         | CacheError::PayloadTruncated { .. }
         | CacheError::PayloadTrailing { .. }
+        | CacheError::PayloadTemporaryHeld { .. }
         | CacheError::PayloadAlignment => EXIT_FAILURE,
     }
 }
@@ -210,7 +215,8 @@ fn exit_code_for_ledger_error(error: &LedgerError) -> u8 {
         | LedgerError::Write { .. }
         | LedgerError::Syntax { .. }
         | LedgerError::CentreOffGrid { .. }
-        | LedgerError::DuplicateRadius { .. } => EXIT_FAILURE,
+        | LedgerError::DuplicateRadius { .. }
+        | LedgerError::TemporaryHeld { .. } => EXIT_FAILURE,
     }
 }
 
