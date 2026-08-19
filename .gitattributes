@@ -5,6 +5,9 @@
 *.pyi text
 *.toml text
 *.md text
+# A result document under results/ is the CLI's stdout redirected, so eol=lf above is what keeps the
+# committed bytes identical to what a rerun prints.
+*.json text
 *.yml text
 *.yaml text
 *.sh text eol=lf

@@ -352,4 +352,5 @@ docs/ponytail.md                 the ponytail plugin's use here, and its limits
 crates/                          Rust workspace — the search
 data/                            input datasets; registry in data/registry.toml
 python/                          Python project — src/ holds the packages, tests/ the suite
+results/                         the answers this project publishes, as the documents that printed them
 ```
