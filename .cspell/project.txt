@@ -76,6 +76,7 @@ scalerank
 semiminor
 shapefile
 tiffinfo
+webp
 
 # --- Library and API identifiers ---
 anstream
