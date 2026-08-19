@@ -94,6 +94,7 @@ figsize
 flate
 fontsize
 geoms
+figcaption
 getpid
 gridlines
 horizontalalignment
@@ -116,6 +117,7 @@ skia
 socketpair
 splitmix
 thiserror
+verticalalignment
 weezl
 xlim
 ylim
@@ -134,11 +136,13 @@ negotiables
 newtypes
 overexplanation
 relitigate
+renderable
 rescope
 restater
 unfetched
 unfireable
 unpushed
+unrenderable
 widenings
 
 # --- Data sources ---
