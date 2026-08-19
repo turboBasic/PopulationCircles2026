@@ -394,6 +394,22 @@ Identifiers are flat, sequential and never reused.
   the tree as it is then. Note while deciding: `author_association` is computed by GitHub per comment and
   cannot be narrowed to "this person may spend money", so whatever replaces it is a proxy too.
 
+### FU-28 - `Circle` is the transport for facts a figure needs and a circle does not
+
+- **Status** — `dormant` (2026-08-19, issue #94): one such field exists. `dataset` is a registry key the
+  renderer resolves a citation from, and no geometry reads it — it rides `Circle` because that is what
+  `circle_of` returns, following the precedent `earth_radius_km` set.
+- **Condition** — a second field on `Circle` in
+  [`python/src/population_circles/circle_document.py`](../python/src/population_circles/circle_document.py)
+  is read by no caller that draws or measures. The sweep is the field list of `Circle` against what
+  `circle_geometry.py` and `map_frame.py` reference: `centre`, `radius_km` and `earth_radius_km` are the
+  geometry's, `population` and `share` are the caption's, and `dataset` is the credit's. A digest, a
+  decimation or a table path arriving for a caption is the event.
+- **Fix** — `circle_of` returns the answer rather than the circle: one frozen model carrying the circle it
+  draws and the provenance the figure states, so the geometry takes a type whose every field it reads.
+  Not now, because with one such field the split is a second model for one string, and the seam is one
+  function's return type — reversing it costs a signature and its two callers.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
