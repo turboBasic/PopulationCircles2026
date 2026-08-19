@@ -94,7 +94,7 @@ impl CachedTable {
 
     pub(crate) fn provenance(&self) -> Provenance {
         // The name comes off the header rather than off a flag, which is what lets a command that takes no
-        // `--dataset` publish one: it is the table that knows, and this is the one place a table is opened.
+        // `--dataset` publish one.
         Provenance::new(
             &self.identity,
             self.mapped.dataset(),

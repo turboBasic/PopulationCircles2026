@@ -308,6 +308,7 @@ struct HeaderVersion {
 /// flattened [`Attestation`], so the header stays the flat object a person can read with `cat` and the
 /// comparison is not written here; `byte_order` is last and is the header's alone, because it describes a
 /// payload of raw f64 and a ledger's numbers are JSON text with no order to disagree about.
+///
 /// `dataset` is what the cells came from rather than what they are, which is why it is second and why
 /// [`Self::check`] does not compare it: the digest already binds the cells, so a name is a fact about
 /// provenance that travels with the table rather than a ground for refusing one. Absent — the key omitted,
@@ -560,8 +561,7 @@ impl Writer<'_> {
     /// replaces a directory entry rather than an inode, and a mapping already established keeps the
     /// bytes it mapped while a fresh build publishes over the same path.
     ///
-    /// `dataset` is what the cells came from, for a caller that resolved one — it is recorded so every
-    /// document answered from this table can name it, and this crate never resolves one itself.
+    /// `dataset` is what the cells came from, for a caller that resolved one; this crate resolves none.
     ///
     /// # Errors
     /// [`CacheError::PayloadTruncated`] or [`CacheError::PayloadTrailing`] when the rows written are not
@@ -767,9 +767,6 @@ mod tests {
     }
 
     /// Builds a table straight into the cache and commits both files, returning what the build settled.
-    ///
-    /// Naming no dataset, which is what every build through this crate's own API does — a name reaches a
-    /// header only from a caller that resolved one.
     fn publish(cache: &Cache, decimation: Decimation) -> BuiltTable {
         publish_named(cache, decimation, None)
     }
@@ -1031,8 +1028,7 @@ mod tests {
     #[test]
     fn a_table_published_with_no_dataset_names_none_and_carries_no_key_for_it() {
         // The absent case as text rather than as a parsed value: what the skip promises is that the key is
-        // not there at all, so a consumer distinguishing absent from null reads the document. This is every
-        // build driven through this crate, the whole test suite included.
+        // not there at all, so a consumer distinguishing absent from null reads the document.
         let directory = TempDir::new().unwrap();
         let cache = cache_in(&directory);
         let built = publish(&cache, Decimation::none(grid(4, 3)));

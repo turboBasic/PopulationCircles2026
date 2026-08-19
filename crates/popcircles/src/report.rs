@@ -210,14 +210,14 @@ impl<T: Document> Envelope<T> {
 
 /// The table a command answered from, and where it sits.
 ///
-/// All three facts here are the cache's own: `digest`, `decimation` and `grid` are what opening a cache
-/// **attested** to, because the header binds the whole geometry and compares it (ADR 0005). The geometry
+/// `digest`, `decimation` and `grid` are what opening a cache **attested** to, because the header binds the
+/// whole geometry and compares it (ADR 0005). The geometry
 /// is compared within `BOUNDARY_TOLERANCE_DEG`, so what a document names is the caller's spelling of a
 /// grid the header accepted rather than the header's own bits.
-/// `dataset` is the exception to that: it is the registry key the cache header records, so it names what the
-/// cells came from rather than what they are, and it is what a consumer reads to credit the raster a figure
-/// was drawn from. Absent — the key omitted, not null — from a table built without one, which is every table
-/// a caller of this crate publishes for itself.
+///
+/// `dataset` is not attested in that sense: it is the registry key the cache header records, so it names
+/// what the cells came from rather than what they are, and it is what a consumer reads to credit the raster
+/// a figure was drawn from. Absent — the key omitted, not null — from a table built without one.
 #[derive(Debug, Clone, Serialize)]
 pub struct Provenance {
     digest: String,
