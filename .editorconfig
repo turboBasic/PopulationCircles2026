@@ -24,10 +24,9 @@ indent_size = 2
 [*.geojson]
 max_line_length = off
 
-# A committed result document is what the program printed, one line of it, and rewrapping or reformatting
-# one would stop it being that. ADR 0011 rules why the tree carries them at all.
+# A committed result document is what the program printed, one line of it, and rewrapping one would stop
+# it being that.
 [results/*.json]
-indent_size = unset
 max_line_length = off
 
 # insta generates these, so the layout is what it emits rather than what this file asks for. Trailing
