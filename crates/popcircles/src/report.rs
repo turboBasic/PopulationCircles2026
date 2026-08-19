@@ -72,9 +72,9 @@
 //! 7.76e9. A circle is a sum of one such query per grid row it spans, added in
 //! [`crate::circle::population`]'s fixed order, so the error composes rather than cancelling:
 //! [`crate::smallest::predicate_slack_persons`] is that composition, and it is what
-//! `predicate_slack_persons` publishes. Measured on this dataset it is 0.012 persons over the 5 arcmin
-//! grid and 0.20 over the 30 arcsec one — against populations of 3.9e9, which is eleven significant
-//! figures.
+//! `predicate_slack_persons` publishes. Measured on this dataset's half-world circle it is 0.012 persons
+//! over the 5 arcmin grid and 0.12 over the 30 arcsec one — against populations of 3.9e9, which is eleven
+//! significant figures.
 //!
 //! **`tolerance_persons` is zero, and it means what it says.** The fixed-radius search reports the exact
 //! maximum over the grid's cell centres: refinement runs to single cells, the pruning bound is rounded

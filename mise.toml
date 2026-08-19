@@ -249,8 +249,8 @@ run = "uv run fetch-data"
 # Not in `lint`, `test` or `ci`, and no later change can put it there: it needs the raster and one
 # full-resolution search of about ninety minutes.
 # The digest is read back from what each build printed, because a search names the table it wants by digest.
-# The ledgers go first, so every run is a fresh search: a resumed one answers the same but reports the work
-# as reused, and a committed document saying `radii_evaluated: 0` describes nothing that happened.
+# The ledgers go first: a resumed run answers the same but reports `radii_evaluated: 0`, which describes
+# nothing that happened.
 [tasks."results:build"]
 description = "Regenerate the committed result documents from the raster (needs mise run data:get)"
 run = '''

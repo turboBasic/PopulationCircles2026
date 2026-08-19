@@ -243,20 +243,23 @@ Also three things, and the surprise is that only one of them matters here:
   publishes exactly how much: **0.06 of a person** out of 3.9 billion at 1 arcmin. That is eleven correct
   significant figures. It is never the thing limiting your answer.
 
-Measured on the real raster, for half the world's population — every row an actual run, on a 16 GB M2 Pro:
+Measured on the real raster, for half the world's population — every row an actual run, end to end, on a
+16 GB M2 Pro (6 performance and 4 efficiency cores, internal SSD) under macOS 26.6:
 
 | `--decimate` | Cell size | Table | Build | Search | Radius | Centre error |
 | --- | --- | --- | --- | --- | --- | --- |
 | 10 | 9.3 km | 71 MB | 11 s | 0.9 s | 3360 km | 6.3 km |
 | 4 | 3.7 km | 445 MB | 15 s | 5.0 s | 3360 km | 1.8 km |
 | **2** | **1.9 km** | **1.8 GB** | **16 s** | **18 s** | **3360 km** | **0.6 km** |
-| 1 | 0.9 km | 7.0 GB | 18 s | ~1 hour† | 3360 km | — (the reference) |
+| 1 | 0.9 km | 7.0 GB | 21 s | 78 min | 3360 km | — (the reference) |
 
-† Estimated, not measured: a single radius near the answer took 247–292 s, and a full search probes 24 of
-them. Everything else in the table was run end to end.
+The full-resolution row is 24 probed radii at 100–275 s each, and
+[`results/world-half-30arcsec.json`](results/world-half-30arcsec.json) is the document it printed. A sweep
+is cheaper than its shares suggest: ten of them over one ledger cost 7.0 s at `--decimate 10`, because 28
+radii answer all ten.
 
 **All four agree on the radius.** Resolution buys you centre placement and nothing else, and it buys it at
-about 4× the cost per halving of the cell. The last step — 1 arcmin to full — costs roughly 200× the time
+about 4× the cost per halving of the cell. The last step — 1 arcmin to full — costs roughly 250× the time
 for half a kilometre of centre, because it is the step that goes over the RAM cliff.
 
 ### Choosing spacing
