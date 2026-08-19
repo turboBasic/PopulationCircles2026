@@ -3,15 +3,27 @@
 Worked commands and their real output, and how to choose the two flags that decide what a run costs.
 [`README.md`](README.md) has the overview, the measured result and the release artifacts.
 
-Great-circle distance, Wiesbaden to Rome:
+## Distances, grids and tables
+
+### A great-circle distance
+
+Wiesbaden to Rome:
 
 ```sh
 $ mise run cli -- distance 50.0782 8.2398 41.9028 12.4964
 {"schema_version":1,"tool":"popcircles","result":{"great_circle_km":966.3013398709427, …}}
 ```
 
-Grid geometry for the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading
-the file itself:
+### Grid geometry
+
+Six numbers describe the image every other command reads — its width and height in cells, the corner it
+starts at, and how far one cell steps in each direction — and a wrong sign or a truncated step gives a
+plausible wrong answer rather than an error. This command checks those numbers on their own: it refuses a
+shape that cannot exist, and says what they mean on the ground, including whether the grid wraps the whole
+globe and how large one of its cells is. It takes no file and no time, which is the point — run it before a
+table build, not after a search that disagreed with you.
+
+For the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading the file itself:
 
 ```sh
 $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --origin-lon -180 \
@@ -19,10 +31,11 @@ $ mise run cli -- grid describe --width 43200 --height 21600 --origin-lat 90 --o
 {"schema_version":1,"tool":"popcircles","result":{"middle_row_cell_area_km2":0.8586351267048113, …}}
 ```
 
-A summation table over that raster, decimated to 5 arcmin so the cache stays small, and then
-population queries answered from it by mmap — the payload is never resident. The `query` function is
-this file's doing rather than the CLI's, because the same grid, table and digest go to every query and
-only the window changes:
+### The summation table, and the queries over it
+
+A table over that raster, decimated to 5 arcmin so the cache stays small, and then population queries
+answered from it by mmap — the payload is never resident. The `query` function is this file's doing rather
+than the CLI's, because the same grid, table and digest go to every query and only the window changes:
 
 ```sh
 $ mise run cli -- table build --dataset population-count-2020-30arcsec \
@@ -77,7 +90,14 @@ $ search() { local command="$1"; shift; mise run cli -- "$command" --width 43200
     --decimate 10 --cache out/gpw-5arcmin --digest 0xf17aa802a6890f0c "$@"; }
 ```
 
-The population inside a circle you name. A thousand kilometres around Dhaka is a tenth of everyone:
+**Every figure below is a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
+each direction, so a radius here is good to about the width of one of its cells — which for half the world
+turns out to be no error at all. [Validation](README.md#validation) is where that was checked at full
+resolution.
+
+### The population inside a circle you name
+
+A thousand kilometres around Dhaka is a tenth of everyone:
 
 ```sh
 $ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
@@ -88,8 +108,10 @@ $ search population-at --lat 23.8103 --lon 90.4125 --radius-km 1000
 The centre is not the coordinate asked for: it is the centre of the cell containing it, and both are
 published because they are different questions.
 
-The most populous circle of that radius, found by branch and bound over every cell centre — a good deal
-further west, and holding 16% of the world rather than 10%:
+### The most populous circle of a radius
+
+Found by branch and bound over every cell centre — a good deal further west than the last one, and holding
+16% of the world rather than 10%:
 
 ```sh
 $ search most-populous --radius-km 1000 --spacing 32
@@ -102,7 +124,9 @@ $ search most-populous --radius-km 1000 --spacing 32
 and the useful value is a property of the raster and the radius that nothing here has measured.
 `blocks_pruned` against `blocks_examined` is how you tell the bound is biting — 12 725 of 13 908 here.
 
-And the question the program is named for. The smallest circle holding half the world's population:
+### The smallest circle holding a share
+
+The question the program is named for — here, half the world's population:
 
 ```sh
 $ search smallest-for-share --share 50 --spacing 32 --ledger out/radii.json
@@ -123,6 +147,8 @@ This answer is separated by 174 088 people against a `predicate_slack_persons` o
 ocean — grows one, naming the probed radii the arithmetic cannot tell apart, and the run says so once on
 stderr as well.
 
+### A sweep of shares over one ledger
+
 Every radius tried goes in the ledger, so a sweep of several shares pays for each radius once. Here the
 50% record costs no search at all, because the run above already settled its radii:
 
@@ -139,11 +165,6 @@ $ search sweep --from 10 --to 50 --step 20 --spacing 32 --ledger out/radii.json
 A ledger describing another table is refused rather than resumed from, which is why there is no way to
 turn it off.
 
-**These figures are a decimated table's.** The 5 arcmin grid is a tenth of the raster's resolution in
-each direction, so a radius here is good to about the width of one of its cells — which for half the
-world turns out to be no error at all. [Validation](README.md#validation) is where that was checked at
-full resolution.
-
 ## Maps
 
 Rendering opens one file — a document one of the commands above wrote — and nothing else. Not the
@@ -154,6 +175,11 @@ search most-populous --radius-km 1000 --spacing 32 > out/most-populous.json
 mise run render -- --input out/most-populous.json --output out/most-populous.png
 mise run render -- --input out/most-populous.json --output out/globe.png --projection orthographic
 ```
+
+**The documents this project publishes its answers as are in the tree**, under
+[`results/`](results/), so
+`mise run render -- --input results/world-most-populous-1000km-5arcmin.json --output out/map.png` draws a
+figure on a clone that has fetched no raster at all. `mise run results:build` regenerates them.
 
 `--projection` takes `plate-carree`, which is what the viral maps used, or `orthographic` centred on the
 circle. Every figure carries the CC BY citation the raster's licence requires, and a test fails if that
@@ -188,9 +214,16 @@ stdout stays exactly one JSON document at every level.
 
 ## Choosing the inputs
 
-If you just want a good answer without reading further: **build at `--decimate 2` and search with
-`--spacing 1280`.** That gives the same radius as the full-resolution run, a centre within a kilometre of
-it, and takes 34 seconds instead of about an hour.
+**Two flags decide what a run costs.** `--decimate` coarsens the image before searching — bigger cells,
+fewer of them, so everything is faster and the circle's centre lands less precisely. `--spacing` sets how
+coarsely the first pass sweeps the globe for candidate centres, and it changes the time only, never the
+answer.
+
+**If you read nothing else: build at `--decimate 2` and search with `--spacing 1280`.** That is the same
+radius as the full raster gives, a centre within a kilometre of it, and 34 seconds against 78 minutes.
+
+The rest of this section is why those are the only two knobs and how to trade differently: the words, what
+actually costs time, what limits precision, the measured numbers, and how to pick a spacing.
 
 ### The five words you need
 
@@ -238,20 +271,23 @@ Also three things, and the surprise is that only one of them matters here:
   publishes exactly how much: **0.06 of a person** out of 3.9 billion at 1 arcmin. That is eleven correct
   significant figures. It is never the thing limiting your answer.
 
-Measured on the real raster, for half the world's population — every row an actual run, on a 16 GB M2 Pro:
+Measured on the real raster, for half the world's population — every row an actual run, end to end, on a
+16 GB M2 Pro (6 performance and 4 efficiency cores, internal SSD) under macOS 26.6:
 
 | `--decimate` | Cell size | Table | Build | Search | Radius | Centre error |
 | --- | --- | --- | --- | --- | --- | --- |
 | 10 | 9.3 km | 71 MB | 11 s | 0.9 s | 3360 km | 6.3 km |
 | 4 | 3.7 km | 445 MB | 15 s | 5.0 s | 3360 km | 1.8 km |
 | **2** | **1.9 km** | **1.8 GB** | **16 s** | **18 s** | **3360 km** | **0.6 km** |
-| 1 | 0.9 km | 7.0 GB | 18 s | ~1 hour† | 3360 km | — (the reference) |
+| 1 | 0.9 km | 7.0 GB | 21 s | 78 min | 3360 km | — (the reference) |
 
-† Estimated, not measured: a single radius near the answer took 247–292 s, and a full search probes 24 of
-them. Everything else in the table was run end to end.
+The full-resolution row is 24 probed radii at 100–275 s each, and
+[`results/world-half-30arcsec.json`](results/world-half-30arcsec.json) is the document it printed. A sweep
+is cheaper than its shares suggest: ten of them over one ledger cost 7.0 s at `--decimate 10`, because 28
+radii answer all ten.
 
 **All four agree on the radius.** Resolution buys you centre placement and nothing else, and it buys it at
-about 4× the cost per halving of the cell. The last step — 1 arcmin to full — costs roughly 200× the time
+about 4× the cost per halving of the cell. The last step — 1 arcmin to full — costs roughly 250× the time
 for half a kilometre of centre, because it is the step that goes over the RAM cliff.
 
 ### Choosing spacing

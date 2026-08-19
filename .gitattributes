@@ -5,6 +5,7 @@
 *.pyi text
 *.toml text
 *.md text
+*.json text
 *.yml text
 *.yaml text
 *.sh text eol=lf
