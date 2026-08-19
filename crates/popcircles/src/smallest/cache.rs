@@ -279,7 +279,7 @@ impl Ledger {
     /// call finished, never the half-written middle. The temporary is created exclusively, so it is also
     /// this ledger's lock: two runs publishing to one path cannot interleave into a document that parses
     /// and resumes from radii neither of them measured. What that costs is an interrupted run's leftover
-    /// refusing the next `put` rather than being named back by it — [`LedgerError::TemporaryHeld`].
+    /// refusing the next `put` — [`LedgerError::TemporaryHeld`].
     fn publish(&self) -> Result<(), LedgerError> {
         let mut document = Document::new(&self.identity);
         document.radii = self
@@ -300,19 +300,15 @@ impl Ledger {
         let bytes = serde_json::to_vec(&document)
             .map_err(|source| write(&self.path, io::Error::other(source)))?;
 
-        let mut file = File::options()
-            .write(true)
-            .create_new(true)
-            .open(&self.temporary)
-            .map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    LedgerError::TemporaryHeld {
-                        path: self.temporary.clone(),
-                    }
-                } else {
-                    write(&self.temporary, source)
+        let mut file = File::create_new(&self.temporary).map_err(|source| {
+            if source.kind() == io::ErrorKind::AlreadyExists {
+                LedgerError::TemporaryHeld {
+                    path: self.temporary.clone(),
                 }
-            })?;
+            } else {
+                write(&self.temporary, source)
+            }
+        })?;
         file.write_all(&bytes)
             .map_err(|source| write(&self.temporary, source))?;
         file.sync_all()

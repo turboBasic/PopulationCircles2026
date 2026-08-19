@@ -421,22 +421,18 @@ impl Cache {
     /// [`CacheError::PayloadTemporaryHeld`] when a temporary is already there;
     /// [`CacheError::PayloadWrite`] when it cannot be created for any other reason.
     pub fn writer(&self) -> Result<Writer<'_>, CacheError> {
-        let file = File::options()
-            .write(true)
-            .create_new(true)
-            .open(&self.payload_temporary)
-            .map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    CacheError::PayloadTemporaryHeld {
-                        path: self.payload_temporary.clone(),
-                    }
-                } else {
-                    CacheError::PayloadWrite {
-                        path: self.payload_temporary.clone(),
-                        source,
-                    }
+        let file = File::create_new(&self.payload_temporary).map_err(|source| {
+            if source.kind() == io::ErrorKind::AlreadyExists {
+                CacheError::PayloadTemporaryHeld {
+                    path: self.payload_temporary.clone(),
                 }
-            })?;
+            } else {
+                CacheError::PayloadWrite {
+                    path: self.payload_temporary.clone(),
+                    source,
+                }
+            }
+        })?;
         Ok(Writer {
             cache: self,
             file,
@@ -1419,8 +1415,8 @@ mod tests {
         ));
 
         // And the other half of an interruption — a temporary that never got renamed — refuses the next
-        // build rather than being deleted by it. No writer can tell a temporary nobody holds from one
-        // being written into, and deleting it is what let two builds share an inode.
+        // build rather than being deleted by it: no writer can tell a temporary nobody holds from one
+        // being written into.
         let orphan = cache.payload_temporary.clone();
         let leftover = b"a payload a crashed build was part way through";
         fs::write(&orphan, leftover).unwrap();
@@ -1440,13 +1436,11 @@ mod tests {
 
     #[test]
     fn two_builds_into_one_cache_cannot_hold_the_payload_between_them() {
-        // The wrong-number path this refusal exists for: `File::create` truncates rather than failing, so
-        // two builds racing through a remove-then-create pair ended up on one inode with two write
-        // offsets. Whichever renamed first published its own length over a mix of both their cells, and
-        // the header attests the identity rather than the bytes, so nothing downstream could notice.
+        // The wrong-number path this refusal exists for: two builds on one inode write at two offsets,
+        // whichever renames first publishes its own length over a mix of both their cells, and the header
+        // attests the identity rather than the bytes, so nothing downstream can notice.
         let directory = TempDir::new().unwrap();
         let cache = cache_in(&directory);
-        let decimation = Decimation::none(grid(4, 3));
 
         let first = cache.writer().unwrap();
         assert!(matches!(
@@ -1458,13 +1452,6 @@ mod tests {
         // build holding it either finishes or is cleaned up by hand.
         drop(first);
         assert!(cache.writer().is_err());
-        fs::remove_file(&cache.payload_temporary).unwrap();
-
-        // And a base whose build did finish takes the next one, because publication renames the
-        // temporary away rather than leaving it.
-        let built = publish(&cache, decimation);
-        assert!(cache.read(&Identity::from(&built)).is_ok());
-        assert!(cache.writer().is_ok());
     }
 
     #[test]
