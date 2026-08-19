@@ -1,0 +1,51 @@
+# One scenario: publish the gallery from what the default branch says. There is no pull-request leg
+# here and no condition standing in for one — the suite builds this same gallery, so a broken render
+# already fails a required check.
+
+name: Gallery
+
+on:
+  push:
+    branches: [main]
+  # So the deploy can be proved from a branch before the merge that would otherwise be its first run.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  gallery:
+    name: Gallery
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      - name: Sync Python tooling
+        run: uv sync --locked
+
+      # No raster and no network beyond this checkout: the documents are committed and so is the
+      # basemap, which is the whole reason this job can exist.
+      - run: mise run gallery -- --input results --output build/gallery
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/gallery
+
+      - id: deploy
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

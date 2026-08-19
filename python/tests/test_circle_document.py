@@ -7,6 +7,7 @@ from population_circles.circle_document import (
     CIRCLE_KINDS,
     SCHEMA_VERSION,
     MissingDatasetError,
+    MissingTableError,
     UnsupportedDocumentError,
     circle_of,
 )
@@ -159,6 +160,16 @@ def test_a_document_naming_no_dataset_is_refused_rather_than_drawn() -> None:
     with pytest.raises(MissingDatasetError) as caught:
         circle_of(unnamed)
     assert "names no dataset" in str(caught.value)
+
+
+def test_a_document_naming_half_a_table_is_refused_rather_than_captioned() -> None:
+    # Either half missing is a caption that cannot name what answered it, and the digest alone is
+    # not the half that would do: it is the raster's, identical for every table built from one.
+    for field in ("digest", "decimation"):
+        partial = envelope("circle", measured())
+        del partial["provenance"][field]
+        with pytest.raises(MissingTableError):
+            circle_of(partial)
 
 
 def test_a_kind_that_cannot_be_drawn_is_refused_before_its_dataset_is_looked_for() -> None:

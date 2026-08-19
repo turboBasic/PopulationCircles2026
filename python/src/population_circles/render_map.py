@@ -113,13 +113,17 @@ def stroke(axes: Axes, geometry: BaseGeometry, colour: str, width: float, layer:
 
 
 def title_of(circle: Circle) -> str:
+    # The table is in the caption because a reader cannot otherwise tell a 30 arc-second answer
+    # from a decimated one, and the two differ by more than rounding.
     return (
         f"{circle.radius_km:,.0f} km circle holding {circle.share:.2%} of the population\n"
-        f"{circle.population:,.0f} people, centred {circle.centre.lat:.4f}, {circle.centre.lon:.4f}"
+        f"{circle.population:,.0f} people, "
+        f"centred {circle.centre.lat:.4f}, {circle.centre.lon:.4f}\n"
+        f"answered from table {circle.table}"
     )
 
 
-def annotate(figure: Figure, y: float, text: str, size: float) -> None:
+def annotate(figure: Figure, y: float, text: str, size: float, alignment: str = "baseline") -> None:
     # matplotlib types Figure.text's keyword arguments as Unknown, so the ignore lives here once
     # rather than at each of the two callers.
     figure.text(  # pyright: ignore[reportUnknownMemberType] — matplotlib **kwargs: Unknown
@@ -127,6 +131,7 @@ def annotate(figure: Figure, y: float, text: str, size: float) -> None:
         y,
         text,
         horizontalalignment="center",
+        verticalalignment=alignment,
         fontsize=size,
     )
 
@@ -139,7 +144,15 @@ def draw(axes: Axes, view: Frame, coastline: BaseGeometry | None) -> None:
     outline(axes, view.horizon)
 
 
-def render(circle: Circle, projection: str, attribution: str, *, coastlines: bool) -> Figure:
+def render(
+    circle: Circle,
+    projection: str,
+    attribution: str,
+    *,
+    # The basemap arrives drawn rather than named, so nothing under here reads a file and a caller
+    # drawing several figures unions the coastlines once. `None` is a figure without them.
+    coastline: BaseGeometry | None,
+) -> Figure:
     built = cap(circle.centre, circle.radius_km, circle.earth_radius_km)
     view = frame(projection, built)
     centre = view.to_frame.transform(circle.centre.lon, circle.centre.lat)
@@ -161,7 +174,7 @@ def render(circle: Circle, projection: str, attribution: str, *, coastlines: boo
     axes.set_xlim(west, east)
     axes.set_ylim(south, north)
 
-    draw(axes, view, basemap(COASTLINE) if coastlines else None)
+    draw(axes, view, coastline)
     axes.plot(  # pyright: ignore[reportUnknownMemberType] — matplotlib **kwargs: Unknown
         [centre[0]],
         [centre[1]],
@@ -171,7 +184,9 @@ def render(circle: Circle, projection: str, attribution: str, *, coastlines: boo
         zorder=CENTRE_LAYER,
     )
 
-    annotate(figure, 0.94, title_of(circle), 12.0)
+    # Anchored at its top, so a title line added later grows down into the margin rather than off
+    # the top of the figure — which is silent, since nothing about a clipped artist fails.
+    annotate(figure, 0.985, title_of(circle), 12.0, "top")
     # Wrapped rather than one line: at this width the citation runs off both edges of the figure,
     # which is an attribution nobody can read and so not an attribution.
     annotate(figure, 0.055, textwrap.fill(attribution, width=118), 6.5)
@@ -200,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         circle,
         projection,
         citation(load(), circle.dataset),
-        coastlines=not no_coastlines,
+        coastline=None if no_coastlines else basemap(COASTLINE),
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # No bbox_inches="tight": the title and citation are placed at figure coordinates, and cropping

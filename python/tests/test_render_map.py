@@ -42,7 +42,7 @@ def document() -> dict[str, Any]:
         "tool": "popcircles",
         "tool_version": "0.1.0",
         "earth_model": {"model": "sphere", "radius_km": 6371.0088},
-        "provenance": {"digest": "0xf17aa802a6890f0c", "dataset": DATASET},
+        "provenance": {"digest": "0xf17aa802a6890f0c", "decimation": 10, "dataset": DATASET},
         "result": {
             "centre": {"lat": CENTRE_LAT, "lon": CENTRE_LON},
             "row": 508,
@@ -142,19 +142,23 @@ def test_the_basemap_is_the_committed_one() -> None:
 
 
 def test_the_footer_artist_carries_the_citation() -> None:
-    figure = render(circle_of(document()), PLATE_CARREE, MARKER, coastlines=False)
+    figure = render(circle_of(document()), PLATE_CARREE, MARKER, coastline=None)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
     # The string handed in, not the one the registry holds: `render` draws what it is given, which
     # is the whole of what this test can prove about it.
     assert MARKER in drawn_text
 
 
-def test_the_title_states_the_radius_the_share_and_the_centre() -> None:
-    figure = render(circle_of(document()), ORTHOGRAPHIC, MARKER, coastlines=False)
+def test_the_title_states_the_radius_the_share_the_centre_and_the_table() -> None:
+    figure = render(circle_of(document()), ORTHOGRAPHIC, MARKER, coastline=None)
     drawn_text = " ".join(normalised(artist.get_text()) for artist in figure.texts)
     assert "1,000 km circle" in drawn_text
     assert "16.17% of the population" in drawn_text
     assert "1,254,363,868 people" in drawn_text
+    assert f"{CENTRE_LAT:.4f}, {CENTRE_LON:.4f}" in drawn_text
+    # The decimation as well as the digest: the fixture's digest is the one both committed tables
+    # carry, so a caption dropping the decimation would read the same for either of them.
+    assert "0xf17aa802a6890f0c at decimation 10" in drawn_text
 
 
 @pytest.mark.parametrize("projection", [PLATE_CARREE, ORTHOGRAPHIC])

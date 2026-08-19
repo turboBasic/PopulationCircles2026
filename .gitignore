@@ -20,11 +20,22 @@ __pycache__/
 # The wheel and sdist `uv build` writes, now that there is a package to build
 /dist/
 
-# Generated data products: summation tables, rendered maps, profiling output
+# Generated data products: summation tables and profiling output
 *.bin
 /out/
 perf.data
 perf.data.old
+
+# Every image format, rendered map or not: a figure is deployed to the site ADR 0012 rules and no image
+# is a committed file here, so the rule is the format rather than the directory it was written to. This
+# line stops the accident; `no-committed-images` is what refuses a `git add -f`.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
+*.svg
 
 # Local environment
 .env

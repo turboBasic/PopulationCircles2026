@@ -64,6 +64,14 @@ the rest is page faults against a 7.5 GB table, which `FU-17` in
 [`docs/follow-ups.md`](docs/follow-ups.md) holds. `mise run test:validate` is the end-to-end run against the real
 raster, and it skips with a message when the raster has not been fetched.
 
+## The maps
+
+[**The gallery**][gallery] draws every committed document that carries a circle, rebuilt from the tree on
+every merge. Each figure is captioned from its own document — the share, the radius, the centre, the table
+that answered it and the credit the raster requires — and the document it was drawn from sits beside it.
+Nothing there is committed; a figure is deployed rather than carried
+([ADR 0012](docs/decisions/0012-a-figure-is-deployed-to-a-site-not-attached-to-a-tag.md)).
+
 ## Releases
 
 A [release][releases] attaches two binaries, each named by its target triple with a `.sha256` beside it:
@@ -145,6 +153,7 @@ Prior art on the 50% circle specifically: the [Valeriepieris circle][valeriepier
 [ci]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/PopulationCircles2026/actions/workflows/ci.yml/badge.svg?branch=main
 [data-tag]: https://github.com/turboBasic/PopulationCircles2026/releases/tag/data-v1
+[gallery]: https://turbobasic.github.io/PopulationCircles2026/
 [gpw]: https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-gpwv4-apct-wpp-2015-r11-4.11
 [gpw-doi]: https://doi.org/10.7927/H4PN93PB
 [license]: LICENSE

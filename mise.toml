@@ -59,6 +59,13 @@ run = "cargo build --release --locked -p popcircles-cli"
 description = "Render a map from a popcircles JSON document"
 run = "uv run render-map"
 
+# Not in `lint` or `ci` for the same reason as `render`: it writes files. What CI runs on a pull request
+# is the suite, which builds this same gallery into a temporary directory and asserts against it — so a
+# broken render fails a check without this task being one.
+[tasks.gallery]
+description = "Render every renderable document in a corpus to a gallery"
+run = "uv run render-gallery"
+
 [tasks.fmt]
 description = "Format Rust, Python and TOML"
 run = [
@@ -93,10 +100,10 @@ run = "actionlint"
 
 # CI never runs prek, so a hook selected by id here and put in `lint`'s depends is what keeps
 # .pre-commit-config.yaml the only implementation. --all-files, not the staged set: nothing is staged
-# on a CI checkout.
+# on a CI checkout. Three hooks, one subject: what may be a file in this tree at all.
 [tasks."lint:data"]
-description = "Check every geo data file has a registry row and no large blob is committed"
-run = "prek run --all-files check-added-large-files geo-data-registered"
+description = "Check geo data has a registry row, no large blob is committed, and no image is"
+run = "prek run --all-files check-added-large-files geo-data-registered no-committed-images"
 
 # See `lint:data` for why. These hooks rewrite rather than check, so a CI failure here reads "files
 # were modified" rather than naming the diff — still enough to stop the merge.
