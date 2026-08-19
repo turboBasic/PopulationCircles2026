@@ -31,7 +31,8 @@ use crate::table::cache::{Attestation, Identity, Mismatch};
 /// shape moves.
 pub const FORMAT_VERSION: u32 = 2;
 
-/// One suffix, so an interrupted publication leaves a name the next one can name back.
+/// One suffix, so an interrupted publication leaves one name and no more. Created exclusively, which
+/// makes it this ledger's lock as well — [`Ledger::publish`].
 const TEMPORARY_SUFFIX: &str = ".tmp";
 
 /// Every way a ledger can fail to be the one a caller asked for.
@@ -62,6 +63,16 @@ pub enum LedgerError {
         #[source]
         source: serde_json::Error,
     },
+
+    // The table's [`PayloadTemporaryHeld`](crate::table::cache::CacheError::PayloadTemporaryHeld), for the
+    // same ground and with the same action: one mechanism for both documents, which is what stops two
+    // answers to one question.
+    #[error(
+        "a ledger temporary is already at {}: either a run is publishing this ledger now, or one was \
+         interrupted and left it — remove it to resume",
+        path.display()
+    )]
+    TemporaryHeld { path: PathBuf },
 
     #[error("this build reads format version {expected}; the ledger declares {found}")]
     FormatVersion { expected: u32, found: u32 },
@@ -265,8 +276,10 @@ impl Ledger {
     ///
     /// ADR 0005's publication by rename, and the reason is the same: a rename replaces a directory entry
     /// rather than an inode, so a reader either sees the document that was there before or the one this
-    /// call finished, never the half-written middle. The temporary's name is deterministic, so an
-    /// interrupted run leaves at most one and the next `put` names it back rather than accumulating.
+    /// call finished, never the half-written middle. The temporary is created exclusively, so it is also
+    /// this ledger's lock: two runs publishing to one path cannot interleave into a document that parses
+    /// and resumes from radii neither of them measured. What that costs is an interrupted run's leftover
+    /// refusing the next `put` — [`LedgerError::TemporaryHeld`].
     fn publish(&self) -> Result<(), LedgerError> {
         let mut document = Document::new(&self.identity);
         document.radii = self
@@ -287,8 +300,15 @@ impl Ledger {
         let bytes = serde_json::to_vec(&document)
             .map_err(|source| write(&self.path, io::Error::other(source)))?;
 
-        let mut file =
-            File::create(&self.temporary).map_err(|source| write(&self.temporary, source))?;
+        let mut file = File::create_new(&self.temporary).map_err(|source| {
+            if source.kind() == io::ErrorKind::AlreadyExists {
+                LedgerError::TemporaryHeld {
+                    path: self.temporary.clone(),
+                }
+            } else {
+                write(&self.temporary, source)
+            }
+        })?;
         file.write_all(&bytes)
             .map_err(|source| write(&self.temporary, source))?;
         file.sync_all()
@@ -724,9 +744,12 @@ mod tests {
     }
 
     #[test]
-    fn an_interrupted_publication_leaves_the_document_before_it_and_no_orphan() {
-        // The rename's whole point, from the other side: a temporary a crashed run left behind is neither
-        // read nor accumulated, and the document a reader finds is the last one a `put` finished.
+    fn an_interrupted_publication_leaves_the_document_before_it_and_refuses_the_next_put() {
+        // The rename's whole point, from the other side: a temporary a crashed run left behind is never
+        // read, and the document a reader finds is the last one a `put` finished. What the temporary being
+        // exclusive adds is that the next `put` refuses rather than writing over it — two runs publishing
+        // to one path would otherwise interleave into a document that parses and resumes from radii
+        // neither of them measured.
         let directory = TempDir::new().unwrap();
         let identity = identity(8, 6);
         let mut ledger = ledger_in(&directory, &identity);
@@ -738,7 +761,15 @@ mod tests {
         assert_eq!(fs::read(ledger.path()).unwrap(), published);
         assert_eq!(reopen(&ledger, &identity).unwrap().len(), 3);
 
-        // And the next put names it back rather than leaving it there.
+        // The next put refuses, naming the file — and the ledger on disk is untouched, so nothing measured
+        // is lost by the refusal: removing the orphan resumes.
+        assert!(matches!(
+            ledger.put(2000, candidate(&identity, 3, 4, 900.0)),
+            Err(LedgerError::TemporaryHeld { ref path }) if *path == orphan
+        ));
+        assert_eq!(fs::read(ledger.path()).unwrap(), published);
+
+        fs::remove_file(&orphan).unwrap();
         ledger.put(2000, candidate(&identity, 3, 4, 900.0)).unwrap();
         assert!(!orphan.exists());
         assert_eq!(reopen(&ledger, &identity).unwrap().len(), 4);
