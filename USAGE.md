@@ -156,10 +156,9 @@ mise run render -- --input out/most-populous.json --output out/globe.png --proje
 ```
 
 **The documents this project publishes its answers as are in the tree**, under
-[`results/`](results/) — printed by the commands above and committed, so
+[`results/`](results/), so
 `mise run render -- --input results/world-most-populous-1000km-5arcmin.json --output out/map.png` draws a
-figure on a clone that has fetched no raster at all. `mise run results:build` is what regenerates them, and
-that one does need the raster.
+figure on a clone that has fetched no raster at all. `mise run results:build` regenerates them.
 
 `--projection` takes `plate-carree`, which is what the viral maps used, or `orthographic` centred on the
 circle. Every figure carries the CC BY citation the raster's licence requires, and a test fails if that

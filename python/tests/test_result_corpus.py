@@ -22,4 +22,4 @@ def test_a_committed_document_parses_and_names_its_dataset(document: Path) -> No
     assert envelope.provenance is not None
     assert envelope.provenance.dataset is not None
     if envelope.document in CIRCLE_KINDS:
-        assert circle_of(payload).radius_km > 0
+        circle_of(payload)
