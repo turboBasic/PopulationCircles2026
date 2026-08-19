@@ -16,6 +16,13 @@ $ mise run cli -- distance 50.0782 8.2398 41.9028 12.4964
 
 ### Grid geometry
 
+Six numbers describe the image every other command reads — its width and height in cells, the corner it
+starts at, and how far one cell steps in each direction — and a wrong sign or a truncated step gives a
+plausible wrong answer rather than an error. This command checks those numbers on their own: it refuses a
+shape that cannot exist, and says what they mean on the ground, including whether the grid wraps the whole
+globe and how large one of its cells is. It takes no file and no time, which is the point — run it before a
+table build, not after a search that disagreed with you.
+
 For the GPWv4.11 raster (see [`data/README.md`](data/README.md)), without reading the file itself:
 
 ```sh
