@@ -751,8 +751,9 @@ Identifiers are flat, sequential and never reused.
   own — `rg -n 'POPULATION_KEY' python/` returns nothing. Closed while still dormant: the registry carries
   one attributed row, so the Condition never fired, and what the entry guarded against is now impossible
   rather than merely absent. A document that names no dataset is refused rather than credited from a
-  fallback, and the two-attributed-dataset case is a fixture in `python/tests/test_render_map.py` because
-  the registry cannot supply it.
+  fallback; the two-attributed-dataset case is a fixture in `python/tests/test_render_map.py` because the
+  registry cannot supply it, and one case there renders through `main` over that fixture, so putting a
+  constant back where the key is read fails the suite rather than passing it.
 
   **The registry's second row landed and does not fire this** (2026-08-15, issue #69).
   `boundaries/coastline-1to110m.geojson` is a basemap in the public domain whose entry records that its

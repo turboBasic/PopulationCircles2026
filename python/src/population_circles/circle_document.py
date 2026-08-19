@@ -76,9 +76,9 @@ class Circle(BaseModel):
 class Provenance(BaseModel):
     model_config = _CONFIG
 
-    # Optional in the format, per `report.rs` "Growth", and required by this reader: a figure
-    # crediting the dataset its renderer was written against rather than the one its document came
-    # from is the defect FU-16 names, so a document that cannot say is refused rather than drawn.
+    # Optional in the format, per `report.rs` "Growth", and required by this reader: a figure whose
+    # credit cannot be read off its own document would be credited from whatever the renderer was
+    # written against, so a document that cannot say is refused rather than drawn.
     dataset: str | None = None
 
 

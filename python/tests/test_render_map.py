@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 import pytest
+from matplotlib.figure import Figure
 
-from population_circles.circle_document import circle_of
+from population_circles.circle_document import Circle, circle_of
 from population_circles.circle_geometry import HALF_TURN_DEG, POLE_LAT
 from population_circles.dataset_registry import load, parse
 from population_circles.map_frame import ORTHOGRAPHIC, PLATE_CARREE
@@ -118,9 +119,6 @@ nodata = -1.0
 
 
 def test_the_credit_is_the_one_the_named_dataset_owes_and_not_a_neighbours() -> None:
-    # The condition FU-16 was waiting for, built as a fixture rather than added to the registry:
-    # with two datasets owing two credits, a selection keyed by anything but the document's own name
-    # gets the wrong one.
     registry = parse(TWO_ATTRIBUTED)
     assert citation(registry, "first-raster") == "the credit the first dataset requires"
     assert citation(registry, "second-raster") == "the credit the second dataset requires"
@@ -190,3 +188,29 @@ def test_a_complete_figure_needs_no_network(
 
     assert main(["--input", str(source), "--output", str(output)]) == 0
     assert output.read_bytes().startswith(PNG_MAGIC)
+
+
+def test_main_credits_the_dataset_its_document_names_and_not_a_constant(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The one wire nothing else covers: `main` passing the document's own key to `citation`. Every
+    # other case here hands `citation` a literal, so a constant put back in `main` would pass them
+    # all. The fixture registry carries neither committed row, so a `main` reaching for one of those
+    # cannot resolve it at all.
+    monkeypatch.setattr("population_circles.render_map.load", lambda: parse(TWO_ATTRIBUTED))
+    drawn: list[str] = []
+
+    def capture(_circle: Circle, _projection: str, attribution: str, **_options: bool) -> Figure:
+        drawn.append(attribution)
+        return Figure()
+
+    monkeypatch.setattr("population_circles.render_map.render", capture)
+
+    named = document()
+    named["provenance"]["dataset"] = "second-raster"
+    source = tmp_path / "circle.json"
+    source.write_text(json.dumps(named), encoding="utf-8")
+
+    assert main(["--input", str(source), "--output", str(tmp_path / "map.png")]) == 0
+    assert drawn == ["the credit the second dataset requires"]
