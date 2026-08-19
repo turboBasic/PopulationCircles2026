@@ -24,10 +24,6 @@
 //! table sits, and which registered dataset its cells came from. It is absent — the key omitted, not null —
 //! from a document whose command read no cached table.
 //!
-//! **`dataset` is the field a figure's credit is selected by**, and it is a registry key rather than a
-//! citation: `data/registry.toml` owns the wording each licence requires, so a renderer resolves the key
-//! there and this format carries no attribution text of its own.
-//!
 //! A payload's own `digest` or `grid` is a different thing and not a second answer to the same question.
 //! [`TableQueryReport`] is the one place the distinction is visible: it carries both in its payload and
 //! carries no provenance, because there the table is what the command is *about* rather than what it was
@@ -217,7 +213,9 @@ impl<T: Document> Envelope<T> {
 ///
 /// `dataset` is not attested in that sense: it is the registry key the cache header records, so it names
 /// what the cells came from rather than what they are, and it is what a consumer reads to credit the raster
-/// a figure was drawn from. Absent — the key omitted, not null — from a table built without one.
+/// a figure was drawn from — a key and not a citation, because `data/registry.toml` owns the wording each
+/// licence requires and this format is not a second place it lives. Absent — the key omitted, not null —
+/// from a table built without one.
 #[derive(Debug, Clone, Serialize)]
 pub struct Provenance {
     digest: String,
