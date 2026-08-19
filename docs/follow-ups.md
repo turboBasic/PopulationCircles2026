@@ -410,6 +410,20 @@ Identifiers are flat, sequential and never reused.
   Not now, because with one such field the split is a second model for one string, and the seam is one
   function's return type — reversing it costs a signature and its two callers.
 
+### FU-29 - A committed document is what the program printed, and nothing checks that it still is
+
+- **Status** — `dormant` (2026-08-19, issue #68): the three documents in `results/` are each one line, as
+  the CLI wrote them. One was reformatted by hand while this work was open and the corpus test passed over
+  it unchanged, which is how the gap was found rather than reasoned about.
+- **Condition** — a file in [`results/`](../results/) is more than one line, which
+  `awk 'END{exit NR<2}' results/*.json` answers per file. `python/tests/test_result_corpus.py` reads each
+  document through `json.loads`, so any formatting parses and
+  [ADR 0011](decisions/0011-a-published-answer-is-committed-as-its-document.md)'s byte-for-byte ruling is a
+  convention with no gate under it.
+- **Fix** — a one-line assertion in that test, since it already opens every document. Not now, because the
+  layout carries nothing a consumer reads and a reformatted document is still the same answer: what would
+  make this due is a diff nobody can review, and one hand-edited file is not that.
+
 ## Closed and retired
 
 ### FU-02 - Nothing checks that a pointer resolves
