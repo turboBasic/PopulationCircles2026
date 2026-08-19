@@ -40,6 +40,7 @@ def document() -> dict[str, Any]:
         "tool": "popcircles",
         "tool_version": "0.1.0",
         "earth_model": {"model": "sphere", "radius_km": 6371.0088},
+        "provenance": {"digest": "0xf17aa802a6890f0c", "dataset": POPULATION_KEY},
         "result": {
             "centre": {"lat": CENTRE_LAT, "lon": CENTRE_LON},
             "row": 508,
