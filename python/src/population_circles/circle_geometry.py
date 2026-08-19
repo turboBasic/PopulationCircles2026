@@ -11,9 +11,9 @@ from population_circles.circle_document import Coordinate
 METRES_PER_KM = 1000.0
 
 # Per quadrant, so the ring shapely returns has 720 sides. The chord then cuts R(1 - cos(pi/720))
-# inside the arc, which at 3300 km is 31.41 m — two orders below the cell of any grid a figure at
-# this scale is drawn over, and it falls with the radius. Raising it costs vertices in every drawn
-# polygon and buys nothing visible.
+# inside the arc, which at 3300 km is 31.41 m and falls with the radius — more than an order below
+# the finest cell a grid this program answers on has, so the shortfall is below anything a figure
+# can show. Raising it costs vertices in every drawn polygon and buys nothing visible.
 QUAD_SEGS = 180
 
 TURN_DEG = 360.0

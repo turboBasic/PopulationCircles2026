@@ -70,8 +70,8 @@ SEAM_LON = 180.0
 # A vertex the cut synthesises sits on a line straight in longitude and latitude between two ring
 # vertices, and the boundary between them is an arc, so it can land outside the cap: 7.2 m at 3000
 # km over the north pole, measured, which is the worst of the five cases. The claim is that nothing
-# is drawn outside the cap, and this is the width of "nothing" — a fortieth of the 926.6 m cell the
-# registry raster answers on.
+# is drawn outside the cap, and this is the width of "nothing" — two orders below the finest cell a
+# grid this program answers on has.
 CUT_SLACK_KM = 0.01
 
 
