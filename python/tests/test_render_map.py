@@ -8,11 +8,11 @@ import pytest
 
 from population_circles.circle_document import circle_of
 from population_circles.circle_geometry import HALF_TURN_DEG, POLE_LAT
-from population_circles.dataset_registry import load
+from population_circles.dataset_registry import load, parse
 from population_circles.map_frame import ORTHOGRAPHIC, PLATE_CARREE
 from population_circles.render_map import (
     COASTLINE,
-    POPULATION_KEY,
+    UnregisteredDatasetError,
     basemap,
     citation,
     main,
@@ -20,6 +20,7 @@ from population_circles.render_map import (
 )
 
 REGISTRY = load()
+DATASET = "population-count-2020-30arcsec"
 PROSE = Path(__file__).resolve().parents[2] / "data" / "README.md"
 
 CENTRE_LAT = 25.125
@@ -40,7 +41,7 @@ def document() -> dict[str, Any]:
         "tool": "popcircles",
         "tool_version": "0.1.0",
         "earth_model": {"model": "sphere", "radius_km": 6371.0088},
-        "provenance": {"digest": "0xf17aa802a6890f0c", "dataset": POPULATION_KEY},
+        "provenance": {"digest": "0xf17aa802a6890f0c", "dataset": DATASET},
         "result": {
             "centre": {"lat": CENTRE_LAT, "lon": CENTRE_LON},
             "row": 508,
@@ -63,14 +64,73 @@ def normalised(text: str) -> str:
 def test_the_citation_is_the_text_the_prose_entry_quotes() -> None:
     # data/registry.toml owns the wording and data/README.md restates it for a human, so a drift
     # between the two fails here rather than shipping a credit that matches nothing in the tree.
-    assert normalised(citation()) in normalised(PROSE.read_text(encoding="utf-8"))
+    assert normalised(citation(REGISTRY, DATASET)) in normalised(
+        PROSE.read_text(encoding="utf-8"),
+    )
 
 
 def test_the_credited_dataset_owes_a_citation_at_all() -> None:
     # An empty attribution is a legal value in the registry — the coastline has one — so the footer
     # assertion below would pass vacuously on "". CC BY is the whole reason a figure carries text.
-    assert citation().strip()
-    assert REGISTRY.datasets[POPULATION_KEY].licence != "public domain"
+    assert citation(REGISTRY, DATASET).strip()
+    assert REGISTRY.datasets[DATASET].licence != "public domain"
+
+
+# Two rows, each owing a different credit, which the committed registry cannot supply: it carries
+# one attributed dataset, so a selection keyed by anything at all passes against it.
+TWO_ATTRIBUTED = """
+[datasets.first-raster]
+kind = "population-raster"
+path = "data/population/first-raster.tif"
+bytes = 1
+sha256 = "0"
+source_url = "https://example.invalid/first"
+licence = "CC BY 4.0"
+licence_url = "https://creativecommons.org/licenses/by/4.0/"
+attribution = "the credit the first dataset requires"
+width = 4
+height = 2
+origin_lat = 90.0
+origin_lon = -180.0
+lat_step = -90.0
+lon_step = 90.0
+epsg = 4326
+nodata = -1.0
+
+[datasets.second-raster]
+kind = "population-raster"
+path = "data/population/second-raster.tif"
+bytes = 1
+sha256 = "0"
+source_url = "https://example.invalid/second"
+licence = "CC BY 4.0"
+licence_url = "https://creativecommons.org/licenses/by/4.0/"
+attribution = "the credit the second dataset requires"
+width = 4
+height = 2
+origin_lat = 90.0
+origin_lon = -180.0
+lat_step = -90.0
+lon_step = 90.0
+epsg = 4326
+nodata = -1.0
+"""
+
+
+def test_the_credit_is_the_one_the_named_dataset_owes_and_not_a_neighbours() -> None:
+    # The condition FU-16 was waiting for, built as a fixture rather than added to the registry:
+    # with two datasets owing two credits, a selection keyed by anything but the document's own name
+    # gets the wrong one.
+    registry = parse(TWO_ATTRIBUTED)
+    assert citation(registry, "first-raster") == "the credit the first dataset requires"
+    assert citation(registry, "second-raster") == "the credit the second dataset requires"
+
+
+def test_a_document_naming_a_dataset_the_registry_lacks_is_refused() -> None:
+    with pytest.raises(UnregisteredDatasetError) as caught:
+        citation(REGISTRY, "gpw-v4")
+    assert caught.value.key == "gpw-v4"
+    assert "gpw-v4" in str(caught.value)
 
 
 def test_the_basemap_is_the_committed_one() -> None:
