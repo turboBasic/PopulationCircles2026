@@ -29,7 +29,7 @@ tempfile = "3"
 thiserror = "2"
 # Parse only: the CLI reads `data/registry.toml` and writes nothing back, so the writing half and the
 # format-preserving edit machinery are features nothing here reaches.
-toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
 # The trimmed feature set is ADR 0003's ruling, not a default: deflate, fax and jpeg are decode
 # paths a Float32 population raster cannot reach, and enabling one costs eleven more crates.
 tiff = { version = "0.11", default-features = false, features = ["lzw"] }
