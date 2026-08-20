@@ -35,7 +35,7 @@ toml = { version = "1.1", default-features = false, features = ["parse", "serde"
 tiff = { version = "0.11", default-features = false, features = ["lzw"] }
 # 0.1 rather than the current 0.2, because the point of it is to compress test fixtures with the
 # same implementation tiff decompresses them with, and tiff 0.11 depends on 0.1.
-weezl = "0.1"
+weezl = "0.2"
 
 [workspace.package]
 version = "0.2.0"
