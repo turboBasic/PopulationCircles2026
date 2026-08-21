@@ -1,0 +1,15 @@
+{
+  "enabledPlugins": {
+    "planning@turbobasic": true,
+    "review@turbobasic": true,
+    "hygiene@turbobasic": true
+  },
+  "extraKnownMarketplaces": {
+    "turbobasic": {
+      "source": {
+        "source": "github",
+        "repo": "turboBasic/claude-plugins"
+      }
+    }
+  }
+}
