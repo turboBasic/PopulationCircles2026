@@ -23,10 +23,19 @@ _.python.venv = { path = ".venv", create = true }
 [tasks.setup]
 description = "Install dependencies and git hooks"
 run = [
-  "cargo fetch",
-  "uv sync --locked",
+  "mise run deps",
   "prek install",
   "mise run git:ff-only",
+]
+
+# What `setup` always did, named so a stage can depend on it: `project-ci` invokes a task and prepares
+# nothing on this repository's behalf, so the leaves that cannot run without dependencies say so
+# themselves. This is where the workflow's own `uv sync --locked` step went.
+[tasks.deps]
+description = "Fetch the Rust and Python dependencies"
+run = [
+  "cargo fetch",
+  "uv sync --locked",
 ]
 
 # A guardrail, not a gate — `git merge --no-ff` still overrides it — that makes an accidental merge
@@ -76,6 +85,7 @@ run = [
 
 [tasks."lint:rust"]
 description = "Lint Rust with clippy, warnings are errors"
+depends = ["deps"]
 run = "cargo clippy --all-targets --all-features -- -D warnings"
 
 # `-D warnings`: rustdoc warns and exits 0, so the exit status alone passes a tree with broken links.
@@ -84,6 +94,7 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 # `popcircles` (cargo#6313), so a shared `--target-dir` has the second run delete what the first wrote.
 [tasks."lint:rustdoc"]
 description = "Lint rustdoc, broken intra-doc links are errors"
+depends = ["deps"]
 env = { RUSTDOCFLAGS = "-D warnings" }
 run = [
   "cargo doc -p popcircles --no-deps --document-private-items",
@@ -92,6 +103,7 @@ run = [
 
 [tasks."lint:python"]
 description = "Lint Python with ruff"
+depends = ["deps"]
 run = "uv run ruff check ."
 
 [tasks."lint:workflows"]
@@ -130,6 +142,7 @@ run = "prek run --all-files cspell"
 # Same shape as `lint:data`: CI never runs prek on its own, and this is what puts the hook there.
 [tasks."lint:docs"]
 description = "Check pointers and the Structure tree with the lint-docs entry point"
+depends = ["deps"]
 run = "prek run --all-files doc-pointers"
 
 [tasks.lint]
@@ -153,10 +166,12 @@ depends = ["typecheck:rust", "typecheck:python"]
 
 [tasks."typecheck:rust"]
 description = "Type-check Rust"
+depends = ["deps"]
 run = "cargo check --all-targets --all-features"
 
 [tasks."typecheck:python"]
 description = "Type-check Python with pyright"
+depends = ["deps"]
 run = "uv run pyright"
 
 [tasks.test]
@@ -165,10 +180,12 @@ depends = ["test:python", "test:rust"]
 
 [tasks."test:rust"]
 description = "Run the Rust test suite"
+depends = ["deps"]
 run = "cargo test --all-features"
 
 [tasks."test:python"]
 description = "Run the Python test suite"
+depends = ["deps"]
 run = "uv run pytest"
 
 # Never in `test`: a CI checkout has no raster, and a length assertion against it would fail for

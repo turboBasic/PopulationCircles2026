@@ -310,13 +310,17 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
   tag: it is a first-party repo Dependabot already tracks (`.github/dependabot.yml`,
   `github-actions` ecosystem), so a tag it controls costs no more than the SHA it would otherwise
   bump to. Every other action, first- or third-party, still takes the full SHA.
-- Reuse `turboBasic/github-actions` reusable workflows wherever one fits. The Rust job is inline
-  because no shared `rust-ci.yml` exists yet; extracting one there is the intended next step, and
-  until then this repo's `ci.yml` is the prototype for it. Do not fork Python-specific shared
-  workflows to fake Rust support.
+- Reuse `turboBasic/github-actions` reusable workflows wherever one fits. `ci.yml` is one: its
+  `project-ci.yml` is bounded by the component rather than the language, so what runs is this
+  repository's own `lint`, `typecheck` and `test` tasks and no shared `rust-ci.yml` is wanted. A stage
+  that cannot run without dependencies installed declares `depends = ["deps"]` itself, because the
+  capability prepares nothing on a caller's behalf — and `depends` runs in parallel, so that belongs on
+  the leaf tasks rather than on the three aggregators.
 - A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
-  call rather than a condition on the event. `ci.yml` is the stated exception, because `main`'s ruleset
-  matches its required checks by the names a call would prefix.
+  call rather than a condition on the event.
+- **A called job's id is the first half of its required context.** `ci.yml`'s job is `popcircles`, the
+  component, so the ruleset requires `popcircles / project-ci`. Renaming that job means editing the
+  ruleset in the same change, for the reason the branch-protection note above gives.
 - A comment in a workflow keeps to [`code.md`](code.md) "Comments and docs", which already governs it,
   and adds one restriction that section does not: no ADR, issue or follow-up citation, no account of
   what the file used to be, and no sentence a reader has to unpack before it parses — `docs/decisions/`

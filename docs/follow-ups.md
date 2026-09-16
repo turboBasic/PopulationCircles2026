@@ -809,3 +809,19 @@ Identifiers are flat, sequential and never reused.
   nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
   additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
   the value to publish first exists.
+
+### FU-30 - CI compiles from cold, because a called workflow caches only its hook runner
+
+- **Status** — `open`.
+- **Condition** — `mise run lint`, `typecheck` and `test` run under
+  `turboBasic/github-actions/.github/workflows/project-ci.yml`, and that capability's published inputs
+  name no cache. The sweep is `gh run list --workflow ci.yml`: the median run was 0.9 minutes while
+  `ci.yml` cached `~/.cargo/registry`, `~/.cargo/git` and `build/target` keyed on `Cargo.lock`, and
+  nothing restores those now. A caller cannot add a step to a job it does not own, so this is not
+  fixable here.
+- **Fix** — either a cache input on the capability, taking paths and a key from the caller and passing
+  them to `actions/cache` — language-agnostic, so ADR 0004 upstream does not forbid it — or the finding
+  that a cold compile is cheap enough to leave alone. Which applies is a measurement, not an argument:
+  compare the run this migration produces against the 0.9-minute median above. Reverting `ci.yml` to an
+  inline job is the third option and the one that gives up the shared contract, so it needs the other
+  two ruled out first.

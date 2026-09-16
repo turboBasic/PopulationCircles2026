@@ -1,6 +1,11 @@
-# Inline rather than a call into turboBasic/github-actions: its python-ci.yml is bound to
-# `uv sync --locked` and `uv run pre-commit`, which is neither Rust nor prek. The steps are
-# mise tasks so that what CI runs and what `mise run ci` runs cannot drift apart.
+# A call into turboBasic/github-actions now that its CI capability is bounded by the component rather
+# than the language: it checks the tree out, installs what this repository's [tools] table pins, and runs
+# `mise run lint`, `mise run typecheck` and `mise run test` — the same three tasks the inline job ran, so
+# what CI runs and what `mise run ci` runs still cannot drift apart.
+#
+# What the inline job did and this does not: cache `~/.cargo/registry`, `~/.cargo/git` and
+# `build/target` keyed on Cargo.lock. The capability caches the hook runner and nothing else, and a
+# caller cannot add a step to a job it does not own.
 
 name: CI
 
@@ -17,31 +22,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            build/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-
-
-      - name: Sync Python tooling
-        run: uv sync --locked
-
-      - run: mise run lint
-      - run: mise run typecheck
-      - run: mise run test
+  # The id names the component and composes the required context `popcircles / project-ci`. One
+  # component here, Rust and Python together, which is why it is named after neither.
+  popcircles:
+    uses: turboBasic/github-actions/.github/workflows/project-ci.yml@v0.3
+    permissions:
+      contents: read
+    with:
+      # `mise run ci` is lint, typecheck and test. The release binary is built by build-binaries.yml and
+      # proven by release-smoke.yml, so a build stage here would compile the same tree a fourth time.
+      run-build: false
