@@ -22,9 +22,11 @@ _.python.venv = { path = ".venv", create = true }
 
 [tasks.setup]
 description = "Install dependencies and git hooks"
+depends = ["deps"]
 run = [
-  "mise run deps",
   "prek install",
+  # A `run` entry rather than a second `depends`, because it has to follow `prek install`: `depends`
+  # can only put a task before this one.
   "mise run git:ff-only",
 ]
 
