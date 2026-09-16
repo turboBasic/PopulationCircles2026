@@ -1,6 +1,6 @@
 # What CI runs is this repository's own `lint`, `typecheck` and `test` tasks, so it cannot drift from
-# `mise run ci`. Nothing here caches a compile: the capability caches its hook runner and no other path,
-# and a caller cannot add a step to a job it does not own — FU-30.
+# `mise run ci`. Nothing caches a compile here: the called workflow caches its hook runner and no other
+# path, and a caller cannot add a step to a job it does not own.
 
 name: CI
 
