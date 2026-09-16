@@ -310,12 +310,11 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
   tag: it is a first-party repo Dependabot already tracks (`.github/dependabot.yml`,
   `github-actions` ecosystem), so a tag it controls costs no more than the SHA it would otherwise
   bump to. Every other action, first- or third-party, still takes the full SHA.
-- Reuse `turboBasic/github-actions` reusable workflows wherever one fits. `ci.yml` is one: its
-  `project-ci.yml` is bounded by the component rather than the language, so what runs is this
-  repository's own `lint`, `typecheck` and `test` tasks and no shared `rust-ci.yml` is wanted. A stage
-  that cannot run without dependencies installed declares `depends = ["deps"]` itself, because the
-  capability prepares nothing on a caller's behalf — and `depends` runs in parallel, so that belongs on
-  the leaf tasks rather than on the three aggregators.
+- Reuse `turboBasic/github-actions` reusable workflows wherever one fits. `ci.yml` is one: `project-ci`
+  is bounded by the component, not the language, so it runs this repository's own `lint`, `typecheck` and
+  `test` and there is nothing a language-specific shared workflow would add. It prepares nothing on a
+  caller's behalf, so a task that cannot run without dependencies declares `depends = ["deps"]` itself —
+  on the leaves, never on the three aggregators, because `depends` runs in parallel.
 - A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
   call rather than a condition on the event.
 - **A called job's id is the first half of its required context.** `ci.yml`'s job is `popcircles`, the

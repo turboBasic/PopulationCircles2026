@@ -435,10 +435,9 @@ Identifiers are flat, sequential and never reused.
   `turboBasic/github-actions/.github/workflows/project-ci.yml`, whose published inputs name no cache, so
   nothing restores `~/.cargo/registry`, `~/.cargo/git` or `build/target` between runs. A caller cannot
   add a step to a job it does not own, so this was never fixable here.
-- **Fix** — none needed. Had the number gone the other way, the fix was a cache input on the capability
-  taking paths and a key from the caller — language-agnostic, so ADR 0004 upstream does not forbid one —
-  and not a fork of the shared workflow. That option stands if this repository's compile times grow:
-  what would reopen it is a `ci.yml` run over three minutes.
+- **Fix** — none. The shape a fix would take is a cache input on the capability, taking paths and a key
+  from the caller — language-agnostic, so ADR 0004 upstream does not forbid one — and never a fork of the
+  shared workflow. What reopens this is a `ci.yml` run over three minutes.
 
 ### FU-02 - Nothing checks that a pointer resolves
 
