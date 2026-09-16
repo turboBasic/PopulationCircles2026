@@ -3,9 +3,9 @@
 # `mise run lint`, `mise run typecheck` and `mise run test` — the same three tasks the inline job ran, so
 # what CI runs and what `mise run ci` runs still cannot drift apart.
 #
-# What the inline job did and this does not: cache `~/.cargo/registry`, `~/.cargo/git` and
-# `build/target` keyed on Cargo.lock. The capability caches the hook runner and nothing else, and a
-# caller cannot add a step to a job it does not own.
+# The inline job also cached `~/.cargo/registry`, `~/.cargo/git` and `build/target` keyed on Cargo.lock,
+# which the capability does not: it caches the hook runner and nothing else, and a caller cannot add a
+# step to a job it does not own. Measured at about 24 seconds — FU-30 in docs/follow-ups.md.
 
 name: CI
 

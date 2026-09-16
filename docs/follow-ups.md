@@ -426,6 +426,20 @@ Identifiers are flat, sequential and never reused.
 
 ## Closed and retired
 
+### FU-30 - CI compiles from cold, because a called workflow caches only its hook runner
+
+- **Status** — `closed` (2026-09-16): measured rather than fixed. The first run without the cargo cache
+  took 1.3 minutes against a 0.9-minute median across the 100 runs that had it, so the cache was worth
+  about 24 seconds and a cold compile is cheap enough to leave alone.
+- **Condition** — `mise run lint`, `typecheck` and `test` run under
+  `turboBasic/github-actions/.github/workflows/project-ci.yml`, whose published inputs name no cache, so
+  nothing restores `~/.cargo/registry`, `~/.cargo/git` or `build/target` between runs. A caller cannot
+  add a step to a job it does not own, so this was never fixable here.
+- **Fix** — none needed. Had the number gone the other way, the fix was a cache input on the capability
+  taking paths and a key from the caller — language-agnostic, so ADR 0004 upstream does not forbid one —
+  and not a fork of the shared workflow. That option stands if this repository's compile times grow:
+  what would reopen it is a `ci.yml` run over three minutes.
+
 ### FU-02 - Nothing checks that a pointer resolves
 
 - **Status** — `closed` (2026-08-14): `python/src/repo_tools/lint_docs.py` implements the fix below, wired into
@@ -809,19 +823,3 @@ Identifiers are flat, sequential and never reused.
   nothing in the wire format a renderer could select on today. Whoever fires this adds that field first,
   additively, and #56 is the change most likely to want it — naming a dataset on the command line is where
   the value to publish first exists.
-
-### FU-30 - CI compiles from cold, because a called workflow caches only its hook runner
-
-- **Status** — `open`.
-- **Condition** — `mise run lint`, `typecheck` and `test` run under
-  `turboBasic/github-actions/.github/workflows/project-ci.yml`, and that capability's published inputs
-  name no cache. The sweep is `gh run list --workflow ci.yml`: the median run was 0.9 minutes while
-  `ci.yml` cached `~/.cargo/registry`, `~/.cargo/git` and `build/target` keyed on `Cargo.lock`, and
-  nothing restores those now. A caller cannot add a step to a job it does not own, so this is not
-  fixable here.
-- **Fix** — either a cache input on the capability, taking paths and a key from the caller and passing
-  them to `actions/cache` — language-agnostic, so ADR 0004 upstream does not forbid it — or the finding
-  that a cold compile is cheap enough to leave alone. Which applies is a measurement, not an argument:
-  compare the run this migration produces against the 0.9-minute median above. Reverting `ci.yml` to an
-  inline job is the third option and the one that gives up the shared contract, so it needs the other
-  two ruled out first.
