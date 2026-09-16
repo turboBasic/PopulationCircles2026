@@ -426,6 +426,20 @@ Identifiers are flat, sequential and never reused.
 
 ## Closed and retired
 
+### FU-30 - CI compiles from cold, because a called workflow caches only its hook runner
+
+- **Status** — `closed` (2026-09-16): measured rather than fixed. The first run without the cargo cache
+  took 1.3 minutes against a 0.9-minute median across the 100 runs that had it, so the cache was worth
+  about 24 seconds and a cold compile is cheap enough to leave alone.
+- **Condition** — `mise run lint`, `typecheck` and `test` run under
+  `turboBasic/github-actions/.github/workflows/project-ci.yml`, whose published inputs name no cache, so
+  nothing restores `~/.cargo/registry`, `~/.cargo/git` or `build/target` between runs. A caller cannot
+  add a step to a job it does not own, so this was never fixable here.
+- **Fix** — none needed. Had the number gone the other way, the fix was a cache input on the capability
+  taking paths and a key from the caller — language-agnostic, so ADR 0004 upstream does not forbid one —
+  and not a fork of the shared workflow. That option stands if this repository's compile times grow:
+  what would reopen it is a `ci.yml` run over three minutes.
+
 ### FU-02 - Nothing checks that a pointer resolves
 
 - **Status** — `closed` (2026-08-14): `python/src/repo_tools/lint_docs.py` implements the fix below, wired into
