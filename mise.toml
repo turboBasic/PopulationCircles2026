@@ -25,14 +25,11 @@ description = "Install dependencies and git hooks"
 depends = ["deps"]
 run = [
   "prek install",
-  # A `run` entry rather than a second `depends`, because it has to follow `prek install`: `depends`
-  # can only put a task before this one.
+  # Not a second `depends`: it has to follow `prek install`.
   "mise run git:ff-only",
 ]
 
-# A dependency of the leaves that cannot run without it, never of the three aggregators: `depends` runs in
-# parallel, so `deps` beside `lint:rust` is a race rather than an ordering. CI calls a task and prepares
-# nothing on this repository's behalf, which is why the preparation is a task at all.
+# The leaves depend on this, never `lint`/`typecheck`/`test`: `depends` runs in parallel and would race.
 [tasks.deps]
 description = "Fetch the Rust and Python dependencies"
 run = [
