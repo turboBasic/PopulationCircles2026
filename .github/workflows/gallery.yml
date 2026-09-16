@@ -2,7 +2,7 @@
 # here and no condition standing in for one — the suite builds this same gallery, so a broken render
 # already fails a required check.
 
-name: Gallery
+name: 🌜 gallery
 
 on:
   push:
@@ -19,7 +19,6 @@ concurrency:
 
 jobs:
   gallery:
-    name: Gallery
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

@@ -318,6 +318,11 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
 - **Name a calling job after the component it judges.** The job id is the first half of the required
   context, so `ci.yml`'s `popcircles` composes `popcircles / project-ci`, and renaming the job means
   editing the ruleset in the same change.
+- **Name a workflow after its own file, behind a marker**: `🧩` where it is reachable only by a call,
+  `🌜` where it has triggers of its own. A call-only workflow's sidebar entry is permanently empty, and
+  the marker is what keeps that from reading as broken.
+- **Write job ids and job names in lowercase kebab-case**, and give a job no `name:` where the name
+  would only repeat its id. GitHub appends a matrix leg's values to the id on its own.
 - **One workflow is one scenario.** Work two scenarios share is a local `workflow_call` workflow both
   call, not a condition on the event.
 - **Drive CI through mise tasks**, so what CI runs and what `mise run ci` runs cannot drift apart.

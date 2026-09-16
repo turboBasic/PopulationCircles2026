@@ -1,4 +1,4 @@
-name: Release
+name: 🌜 release
 
 on:
   push:
@@ -11,7 +11,6 @@ jobs:
   # A tag can name any commit, and main's required checks say nothing about the one it points at.
   # Checking before the build costs a slow release; skipping it risks one that cannot be recalled.
   gate:
-    name: Gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -51,7 +50,6 @@ jobs:
   # legs land here or none does: a leg that fails leaves no Release at all rather than a half-populated
   # one, and re-running after a fixed leg replaces assets with --clobber instead of colliding with them.
   publish:
-    name: Publish
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
