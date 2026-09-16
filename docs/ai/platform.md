@@ -305,29 +305,28 @@ opposite — MD013 is off, so wrapping there costs nothing — which is why this
 
 ## CI
 
-- Pin actions to a full SHA with the version in a trailing comment, never `@main`. The one exception
-  is a reusable workflow call into `turboBasic/github-actions`, which may stay pinned to a version
-  tag: it is a first-party repo Dependabot already tracks (`.github/dependabot.yml`,
-  `github-actions` ecosystem), so a tag it controls costs no more than the SHA it would otherwise
-  bump to. Every other action, first- or third-party, still takes the full SHA.
-- Reuse `turboBasic/github-actions` reusable workflows wherever one fits. `ci.yml` is one: its
-  `project-ci.yml` is bounded by the component rather than the language, so what runs is this
-  repository's own `lint`, `typecheck` and `test` tasks and no shared `rust-ci.yml` is wanted. A stage
-  that cannot run without dependencies installed declares `depends = ["deps"]` itself, because the
-  capability prepares nothing on a caller's behalf — and `depends` runs in parallel, so that belongs on
-  the leaf tasks rather than on the three aggregators.
-- A workflow is one scenario, and work two scenarios share is a local `workflow_call` workflow they both
-  call rather than a condition on the event.
-- **A called job's id is the first half of its required context.** `ci.yml`'s job is `popcircles`, the
-  component, so the ruleset requires `popcircles / project-ci`. Renaming that job means editing the
-  ruleset in the same change, for the reason the branch-protection note above gives.
-- A comment in a workflow keeps to [`code.md`](code.md) "Comments and docs", which already governs it,
-  and adds one restriction that section does not: no ADR, issue or follow-up citation, no account of
-  what the file used to be, and no sentence a reader has to unpack before it parses — `docs/decisions/`
-  owns the reasoning, and a citation in a YAML file is a second place it goes stale.
-- Drive CI through mise tasks so what CI runs and what `mise run ci` runs cannot drift apart.
-- Lint, typecheck, test only.
-- Secrets via CI environment secrets or OIDC.
+- **Pin every action to a full SHA**, with the version in a trailing comment, never `@main`. A reusable
+  workflow call into `turboBasic/github-actions` may pin a version tag instead: Dependabot tracks that
+  repository (`.github/dependabot.yml`, `github-actions` ecosystem), so a tag costs no more than the SHA
+  it would bump to. Every other action, first- or third-party, takes the SHA.
+- **Call a `turboBasic/github-actions` workflow wherever one fits**, and never fork one to fit this
+  repository. `ci.yml` calls `project-ci`, which is bounded by the component rather than the language and
+  runs this repository's own `lint`, `typecheck` and `test`.
+- **Declare `depends = ["deps"]` on any task a called workflow reaches that needs dependencies
+  installed.** A called workflow prepares nothing on a caller's behalf. Declare it on the leaf tasks and
+  never on the `lint`, `typecheck` or `test` aggregators, because `depends` runs in parallel.
+- **Name a calling job after the component it judges.** The job id is the first half of the required
+  context, so `ci.yml`'s `popcircles` composes `popcircles / project-ci`, and renaming the job means
+  editing the ruleset in the same change.
+- **One workflow is one scenario.** Work two scenarios share is a local `workflow_call` workflow both
+  call, not a condition on the event.
+- **Drive CI through mise tasks**, so what CI runs and what `mise run ci` runs cannot drift apart.
+- **Lint, typecheck and test only.**
+- **Take secrets from CI environment secrets or OIDC.**
+- **Keep a workflow comment to [`code.md`](code.md) "Comments and docs"**, plus one restriction that
+  section does not carry: no ADR, issue or follow-up citation, no account of what the file used to be,
+  and no sentence a reader has to unpack before it parses. `docs/decisions/` owns the reasoning, and a
+  citation in a YAML file is a second place it goes stale.
 
 ## Structure
 

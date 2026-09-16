@@ -28,9 +28,9 @@ run = [
   "mise run git:ff-only",
 ]
 
-# What `setup` always did, named so a stage can depend on it: `project-ci` invokes a task and prepares
-# nothing on this repository's behalf, so the leaves that cannot run without dependencies say so
-# themselves. This is where the workflow's own `uv sync --locked` step went.
+# A dependency of the leaves that cannot run without it, never of the three aggregators: `depends` runs in
+# parallel, so `deps` beside `lint:rust` is a race rather than an ordering. CI calls a task and prepares
+# nothing on this repository's behalf, which is why the preparation is a task at all.
 [tasks.deps]
 description = "Fetch the Rust and Python dependencies"
 run = [
