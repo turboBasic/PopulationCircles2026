@@ -1,7 +1,7 @@
 # Separate from `agent.yml`: an `issue_comment` workflow only ever runs the default branch's copy, so a
 # single-file design could not be tested until already merged. `workflow_dispatch` is the escape hatch.
 
-name: Agent run
+name: 🌜 agent-run
 
 on:
   workflow_call:
@@ -52,7 +52,6 @@ permissions: {}
 
 jobs:
   agent:
-    name: Agent
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

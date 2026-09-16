@@ -1,4 +1,4 @@
-name: Conventional Commits
+name: 🌜 conventional-commits
 
 # pull_request, not pull_request_target: the called workflow's jobs run only on pull_request,
 # and a job that does not run is reported as skipped rather than failed, so nothing would say

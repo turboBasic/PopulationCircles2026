@@ -2,7 +2,7 @@
 # `agent-run.yml` is what spends it. Runs no step of its own — a script here would be a place the
 # comment body could reach.
 
-name: Agent
+name: 🌜 agent
 
 on:
   issue_comment:

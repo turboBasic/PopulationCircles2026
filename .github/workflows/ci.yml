@@ -2,7 +2,7 @@
 # `mise run ci`. Nothing caches a compile here: the called workflow caches its hook runner and no other
 # path, and a caller cannot add a step to a job it does not own.
 
-name: CI
+name: 🌜 ci
 
 on:
   push:

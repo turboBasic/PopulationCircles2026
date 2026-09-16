@@ -1,7 +1,7 @@
 # The release build on demand, dispatched by `mise run release:smoke`. It declares no publish job and
 # no write permission, so a run started here cannot create a tag or a Release however it ends.
 
-name: Release smoke
+name: 🌜 release-smoke
 
 on:
   workflow_dispatch:

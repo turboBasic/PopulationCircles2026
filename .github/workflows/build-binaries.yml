@@ -1,4 +1,4 @@
-name: Build binaries
+name: 🧩 build-binaries
 
 on:
   workflow_call:
@@ -8,7 +8,6 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.triple }}
     runs-on: ${{ matrix.runner }}
     # Generous rather than derived: the release profile — codegen-units = 1, thin LTO — is compiled on
     # macOS here and nowhere else, so nothing has measured what it costs there.
